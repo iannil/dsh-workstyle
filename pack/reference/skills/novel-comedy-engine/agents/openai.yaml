@@ -1,0 +1,4 @@
+interface:
+  display_name: "人物驱动的喜剧事件"
+  short_description: "为喜剧或含喜剧段落的小说设计人物欲望驱动的包袱、误会与跨章荒唐事件，修订插科打诨、重复笑法和降智搞笑"
+  default_prompt: "使用 $novel-comedy-engine，依据这部小说的现版资料完成相应设计或审读，并在我授权改稿时落实修改。"

@@ -1,0 +1,5 @@
+# dsh-workstyle bundle patch: mounts the plugin into the Web profile tree.
+- insert:
+    - id: dsh-workstyle
+      name: dsh-workstyle
+      config: {}

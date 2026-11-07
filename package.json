@@ -1,0 +1,37 @@
+{
+  "name": "dsh-workstyle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Work style as code: ship a reviewable, versioned working style (rules + skills + presets) that any teammate can install.",
+  "license": "MIT",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./client.js",
+    "./locale/*.json": "./locale/*.json",
+    "./icon": "./icon.svg"
+  },
+  "files": [
+    "index.js",
+    "client.js",
+    "lib/",
+    "pack/",
+    "locale/",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "LICENSE"
+  ],
+  "icon": "./icon.svg",
+  "keywords": ["dsh", "dsh-plugin", "workstyle", "skills", "methodology", "agent"],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true,
+      "inject": ["slots"]
+    }
+  }
+}

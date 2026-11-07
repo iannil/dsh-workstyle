@@ -1,0 +1,6 @@
+interface:
+  display_name: "网文撰写"
+  short_description: "从人物欲望与行动出发，完成连载正文、连续性修订与五问追读审读"
+  default_prompt: "使用 $write-webnovel，根据当前作品的唯一事实源，完成我指定的网文写作或修订任务，并用五问检验阅读效果。"
+policy:
+  allow_implicit_invocation: true

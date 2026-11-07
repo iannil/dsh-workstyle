@@ -1,0 +1,4 @@
+interface:
+  display_name: "连载节奏与追读修订"
+  short_description: "诊断和修订小说开篇、连续章节或全书的重复感、兑现过晚、章界和下一章期待"
+  default_prompt: "使用 $novel-retention-edit，依据这部小说的现版资料完成相应设计或审读，并在我授权改稿时落实修改。"

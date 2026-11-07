@@ -1,0 +1,4 @@
+interface:
+  display_name: "人物欲望与成长设计"
+  short_description: "设计或审读小说人物的欲望、主动选择、声口、群像差异和成长连续性"
+  default_prompt: "使用 $novel-character-agency，依据这部小说的现版资料完成相应设计或审读，并在我授权改稿时落实修改。"

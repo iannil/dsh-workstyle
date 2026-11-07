@@ -1,0 +1,26 @@
+{
+  "skill_name": "fde-product-pusher",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "我想做一个 AI 记账 App。现在大家记账都嫌麻烦，我想做那种拍一下小票、或者把银行短信转发进来，就自动分类、月底自动出报表的。我自己就老是记着记着就断了。感觉市场很大，年轻人都需要理财。你觉得这个 idea 靠谱吗，帮我看看。",
+      "expected_output": "Skill should engage in one-question-at-a-time grilled brainstorming: acknowledge what's real, then pressure-test the demand first (has anyone actually paid/persisted for this? founder's own drop-off is a warning, not proof), probe the 'market is big / young people need it' as self-consensus, surface the platform/data-access dependency (bank SMS, receipt OCR — who holds the switch), and eventually push toward a buildable definition. Plain language, no RC jargon.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 2,
+      "prompt": "帮我 pressure-test 一个 B2B 的点子：我们团队想做一个给中小型律所用的合同审查 SaaS，用大模型自动标出风险条款。我们几个都是法律科技背景的，大家一致觉得这是刚需，律师每天审合同审到吐。想直接开始做 MVP 了，你能挑挑毛病吗？",
+      "expected_output": "Skill should grill hard but collaboratively, one probe at a time. Key threads: 'we all agree it's a rigid need' = self-consensus / echo chamber (has a single real law firm paid or committed?), MVP scope should be cut to validate demand not features, who holds the kill-switch (data privacy/compliance, model liability, incumbents like existing legal-tech vendors), founder-fit. Should resist the rush to build and steer toward the cheapest demand-validation step. Plain language.",
+      "files": [],
+      "assertions": []
+    },
+    {
+      "id": 3,
+      "prompt": "有个想法一直在脑子里：做一个面向宠物主人的社区 App，可以分享萌宠日常、约同城遛狗、还能问兽医问题。相当于宠物界的小红书+知乎。你帮我一起 brainstorm 一下这个产品怎么做？",
+      "expected_output": "User frames it as pure brainstorming, but skill should still forge: open up the space collaboratively AND pressure-test. Catch the 'X for Y' / clone framing, the multi-feature scope creep (community + local meetup + vet Q&A is three products), the cold-start / who-holds-the-margin problem for social apps, and the vague 'a thought in my head' = zero demand evidence. Should narrow to the single riskiest assumption and a cheap validation, not just enthusiastically co-design all features.",
+      "files": [],
+      "assertions": []
+    }
+  ]
+}

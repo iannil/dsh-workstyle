@@ -1,0 +1,8 @@
+[
+  {"label":"simple cli no frontend","requirements":"做一个 Python 命令行工具，检查 Markdown 文件里的死链接","expected":{"has_frontend":false,"skip_requirements":true,"skip_frontend":true}},
+  {"label":"simple crud api","requirements":"写一个简单的书签 CRUD API，FastAPI + SQLite 存数据","expected":{"has_frontend":false,"skip_requirements":true,"skip_frontend":true}},
+  {"label":"web app with frontend","requirements":"做一个 Next.js 的 todo 待办 web app，有页面","expected":{"has_frontend":true,"skip_requirements":true,"skip_frontend":false}},
+  {"label":"complex multi-portal","requirements":"做一个多端的考试管理 SaaS，含机构端 web、学员端小程序、多租户、审批工作流","expected":{"has_frontend":true,"skip_requirements":false,"skip_frontend":false}},
+  {"label":"ambiguous default blog","requirements":"做一个博客系统","expected":{"has_frontend":true,"skip_requirements":false,"skip_frontend":false}},
+  {"label":"library explicit","requirements":"写一个 Rust library，解析 JSON 配置","expected":{"has_frontend":false,"skip_requirements":true,"skip_frontend":true}}
+]

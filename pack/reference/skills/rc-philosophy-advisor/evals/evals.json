@@ -1,0 +1,17 @@
+{
+  "skill_name": "rc-philosophy-advisor",
+  "evals": [
+    {
+      "id": 0,
+      "prompt": "I've been thinking about free will lately. If everything is just possibilities converging into certainty through observation, does that mean we don't actually have free will? Where does choice fit in?",
+      "expected_output": "RC framework analysis of free will, referencing A7 (available margin), with bilingual key terms",
+      "files": []
+    },
+    {
+      "id": 1,
+      "prompt": "Generate a new philosophical fragment in the RC style about the relationship between AI alignment and observational convergence. I want something that feels like it could be from the corpus — bilingual, dated, with that koan-like density.",
+      "expected_output": "A dated, bilingual CN/EN philosophical fragment about AI alignment through the RC lens, matching the corpus style",
+      "files": []
+    }
+  ]
+}

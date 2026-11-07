@@ -1,0 +1,152 @@
+[
+  {
+    "label": "1a-architect-pending",
+    "state": {
+      "cwdName": "demo",
+      "jobState": { "project": "demo", "mode": "auto", "checkpoint": { "last_phase": "requirements" },
+        "phases": { "init": {"status":"DONE"}, "requirements": {"status":"DONE"}, "architect": {"status":"TODO"}, "frontend": {"status":"TODO"}, "poc": {"status":"TODO"}, "development": {"status":"TODO"}, "run_gate": {"status":"TODO"}, "finalize": {"status":"TODO"}, "deploy": {"status":"TODO"}, "report": {"status":"TODO"} } },
+      "metadata": { "project": { "name": "demo", "description": "a demo app", "features": ["posts","auth"] } },
+      "progress": false, "context": false, "contextMap": false, "requirements": false,
+      "frontendDesign": false, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "1a", "target_skill": "fde-job", "handoff": "reinvoke-job-workflow" }
+  },
+  {
+    "label": "1b-dev-mixed-milestones",
+    "state": {
+      "cwdName": "demo",
+      "jobState": { "project": "demo", "mode": "auto", "checkpoint": { "last_phase": "development" },
+        "phases": { "init": {"status":"DONE"}, "requirements": {"status":"DONE"}, "architect": {"status":"DONE"}, "frontend": {"status":"DONE"}, "poc": {"status":"DONE"},
+          "development": {"status":"IN_PROGRESS","features":{"M1":{"status":"DONE"},"M2":{"status":"IN_PROGRESS"}}},
+          "run_gate": {"status":"TODO"}, "finalize": {"status":"TODO"}, "deploy": {"status":"TODO"}, "report": {"status":"TODO"} } },
+      "metadata": null, "progress": true, "context": true, "contextMap": false,
+      "requirements": false, "frontendDesign": true, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "1b", "target_skill": "fde-orchestrator", "handoff": "route-orchestrator" }
+  },
+  {
+    "label": "1b-dev-not-started",
+    "state": {
+      "cwdName": "demo",
+      "jobState": { "project": "demo", "mode": "normal", "checkpoint": { "last_phase": "poc" },
+        "phases": { "init": {"status":"DONE"}, "requirements": {"status":"DONE"}, "architect": {"status":"DONE"}, "frontend": {"status":"DONE"}, "poc": {"status":"DONE"},
+          "development": {"status":"TODO"}, "run_gate": {"status":"TODO"}, "finalize": {"status":"TODO"}, "deploy": {"status":"TODO"}, "report": {"status":"TODO"} } },
+      "metadata": null, "progress": false, "context": true, "contextMap": false,
+      "requirements": false, "frontendDesign": true, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "1b", "target_skill": "fde-orchestrator", "handoff": "route-orchestrator" }
+  },
+  {
+    "label": "1c-finalize-pending",
+    "state": {
+      "cwdName": "demo",
+      "jobState": { "project": "demo", "mode": "auto", "checkpoint": { "last_phase": "development" },
+        "phases": { "init": {"status":"DONE"}, "requirements": {"status":"DONE"}, "architect": {"status":"DONE"}, "frontend": {"status":"DONE"}, "poc": {"status":"DONE"},
+          "development": {"status":"DONE"}, "run_gate": {"status":"DONE"}, "finalize": {"status":"TODO"}, "deploy": {"status":"TODO"}, "report": {"status":"TODO"} } },
+      "metadata": { "project": { "name": "demo", "description": "a demo app", "features": ["x"] } },
+      "progress": true, "context": true, "contextMap": false,
+      "requirements": false, "frontendDesign": true, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "1c", "target_skill": "fde-job", "handoff": "reinvoke-job-workflow" }
+  },
+  {
+    "label": "1d-all-done",
+    "state": {
+      "cwdName": "demo",
+      "jobState": { "project": "demo", "mode": "auto", "checkpoint": { "last_phase": "report" },
+        "phases": { "init": {"status":"DONE"}, "requirements": {"status":"DONE"}, "architect": {"status":"DONE"}, "frontend": {"status":"DONE"}, "poc": {"status":"DONE"},
+          "development": {"status":"DONE"}, "run_gate": {"status":"DONE"}, "finalize": {"status":"DONE"}, "deploy": {"status":"DONE"}, "report": {"status":"DONE"} } },
+      "metadata": null, "progress": true, "context": true, "contextMap": false,
+      "requirements": false, "frontendDesign": true, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "1d", "target_skill": null, "handoff": "report-complete" }
+  },
+  {
+    "label": "1e-architect-blocked",
+    "state": {
+      "cwdName": "demo",
+      "jobState": { "project": "demo", "mode": "normal", "checkpoint": { "last_phase": "architect" },
+        "phases": { "init": {"status":"DONE"}, "requirements": {"status":"DONE"}, "architect": {"status":"BLOCKED"}, "frontend": {"status":"TODO"}, "poc": {"status":"TODO"},
+          "development": {"status":"TODO"}, "run_gate": {"status":"TODO"}, "finalize": {"status":"TODO"}, "deploy": {"status":"TODO"}, "report": {"status":"TODO"} } },
+      "metadata": null, "progress": false, "context": false, "contextMap": false,
+      "requirements": false, "frontendDesign": false, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "1e", "target_skill": null, "handoff": "report-blocked" }
+  },
+  {
+    "label": "2-progress-only",
+    "state": {
+      "cwdName": "demo", "jobState": null, "metadata": null,
+      "progress": true, "context": true, "contextMap": false,
+      "requirements": false, "frontendDesign": false, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "2", "target_skill": "fde-orchestrator", "handoff": "route-orchestrator" }
+  },
+  {
+    "label": "3-context-only",
+    "state": {
+      "cwdName": "demo", "jobState": null, "metadata": null,
+      "progress": false, "context": true, "contextMap": false,
+      "requirements": false, "frontendDesign": false, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "3", "target_skill": "fde-orchestrator", "handoff": "route-orchestrator" }
+  },
+  {
+    "label": "3-context-multi-module",
+    "state": {
+      "cwdName": "demo", "jobState": null, "metadata": null,
+      "progress": false, "context": true, "contextMap": true,
+      "requirements": false, "frontendDesign": false, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "3", "target_skill": "fde-orchestrator", "handoff": "route-orchestrator" }
+  },
+  {
+    "label": "4-requirements-only",
+    "state": {
+      "cwdName": "demo", "jobState": null, "metadata": null,
+      "progress": false, "context": false, "contextMap": false,
+      "requirements": true, "frontendDesign": false, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "4", "target_skill": "fde-architect", "handoff": "route-architect" }
+  },
+  {
+    "label": "5-metadata-only",
+    "state": {
+      "cwdName": "demo", "jobState": null,
+      "metadata": { "project": { "name": "demo", "type": "cli-tool" } },
+      "progress": false, "context": false, "contextMap": false,
+      "requirements": false, "frontendDesign": false, "pocManifest": false, "codeStats": null
+    },
+    "expected": { "scenario": "5", "target_skill": "fde-requirements", "handoff": "route-requirements" }
+  },
+  {
+    "label": "6a-foreign-near-empty",
+    "state": {
+      "cwdName": "demo", "jobState": null, "metadata": null,
+      "progress": false, "context": false, "contextMap": false,
+      "requirements": false, "frontendDesign": false, "pocManifest": false,
+      "codeStats": { "sourceFiles": 3, "totalLoc": 120 }
+    },
+    "expected": { "scenario": "6a", "target_skill": "fde-job", "handoff": "reinvoke-job-workflow" }
+  },
+  {
+    "label": "6b-foreign-substantial",
+    "state": {
+      "cwdName": "demo", "jobState": null, "metadata": null,
+      "progress": false, "context": false, "contextMap": false,
+      "requirements": false, "frontendDesign": false, "pocManifest": false,
+      "codeStats": { "sourceFiles": 15, "totalLoc": 800 }
+    },
+    "expected": { "scenario": "6b", "target_skill": "fde-architect", "handoff": "route-architect-reverse" }
+  },
+  {
+    "label": "7-empty-dir",
+    "state": {
+      "cwdName": "demo", "jobState": null, "metadata": null,
+      "progress": false, "context": false, "contextMap": false,
+      "requirements": false, "frontendDesign": false, "pocManifest": false,
+      "codeStats": { "sourceFiles": 0, "totalLoc": 0 }
+    },
+    "expected": { "scenario": "7", "target_skill": "fde-job", "handoff": "reinvoke-job-workflow" }
+  }
+]

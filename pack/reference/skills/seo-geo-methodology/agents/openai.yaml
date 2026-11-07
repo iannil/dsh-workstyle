@@ -1,0 +1,4 @@
+interface:
+  display_name: "SEO / GEO 循证优化"
+  short_description: "以证据驱动搜索与 AI 引用优化，覆盖诊断、内容、执行规划和效果测量"
+  default_prompt: "请使用 $seo-geo-methodology 分析目标网站的搜索与 AI 引用表现，给出有证据、有优先级且可验证的改进方案。"

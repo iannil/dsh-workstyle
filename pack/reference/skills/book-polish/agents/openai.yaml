@@ -1,0 +1,3 @@
+interface:
+  display_name: "出版级书稿润色"
+  short_description: "按目标读者与书籍类型校准阅读难度，保留内容精度、作者风格与叙事节奏"

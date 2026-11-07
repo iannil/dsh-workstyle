@@ -1,0 +1,79 @@
+{
+  "id": "fde-engineering",
+  "name": "FDE 工程工作方式",
+  "displayName": "FDE 工程工作方式",
+  "version": "0.1.0",
+  "license": "MIT",
+  "description": "面向工程交付的默认工作方式：先方案、证据优先、验证后收尾、中文短句、产物化、边界清晰。规则来自本机会话数据蒸馏，技能来自 iannil/skills（MIT）。",
+  "author": "dsh-workstyle",
+  "source": {
+    "skills": "https://github.com/iannil/skills",
+    "commit": "b75ace6cb8b31d878a2df23391758d0df3f28a35",
+    "license": "MIT"
+  },
+  "rules": [
+    {
+      "id": "plan-first",
+      "title": "先方案后实现",
+      "text": "多文件、架构、新功能类请求，先给可评审方案：目标、改动点、验收标准、风险；等用户确认后再动代码。用户说「直接做」时除外。",
+      "evidence": "本机 Claude Code 20,056 条用户 prompt 中 815 条（4.1%）含「先方案 / 计划 / 规划 / 先不要写代码」类指令；本次插件任务也以「先出方案，我确认后再真正实现」开场。",
+      "severity": "high"
+    },
+    {
+      "id": "evidence-first",
+      "title": "证据优先，不猜",
+      "text": "先读真实文件、先跑真实命令，再下结论。引用路径、行号、命令输出作为依据；不确定就查，不要用记忆替代事实。",
+      "evidence": "zcode 2026-09-30→11-05 的工具调用：Bash 16,178 次、Read 7,007 次、Edit 3,892 次；执行类工具远多于纯对话。",
+      "severity": "high"
+    },
+    {
+      "id": "verify-before-done",
+      "title": "验证后才宣称完成",
+      "text": "说「完成 / 修好了 / 已生效」之前，必须跑验证命令或给出可复现证据；未验证就明确标注「未验证」并说明验证边界。",
+      "evidence": "FDE 方法论红线「无验证不固化」；插件采纳度量把「未验证宣称完成率」列为核心指标。",
+      "severity": "high"
+    },
+    {
+      "id": "chinese-terse",
+      "title": "中文、短句、先结论",
+      "text": "默认中文回复；先给结论，再给依据和步骤；能用一句话说清就不写一段。",
+      "evidence": "本机 Claude Code prompt 中文占 67%，平均长度 33 字符。",
+      "severity": "medium"
+    },
+    {
+      "id": "artifactize",
+      "title": "产物化，不停在对话里",
+      "text": "每个任务尽量沉淀可复用产物：脚本、skill、模板、pack、文档；一次性的结论也要落成文件或规则。",
+      "evidence": "本机累计 40+ 个自定义 skill、多个自研 DSH 插件（whale widget、better-sidebar、context、billion-context）与项目模板。",
+      "severity": "medium"
+    },
+    {
+      "id": "scope-guard",
+      "title": "先确认落点与边界",
+      "text": "动手前确认改动落在哪个目录、哪些文件；不顺手改无关文件；破坏性操作（删除、覆盖、外发数据）先确认。",
+      "evidence": "本机常用「先出方案，我确认后再实现」的确认式流程；本次插件开发明确指定了独立目录。",
+      "severity": "medium"
+    },
+    {
+      "id": "privacy-local",
+      "title": "本机数据只读不外传",
+      "text": "分析本机会话/日志时只读、不联网上传、不保存 prompt 原文；对外只输出聚合统计与可公开的规则。",
+      "evidence": "dsh-workstyle 设计约束：默认 7 源只读扫描、原文不落盘、报告仅存聚合证据。",
+      "severity": "high"
+    }
+  ],
+  "skills": {
+    "dir": "skills",
+    "bundled": true,
+    "source": "https://github.com/iannil/skills",
+    "commit": "b75ace6cb8b31d878a2df23391758d0df3f28a35",
+    "license": "MIT",
+    "count": 40
+  },
+  "measures": [
+    { "id": "plan-first-rate", "label": "先方案率", "how": "含方案且实现前的会话占比" },
+    { "id": "verify-rate", "label": "改完验证率", "how": "编辑后出现验证命令/测试的会话占比" },
+    { "id": "false-done-rate", "label": "未验证宣称完成率", "how": "宣称完成但无验证证据的会话占比" },
+    { "id": "rule-adherence", "label": "规则遵守度", "how": "第 1 周 vs 第 4 周按规则逐条抽查" }
+  ]
+}

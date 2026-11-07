@@ -1,0 +1,4 @@
+interface:
+  display_name: "小说文字易读性精修"
+  short_description: "诊断并精修句意、动作、信息与对白，保留小说事实、人物声口和情绪"
+  default_prompt: "使用 $novel-prose-readability 精修指定小说片段的易读性，保留事实、人物声口、叙事视角和情绪。"

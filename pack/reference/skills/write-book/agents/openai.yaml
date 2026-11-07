@@ -1,0 +1,4 @@
+interface:
+  display_name: "写书"
+  short_description: "参考祝融说理论、实践与叙事作品，规划新书、逐章撰写并保持全书一致性"
+  default_prompt: "使用 $write-book，参考现有书籍的结构和语体，围绕我提供的主题规划并撰写书稿。"

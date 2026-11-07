@@ -1,0 +1,4 @@
+interface:
+  display_name: "离谱成仙：荒诞修仙喜剧爽文"
+  short_description: "构思与创作规则自洽的大脑洞修仙故事，让反反套路、多重反转、人物喜剧与实际胜果共同兑现"
+  default_prompt: "使用 $writing-absurd-xianxia，依据我的需求和作品现版资料构思、创作或修订荒诞合理、反反套路、多重反转、又爽又好笑的修仙故事；只要方案时不改正文。"

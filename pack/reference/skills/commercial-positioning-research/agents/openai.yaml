@@ -1,0 +1,4 @@
+interface:
+  display_name: "商业定位与价值验证"
+  short_description: "寻找差异化定位，区分商业证据与验证价值，给出匹配阶段的投入建议"
+  default_prompt: "使用 $commercial-positioning-research 为这个产品寻找商业定位，分别判断商业成立已有多少证据、证据尚少时是否值得限额验证，输出附来源、匹配阶段的测算及下一步投入边界的报告。"
