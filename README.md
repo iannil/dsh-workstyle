@@ -4,6 +4,8 @@
 
 > Work style as code: package a person's working habits — rules, skills, presets, templates — into an installable, versionable, measurable DSH plugin.
 
+![工作方式面板](docs/verification/panel-v2-top.png)
+
 ## 它解决什么
 
 技能包解决「会不会」，本插件解决「像不像你」。
@@ -21,9 +23,11 @@
 ## 使用
 
 - 侧边栏面板：
-  - 查看当前生效的 Pack、规则、技能与采集证据；
-  - 「蒸馏建议」卡片列出 `distill` 产出的建议规则，勾选后「采纳选中 / 全部采纳」即写入当前包（进入系统提示、随包导出）；
-  - 采纳的规则在规则卡上带「蒸馏采纳」标记，可随时「撤销」；
+  - 顶部「当前生效」区：包名、版本、规则/技能数、包目录与最近蒸馏时间，右上角可直接切换包；
+  - 「规则」区按编号列出规则全文与本地证据，蒸馏采纳的规则带「蒸馏采纳」标记，可随时「撤销」；
+  - 「蒸馏建议」区列出 `distill` 产出的建议规则（含置信度与证据），勾选后「采纳选中 / 全部采纳」写入当前包（进入系统提示、随包导出）；
+  - 「技能」区展示内置技能（默认展示 12 个，可展开全部）；
+  - 「本地证据源」区展示 Claude Code / Codex / DSH / Pi 的真实会话计数与采样情况；
   - 工具栏「导出包」一键生成可分发的 `.tar.gz`。
 - 命令：`/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | export`
 - Agent 工具：`workstyle_status`、`workstyle_list`、`workstyle_apply`、`workstyle_distill`、`workstyle_evidence`、`workstyle_adopt`、`workstyle_export`
