@@ -23,7 +23,14 @@
     "LICENSE"
   ],
   "icon": "./icon.svg",
-  "keywords": ["dsh", "dsh-plugin", "workstyle", "skills", "methodology", "agent"],
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "workstyle",
+    "skills",
+    "methodology",
+    "agent"
+  ],
   "dsh": {
     "bundle": {
       "patch": "./cordis.patch.yml"
@@ -31,7 +38,12 @@
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": ["slots"]
+      "inject": [
+        "slots"
+      ]
     }
+  },
+  "scripts": {
+    "test": "node test/smoke.mjs"
   }
 }

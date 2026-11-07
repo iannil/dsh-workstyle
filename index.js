@@ -13,10 +13,11 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
-  dshHome, loadPackAt, loadPacks, listSkills, readState, renderRules,
-  reportsDir, workstyleHome, writeState,
+  dshHome, exportsDir, loadPackAt, loadPacks, listSkills, readState,
+  renderRules, reportsDir, workstyleHome, writeState,
 } from './lib/pack.js'
 import { distill, readLatestReport } from './lib/distill.js'
+import { exportPack } from './lib/export.js'
 
 const PKG_DIR = path.dirname(fileURLToPath(import.meta.url))
 const PKG_JSON = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'))
@@ -79,6 +80,39 @@ function loadAllPacks() {
   return packs
 }
 
+/* ------------------------------------------------------------------ */
+/* Adopted rules: distillation review → pack overlay                   */
+/*                                                                     */
+/* The bundled pack stays immutable; rules a user adopts from the      */
+/* distillation report are stored in state.json as an overlay, keyed by */
+/* pack id. They count as pack rules (system prompt, tools, export) and */
+/* are marked `source: 'distilled'` so the panel can show/revoke them.  */
+/* ------------------------------------------------------------------ */
+
+function readAdoptions() {
+  const state = readState()
+  return state && state.adoptions && typeof state.adoptions === 'object' ? state.adoptions : {}
+}
+
+function adoptedRulesFor(packId) {
+  const list = readAdoptions()[packId]
+  if (!Array.isArray(list)) return []
+  return list.filter((rule) => rule && typeof rule.id === 'string' && typeof rule.text === 'string')
+}
+
+function writeAdoptionsFor(packId, list) {
+  const all = { ...readAdoptions() }
+  if (list && list.length) all[packId] = list
+  else delete all[packId]
+  writeState({ adoptions: all })
+}
+
+function mergeRules(pack, adopted) {
+  const ids = new Set(pack.rules.map((rule) => rule.id))
+  const extra = (adopted || []).filter((rule) => !ids.has(rule.id))
+  return [...pack.rules, ...extra.map((rule) => ({ ...rule, source: 'distilled' }))]
+}
+
 function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), {
     status,
@@ -110,15 +144,54 @@ export function apply(ctx) {
 
   log('active pack:', active.id, 'v' + active.version, '/', packs.length, 'pack(s),', active.skillCount, 'skill(s)')
 
+  const withSkills = (pack) => {
+    const skills = listSkills(pack)
+    return { ...pack, skillList: skills, skillCount: skills.length }
+  }
+
+  const effectiveActive = () => ({ ...active, rules: mergeRules(active, adoptedRulesFor(active.id)) })
+
+  const findPack = (idOrDir) => {
+    const packsNow = loadAllPacks()
+    let next = packsNow.find((pack) => pack.id === idOrDir)
+    if (!next) {
+      const byDir = loadPackAt(path.resolve(idOrDir))
+      if (byDir) next = withSkills(byDir)
+    }
+    return { packsNow, next }
+  }
+
   const buildStatus = () => {
     const latest = readLatestReport()
+    const effective = effectiveActive()
+    const packRuleIds = new Set(active.rules.map((rule) => rule.id))
+    const adopted = adoptedRulesFor(active.id)
+    const adoptedIds = new Set(adopted.map((rule) => rule.id))
     return {
-      plugin: { name, version: VERSION, home: workstyleHome(), reports: reportsDir() },
+      plugin: {
+        name, version: VERSION, home: workstyleHome(),
+        reports: reportsDir(), exports: exportsDir(),
+      },
       activePackId: active.id,
-      activePack: packSummary(active),
+      activePack: packSummary(effective),
       packs: packs.map(packSummary),
-      rules: active.rules,
-      skills: active.skillList.map((skill) => ({ name: skill.name, description: skill.description, whenToUse: skill.whenToUse })),
+      rules: effective.rules,
+      adoptions: adopted.map((rule) => ({
+        id: rule.id, title: rule.title, text: rule.text,
+        evidence: rule.evidence || '', adoptedAt: rule.adoptedAt,
+      })),
+      suggestions: latest && Array.isArray(latest.suggestedRules)
+        ? latest.suggestedRules.map((rule) => ({
+            id: rule.id,
+            title: rule.title,
+            text: rule.text,
+            evidence: rule.evidence || '',
+            confidence: rule.confidence || 'medium',
+            adopted: adoptedIds.has(rule.id),
+            present: packRuleIds.has(rule.id),
+          }))
+        : [],
+      skills: effective.skillList.map((skill) => ({ name: skill.name, description: skill.description, whenToUse: skill.whenToUse })),
       latestDistill: latest
         ? { generatedAt: latest.generatedAt, file: path.join(reportsDir(), 'latest.json') }
         : undefined,
@@ -132,24 +205,87 @@ export function apply(ctx) {
   }
 
   const applyPack = (idOrDir) => {
-    const packsNow = loadAllPacks()
-    let next = packsNow.find((pack) => pack.id === idOrDir)
-    if (!next) {
-      const byDir = loadPackAt(path.resolve(idOrDir))
-      if (byDir) {
-        const skills = listSkills(byDir)
-        byDir.skillList = skills
-        byDir.skillCount = skills.length
-        next = byDir
-      }
-    }
+    const { packsNow, next } = findPack(idOrDir)
     if (!next) throw new Error('unknown pack: ' + idOrDir + ' (available: ' + packsNow.map((p) => p.id).join(', ') + ')')
     packs = packsNow
     active = next
     writeState({ activePack: active.id })
     try { skillControl?.invalidate() } catch { /* provider may be gone */ }
     log('applied pack:', active.id)
-    return packSummary(active)
+    return packSummary(effectiveActive())
+  }
+
+  /**
+   * Adopt suggested rules from the latest distillation report into the active
+   * pack's overlay. `all` adopts every suggestion; otherwise `ids` selects.
+   */
+  const adoptRules = (ids, all) => {
+    const report = readLatestReport()
+    if (!report || !Array.isArray(report.suggestedRules) || !report.suggestedRules.length) {
+      throw new Error('no distillation report yet: run workstyle_distill first')
+    }
+    const wanted = all
+      ? report.suggestedRules
+      : report.suggestedRules.filter((rule) => Array.isArray(ids) && ids.includes(rule.id))
+    if (!wanted.length) {
+      throw new Error('no matching suggested rules' + (Array.isArray(ids) && ids.length ? ': ' + ids.join(', ') : ''))
+    }
+    const packRuleIds = new Set(active.rules.map((rule) => rule.id))
+    const existing = adoptedRulesFor(active.id)
+    const existingIds = new Set(existing.map((rule) => rule.id))
+    const added = []
+    const skipped = []
+    for (const rule of wanted) {
+      if (!rule || typeof rule.id !== 'string' || typeof rule.text !== 'string') continue
+      if (packRuleIds.has(rule.id)) { skipped.push(rule.id + '（已在包内）'); continue }
+      if (existingIds.has(rule.id)) { skipped.push(rule.id + '（已采纳）'); continue }
+      added.push({
+        id: rule.id,
+        title: rule.title || rule.id,
+        text: rule.text,
+        evidence: rule.evidence || '',
+        severity: rule.severity || 'medium',
+        source: 'distilled',
+        adoptedAt: new Date().toISOString(),
+      })
+    }
+    if (added.length) writeAdoptionsFor(active.id, [...existing, ...added])
+    log('adopted rules:', added.map((rule) => rule.id).join(', ') || '(none)')
+    return { added: added.map((rule) => rule.id), skipped, ruleCount: effectiveActive().rules.length }
+  }
+
+  const unadoptRule = (ruleId) => {
+    const existing = adoptedRulesFor(active.id)
+    const next = existing.filter((rule) => rule.id !== ruleId)
+    if (next.length === existing.length) throw new Error('rule not adopted: ' + ruleId)
+    writeAdoptionsFor(active.id, next)
+    log('revoked adopted rule:', ruleId)
+    return { removed: ruleId, ruleCount: effectiveActive().rules.length }
+  }
+
+  const exportActivePack = (idOrDir) => {
+    let target = active
+    if (idOrDir) {
+      const found = findPack(idOrDir)
+      if (!found.next) throw new Error('unknown pack: ' + idOrDir + ' (available: ' + found.packsNow.map((p) => p.id).join(', ') + ')')
+      target = found.next
+    }
+    const rules = mergeRules(target, adoptedRulesFor(target.id))
+    const out = exportPack({
+      pack: { ...target, pluginVersion: VERSION },
+      rules,
+      destDir: exportsDir(),
+    })
+    log('exported pack:', target.id, '→', out.file)
+    return {
+      file: out.file,
+      bytes: out.bytes,
+      files: out.files,
+      packId: target.id,
+      ruleCount: rules.length,
+      skillCount: target.skillCount || 0,
+      adoptedRules: adoptedRulesFor(target.id).length,
+    }
   }
 
   /* --- system prompt section --------------------------------------- */
@@ -162,7 +298,7 @@ export function apply(ctx) {
     ctx.effect(() => ctx.systemPrompt.section({
       name: 'dsh-workstyle.rules',
       order,
-      text: () => renderRules(active),
+      text: () => renderRules(effectiveActive()),
     }), 'dsh-workstyle: system prompt rules')
   } catch (error) {
     log('system prompt section unavailable:', error && error.message ? error.message : String(error))
@@ -251,6 +387,8 @@ export function apply(ctx) {
         ruleCount: status.activePack.ruleCount,
         skillCount: status.activePack.skillCount,
         packs: status.packs.map((pack) => ({ id: pack.id, version: pack.version, rules: pack.ruleCount, skills: pack.skillCount })),
+        adoptedRules: status.adoptions.map((rule) => rule.id),
+        suggestions: status.suggestions.map((rule) => ({ id: rule.id, title: rule.title, adopted: rule.adopted, present: rule.present })),
         latestDistill: status.latestDistill,
       }
     },
@@ -265,10 +403,13 @@ export function apply(ctx) {
       render: (args, value) => textBlock(JSON.stringify(value, null, 2)),
     },
     async execute() {
+      const effective = effectiveActive()
       return {
         activePack: active.id,
+        ruleCount: effective.rules.length,
+        adoptedRules: adoptedRulesFor(active.id).map((rule) => rule.id),
         packs: packs.map(packSummary),
-        skills: active.skillList.map((skill) => ({ name: skill.name, description: skill.description })),
+        skills: effective.skillList.map((skill) => ({ name: skill.name, description: skill.description })),
       }
     },
   })
@@ -338,12 +479,57 @@ export function apply(ctx) {
     },
   })
 
+  registerTool({
+    name: 'workstyle_adopt',
+    description: 'Adopt suggested rules from the latest distillation report into the active pack (reviewed overlay). Adopted rules are added to the system prompt and exported with the pack.',
+    parameters: {
+      type: 'object',
+      properties: {
+        ruleIds: { type: 'array', items: { type: 'string' }, description: 'Suggested rule ids to adopt, e.g. ["plan-first"].' },
+        all: { type: 'boolean', description: 'Adopt every suggested rule in the latest report.' },
+      },
+      additionalProperties: false,
+    },
+    output: {
+      schema: { type: 'object', properties: { added: { type: 'array' }, skipped: { type: 'array' }, ruleCount: { type: 'number' } } },
+      render: (args, value) => textBlock(
+        '采纳建议规则 ' + value.added.length + ' 条' + (value.added.length ? '：' + value.added.join(', ') : '') + '\n' +
+        (value.skipped.length ? '跳过：' + value.skipped.join('；') + '\n' : '') +
+        '当前生效规则 ' + value.ruleCount + ' 条。'),
+    },
+    async execute(args) {
+      const ids = args && Array.isArray(args.ruleIds) ? args.ruleIds.map((id) => String(id)) : []
+      const all = !!(args && args.all)
+      return adoptRules(ids, all)
+    },
+  })
+
+  registerTool({
+    name: 'workstyle_export',
+    description: 'Export a workstyle pack (rules + bundled skills, including adopted distillation rules) as a portable .tar.gz that a teammate can extract and apply.',
+    parameters: {
+      type: 'object',
+      properties: { pack: { type: 'string', description: 'Pack id (default: active pack) or absolute pack directory.' } },
+      additionalProperties: false,
+    },
+    output: {
+      schema: { type: 'object', properties: { file: { type: 'string' }, bytes: { type: 'number' }, files: { type: 'number' }, ruleCount: { type: 'number' }, skillCount: { type: 'number' } } },
+      render: (args, value) => textBlock(
+        '已导出：' + value.file + '\n' +
+        value.ruleCount + ' 条规则 / ' + value.skillCount + ' 个技能 · ' + value.files + ' 个文件 · ' + value.bytes + ' 字节'),
+    },
+    async execute(args) {
+      const packArg = args && typeof args.pack === 'string' && args.pack.trim() ? args.pack.trim() : undefined
+      return exportActivePack(packArg)
+    },
+  })
+
   /* --- slash command ------------------------------------------------ */
   try {
     ctx.inject(['commands'], (scoped) => scoped.effect(() => scoped.commands.register({
       name: 'workstyle',
-      description: '工作方式包：/workstyle status | /workstyle apply <pack> | /workstyle distill',
-      input: { hint: 'status | apply <pack> | distill' },
+      description: '工作方式包：/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | export',
+      input: { hint: 'status | apply <pack> | distill | adopt <id|all> | undo <id> | export' },
       async handler(invocation) {
         const raw = String(invocation.rawInput || '').trim()
         const [head, ...rest] = raw.split(/\s+/)
@@ -365,7 +551,26 @@ export function apply(ctx) {
             const { file, report } = await distill({})
             return { kind: 'success', text: '蒸馏完成：' + file + '（建议规则 ' + report.suggestedRules.length + ' 条）' }
           }
-          return { kind: 'error', text: '未知子命令：' + head + '（可用 status / apply / distill）' }
+          if (head === 'adopt') {
+            const arg = rest.join(' ').trim()
+            const result = adoptRules(arg === 'all' || !arg ? [] : [arg], arg === 'all' || !arg)
+            return {
+              kind: 'success',
+              text: '采纳建议规则 ' + result.added.length + ' 条' + (result.added.length ? '：' + result.added.join(', ') : '') +
+                '（当前 ' + result.ruleCount + ' 条规则）',
+            }
+          }
+          if (head === 'undo') {
+            const id = rest.join(' ').trim()
+            if (!id) return { kind: 'error', text: '用法：/workstyle undo <rule-id>' }
+            const result = unadoptRule(id)
+            return { kind: 'success', text: '已撤销采纳：' + result.removed + '（当前 ' + result.ruleCount + ' 条规则）' }
+          }
+          if (head === 'export') {
+            const out = exportActivePack(rest.join(' ') || undefined)
+            return { kind: 'success', text: '已导出：' + out.file + '（' + out.ruleCount + ' 规则 / ' + out.skillCount + ' 技能）' }
+          }
+          return { kind: 'error', text: '未知子命令：' + head + '（可用 status / apply / distill / adopt / undo / export）' }
         } catch (error) {
           return { kind: 'error', text: error && error.message ? error.message : String(error) }
         }
@@ -430,6 +635,52 @@ export function apply(ctx) {
             return jsonResponse({ file, generatedAt: report.generatedAt, suggestedRules: report.suggestedRules.length, sources: report.sources })
           } catch (error) {
             return jsonResponse({ error: error && error.message ? error.message : String(error) }, 500)
+          }
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/adopt',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = await readJsonBody(request)
+          const ids = body && Array.isArray(body.ruleIds) ? body.ruleIds.map((id) => String(id)) : []
+          const all = !!(body && body.all)
+          try {
+            const result = adoptRules(ids, all)
+            return jsonResponse({ ...result, status: buildStatus() })
+          } catch (error) {
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
+          }
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/unadopt',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = await readJsonBody(request)
+          const ruleId = body && typeof body.ruleId === 'string' ? body.ruleId.trim() : ''
+          if (!ruleId) return jsonResponse({ error: 'ruleId is required' }, 400)
+          try {
+            const result = unadoptRule(ruleId)
+            return jsonResponse({ ...result, status: buildStatus() })
+          } catch (error) {
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, 404)
+          }
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/export',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = await readJsonBody(request)
+          const packArg = body && typeof body.pack === 'string' && body.pack.trim() ? body.pack.trim() : undefined
+          try {
+            return jsonResponse(exportActivePack(packArg))
+          } catch (error) {
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
           }
         },
       })

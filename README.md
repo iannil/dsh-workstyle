@@ -20,9 +20,25 @@
 
 ## 使用
 
-- 侧边栏面板：查看当前生效的 Pack、规则、技能与采纳证据。
-- 命令：`/workstyle status | apply <pack> | distill`
-- Agent 工具：`workstyle_status`、`workstyle_list`、`workstyle_apply`、`workstyle_distill`、`workstyle_evidence`
+- 侧边栏面板：
+  - 查看当前生效的 Pack、规则、技能与采集证据；
+  - 「蒸馏建议」卡片列出 `distill` 产出的建议规则，勾选后「采纳选中 / 全部采纳」即写入当前包（进入系统提示、随包导出）；
+  - 采纳的规则在规则卡上带「蒸馏采纳」标记，可随时「撤销」；
+  - 工具栏「导出包」一键生成可分发的 `.tar.gz`。
+- 命令：`/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | export`
+- Agent 工具：`workstyle_status`、`workstyle_list`、`workstyle_apply`、`workstyle_distill`、`workstyle_evidence`、`workstyle_adopt`、`workstyle_export`
+- HTTP 路由：`/api/dsh-workstyle/{status,evidence,apply,distill,adopt,unadopt,export}`
+
+## 蒸馏 → 采纳 → 导出
+
+1. `workstyle_distill`（或面板「蒸馏证据」）扫描本机会话，产出聚合报告与建议规则，写入 `$DSH_HOME/workstyle/reports/`。
+2. `workstyle_adopt` / 面板勾选，把建议规则并入当前包；`workstyle_unadopt`（命令 `/workstyle undo <id>`）撤销。
+3. `workstyle_export` 生成 `$DSH_HOME/workstyle/exports/<pack>-<version>-<时间戳>.tar.gz`：
+   - `workstyle.json`：合并采纳规则后的有效包；
+   - `manifest.json`：导出清单（规则数、技能数、文件列表、来源）；
+   - `README-EXPORT.md`：接收方安装说明；
+   - `skills/**`：技能文件原样。
+4. 接收方解压后 `/workstyle apply /path/to/extracted` 即可获得同一套工作方式。
 
 ## 内置参考 Pack
 
@@ -54,7 +70,19 @@ Pack 放在插件 `pack/<id>/` 或 `$DSH_HOME/workstyle/packs/<id>/`；技能放
 
 ## 开发
 
-无运行时依赖，纯 ESM。Host 侧 `index.js` + `lib/`，Web 面板 `client.js`，清单 `cordis.patch.yml`。
+无运行时依赖，纯 ESM。Host 侧 `index.js` + `lib/`（`pack.js` 包模型、`distill.js` 蒸馏、`export.js` tar.gz 导出），Web 面板 `client.js`，清单 `cordis.patch.yml`。
+
+```bash
+node test/smoke.mjs   # 58 项冒烟检查：7 工具 / 7 路由 / 命令 / 采纳与撤销 / 导出 tar 往返
+```
+
+系统未装 Node 时可用 Harness 自带运行时：
+
+```bash
+ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" test/smoke.mjs
+```
+
+数据目录：`$DSH_HOME/workstyle/`（`state.json` 状态与采纳记录、`reports/` 蒸馏报告、`exports/` 导出包）。
 
 ## 许可
 

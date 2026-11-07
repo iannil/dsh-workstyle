@@ -40,6 +40,21 @@ window.__ModuleLoader__.load({
       error: '出错了',
       privacy: '只读本机数据 · 不联网 · 不上传 · 不保存 prompt 原文',
       license: '参考技能 MIT · iannil/skills',
+      review: '蒸馏建议',
+      reviewHint: '勾选建议规则并采纳进当前包；采纳的规则会进入系统提示、随包导出，也可随时撤销。',
+      adoptSelected: '采纳选中',
+      adoptAll: '全部采纳',
+      adopting: '采纳中…',
+      adoptedNotice: '已采纳建议规则',
+      adoptedLabel: '蒸馏采纳',
+      presentLabel: '已在包内',
+      unadopt: '撤销',
+      noSuggestions: '还没有可审阅的建议。先点「蒸馏证据」扫一次本机会话。',
+      export: '导出包',
+      exporting: '导出中…',
+      exported: '已导出',
+      confidence: '置信度',
+      customCount: '条本地采纳',
     }
     const en = {
       nav: 'Workstyle',
@@ -69,6 +84,21 @@ window.__ModuleLoader__.load({
       error: 'Error',
       privacy: 'Read-only local data · no network · no upload · raw prompts never stored',
       license: 'Reference skills MIT · iannil/skills',
+      review: 'Distillation review',
+      reviewHint: 'Tick suggested rules to adopt them into the active pack. Adopted rules join the system prompt, travel with exports, and can be revoked any time.',
+      adoptSelected: 'Adopt selected',
+      adoptAll: 'Adopt all',
+      adopting: 'Adopting…',
+      adoptedNotice: 'Adopted suggested rules',
+      adoptedLabel: 'adopted',
+      presentLabel: 'already in pack',
+      unadopt: 'Revoke',
+      noSuggestions: 'Nothing to review yet. Run "Distill evidence" first.',
+      export: 'Export pack',
+      exporting: 'Exporting…',
+      exported: 'Exported',
+      confidence: 'confidence',
+      customCount: 'local adoption(s)',
     }
 
     /* ------------------------------ icons ------------------------------ */
@@ -133,6 +163,18 @@ window.__ModuleLoader__.load({
       ruleTitle: { fontSize: 12.5, fontWeight: 650, marginBottom: 3 },
       ruleText: { fontSize: 12, lineHeight: 1.6, color: 'var(--dsw-alias-label-primary)' },
       ruleEvidence: { fontSize: 11, lineHeight: 1.5, marginTop: 4, color: 'var(--dsw-alias-label-secondary)' },
+      ruleTitleRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' },
+      badge: {
+        fontSize: 10, fontWeight: 650, color: 'var(--dsw-alias-brand-primary)',
+        border: '1px solid var(--dsw-alias-brand-primary)', borderRadius: 999, padding: '0 6px',
+      },
+      linkButton: {
+        font: 'inherit', fontSize: 11, color: 'var(--dsw-alias-label-secondary)',
+        background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline',
+      },
+      skillTitleRow: { display: 'flex', alignItems: 'center', gap: 6 },
+      checkbox: { margin: 0, accentColor: 'var(--dsw-alias-brand-primary)' },
+      actions: { display: 'flex', gap: 8, marginTop: 12, flexWrap: 'wrap' },
       skill: {
         display: 'flex', flexDirection: 'column', gap: 3,
         border: '1px solid var(--dsw-alias-border-l1)', background: 'var(--dsw-alias-bg-layer-2)',
@@ -207,6 +249,61 @@ window.__ModuleLoader__.load({
           .finally(() => setBusy(''))
       }
 
+      const [selected, setSelected] = React.useState([])
+
+      const toggleRule = (id) => {
+        setSelected((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id])
+      }
+
+      const onAdopt = (all) => {
+        const ruleIds = all ? [] : selected
+        if (!all && ruleIds.length === 0) return
+        setBusy('adopt'); setError(''); setNotice('')
+        fetch('/api/dsh-workstyle/adopt', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify(all ? { all: true } : { ruleIds }),
+        })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'adopt failed')
+            setStatus(data.status)
+            setSelected([])
+            setNotice(t('adoptedNotice') + ' · ' + data.added.length +
+              (data.skipped && data.skipped.length ? ' · ' + data.skipped.length + ' skipped' : ''))
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setBusy(''))
+      }
+
+      const onUnadopt = (ruleId) => {
+        setBusy('unadopt'); setError(''); setNotice('')
+        fetch('/api/dsh-workstyle/unadopt', {
+          method: 'POST', headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ ruleId }),
+        })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'unadopt failed')
+            setStatus(data.status)
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setBusy(''))
+      }
+
+      const onExport = () => {
+        setBusy('export'); setError(''); setNotice('')
+        fetch('/api/dsh-workstyle/export', {
+          method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({}),
+        })
+          .then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'export failed')
+            setNotice(t('exported') + ' · ' + data.file)
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setBusy(''))
+      }
+
       const severityLabel = (severity) => t(severity === 'high' ? 'severityHigh' : severity === 'low' ? 'severityLow' : 'severityMedium')
 
       if (!status) {
@@ -233,6 +330,8 @@ window.__ModuleLoader__.load({
               }, status.packs.map((pack) => h('option', { key: pack.id, value: pack.id },
                 pack.displayName + '  v' + pack.version))),
               h('button', { style: S.button, onClick: load, disabled: !!busy }, t('refresh')),
+              h('button', { style: S.button, onClick: onExport, disabled: !!busy },
+                busy === 'export' ? t('exporting') : t('export')),
               h('button', { style: S.buttonPrimary, onClick: onDistill, disabled: !!busy },
                 busy === 'distill' ? t('distilling') : t('distill')))),
 
@@ -257,9 +356,48 @@ window.__ModuleLoader__.load({
             (status.rules || []).map((rule, index) => h('div', { key: rule.id, style: index === 0 ? { ...S.rule, borderTop: 'none' } : S.rule },
               h('span', { style: S.dot(rule.severity), title: severityLabel(rule.severity) }),
               h('div', { style: S.ruleBody },
-                h('div', { style: S.ruleTitle }, rule.title),
+                h('div', { style: S.ruleTitleRow },
+                  h('span', { style: S.ruleTitle }, rule.title),
+                  rule.source === 'distilled' ? h('span', { style: S.badge }, t('adoptedLabel')) : null,
+                  rule.source === 'distilled'
+                    ? h('button', { style: S.linkButton, title: t('unadopt'), disabled: !!busy, onClick: () => onUnadopt(rule.id) }, t('unadopt'))
+                    : null),
                 h('div', { style: S.ruleText }, rule.text),
                 rule.evidence ? h('div', { style: S.ruleEvidence }, t('evidence') + ' · ' + rule.evidence) : null)))),
+
+          h('div', { style: S.card },
+            h('div', { style: S.cardTitleRow },
+              h('span', { style: S.cardTitle }, t('review')),
+              h('span', { style: S.count }, String((status.suggestions || []).length)),
+              status.adoptions && status.adoptions.length
+                ? h('span', { style: { ...S.count, marginLeft: 'auto' } }, status.adoptions.length + ' ' + t('customCount'))
+                : null),
+            h('div', { style: { ...S.hint, marginBottom: 10 } }, t('reviewHint')),
+            (!status.suggestions || status.suggestions.length === 0)
+              ? h('div', { style: S.hint }, t('noSuggestions'))
+              : h('div', { style: S.grid }, status.suggestions.map((rule) => {
+                const locked = rule.adopted || rule.present
+                return h('label', { key: rule.id, style: locked ? { ...S.skill, opacity: 0.62 } : S.skill },
+                  h('div', { style: S.skillTitleRow },
+                    h('input', {
+                      type: 'checkbox', style: S.checkbox, disabled: locked || !!busy,
+                      checked: locked || selected.includes(rule.id),
+                      onChange: () => toggleRule(rule.id),
+                    }),
+                    h('span', { style: S.skillName }, rule.id),
+                    h('span', { style: S.count }, t('confidence') + ' ' + (rule.confidence || 'medium'))),
+                  h('div', { style: S.skillDesc }, rule.title + (rule.adopted ? ' · ' + t('adoptedLabel') : rule.present ? ' · ' + t('presentLabel') : '')),
+                  h('div', { style: S.skillDesc }, rule.text))
+              })),
+            h('div', { style: S.actions },
+              h('button', {
+                style: S.button, disabled: !!busy || !status.suggestions || status.suggestions.length === 0,
+                onClick: () => onAdopt(true),
+              }, t('adoptAll')),
+              h('button', {
+                style: S.buttonPrimary, disabled: !!busy || selected.length === 0,
+                onClick: () => onAdopt(false),
+              }, busy === 'adopt' ? t('adopting') : t('adoptSelected') + (selected.length ? ' (' + selected.length + ')' : '')))),
 
           h('div', { style: S.card },
             h('div', { style: S.cardTitleRow },
