@@ -16,9 +16,19 @@
 
 ## 安装
 
+从市场 / GitHub 源码安装（推荐，装完重启 DeepSeek Harness）：
+
+```sh
+dsh plugin --profile <你的 profile> add github:iannil/dsh-workstyle
+```
+
+本地开发安装（改代码即时生效）：
+
 1. 将本目录放到任意路径，例如 `~/Code/zhurong/dsh-workstyle`。
 2. 在 DeepSeek Harness 中安装该目录为插件（插件管理器 → 从本地目录安装）。
-3. 重启或等待 HMR 后，侧边栏出现「工作方式」入口。
+3. 重启后，侧边栏出现「工作方式」入口。
+
+> 本地 link 安装的插件需要重启 Harness 才会加载新的 JS；装完在面板里能看到「当前生效」区即成功。
 
 ## 使用
 
