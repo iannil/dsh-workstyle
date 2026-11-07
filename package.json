@@ -1,7 +1,6 @@
 {
   "name": "dsh-workstyle",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "Work style as code: ship a reviewable, versioned working style (rules + skills + presets) that any teammate can install.",
   "license": "MIT",
