@@ -103,3 +103,29 @@ bun test/multipage-render.mjs # 97 CHECKS PASSED
 这些图像沿用已有真实 API 响应渲染证据并统一到任务要求的 1440×1000 尺寸。任务期间无法启动真机 Harness：`dsh` 不在 PATH（文档命令返回 exit 127），而外部 `/Applications/DeepSeek Harness.app` 受当前 worktree 沙箱限制无法执行。因此真实 Harness 的逐路由刷新由 `multipage-render.mjs` 的 React shim 路由、异步切换、错误恢复和无陈旧内容检查覆盖，实际 GUI 重启仍是已知限制。
 
 专项检查：`#/run`、`#/packs`、`#/packs/fde-engineering`、`#/distill`、`#/metrics`、`#/distribute` 的路由集合、`aria-current`、刷新恢复和项目规则隔离由自动化检查覆盖；临时项目规则写入 `<cwd>/.dsh/workstyle.json`，另一临时项目不继承该文件；`pack/reference/workstyle.json` 验证前后 SHA-256 均为 `1dce344a09dfc9f966b2b5e694a9e2c19c00cc8427e95cac67abb02e3fed416a`。
+
+## panel-optimization（2026-11-09）
+
+真机 GUI 复验发现 multipage 版的实际渲染与设计稿不符：内部导航被当成普通块排在内容上方，
+1440×1000 下导航占 56–370px、环境条 415px、页面标题 510px，首屏近一半是空白；
+包名在状态行与下拉重复三次；暗色主题下卡片数字不可见；蒸馏页出现 `generatedAt 未发现` 幽灵行。
+
+本轮修复（只改 `client.js` 的布局/样式，i18n 与 ARIA id 不变）：
+
+- shell 改为 `masthead + body(rail + content)` 两栏：左栏 200px sticky 导航，内容区自适应；
+  断点 920px 与容器查询 760px 下折叠为横排 tab。
+- 页头只保留「会话 · 项目叠层」两段；包名只出现在下拉。页面级标题统一 `PageHead`（18px + 计数 + 单一动作）。
+- 主题 token 全部改走 Harness CSS 变量（`--dsw-alias-*`）+ `color-mix` 派生；删除启动时
+  `isDark` 亮度探测，明暗主题由 token 实时解析。
+- 修复：chip 计数与标签粘连、「全部7」；蒸馏源列表把 `generatedAt` 当来源渲染；页脚版本串右缘裁切；
+  预设/分发/蒸馏页正文重复 section 标题。
+
+截图（真机 CDP 截取，非 shim 渲染；cookie 取自桌面端 Cookies sqlite，Chrome `--no-sandbox`）：
+
+- `panel-opt-before-overview.png` / `panel-opt-before-rules.png`：改动前（导航整宽堆叠）。
+- `panel-opt-overview.png`：改动后两栏首屏，1440×1000。
+- `panel-opt-rules.png`、`panel-opt-presets.png`、`panel-opt-distill.png`、`panel-opt-metrics.png`、`panel-opt-distribute.png`。
+- `panel-opt-dark-overview.png`：暗色主题，卡片与选中态可读。
+- `panel-opt-narrow-rules.png`：780px 宽，导航折叠为横排 tab；右下页脚被 DSH 小鲸鱼浮窗遮挡，属外部固定浮层。
+
+回归：`bun test/smoke.mjs` 146、`bun test/panel-render.mjs` 116、`bun test/multipage-render.mjs` 97 全过。

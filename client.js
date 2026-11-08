@@ -24,45 +24,25 @@ window.__ModuleLoader__.load({
                danger:'#E5484D', ok:'#4CB782' },
     }
 
-    const luminance = (color) => {
-      const match = color && color.match(/rgba?\(([^)]+)\)/)
-      if (!match) return null
-      const parts = match[1].split(/[,\s/]+/).filter(Boolean)
-      const alpha = parts.length > 3 ? parseFloat(parts[3]) : 1
-      if (!(alpha > 0.1)) return null
-      const [r, g, b] = parts.map(Number)
-      return (0.2126 * r + 0.7152 * g + 0.0722 * b) < 128
+    /* Theme tokens resolve through the harness CSS variables, never a
+       load-time snapshot: the plugin can mount before the shell paints its
+       theme, and a snapshot would leave dark-mode text invisible. TOKENS stays
+       as the documented palette behind those variables. */
+    const T = {
+      bg: 'var(--dsw-alias-bg-base)',
+      surface: 'var(--dsw-alias-bg-layer-1)',
+      sel: 'color-mix(in srgb, var(--dsw-alias-label-primary) 7%, transparent)',
+      border: 'color-mix(in srgb, var(--dsw-alias-label-primary) 14%, transparent)',
+      ink: 'var(--dsw-alias-label-primary)',
+      ink2: 'var(--dsw-alias-label-secondary)',
+      ink3: 'color-mix(in srgb, var(--dsw-alias-label-secondary) 62%, transparent)',
+      accent: 'var(--dsw-alias-label-primary)',
+      danger: 'var(--dsw-alias-state-error-primary)',
+      ok: 'var(--dsw-alias-state-success-primary)',
     }
-
-    const isDark = (() => {
-      try {
-        if (typeof document !== 'undefined' && document.body && document.createElement) {
-          const probeTag = 'div'
-          const probe = document.createElement(probeTag)
-          probe.setAttribute('aria-hidden', 'true')
-          probe.style.cssText = 'position:absolute;left:-9999px;top:0;width:0;height:0;background:var(--dsw-alias-bg-base,transparent)'
-          document.body.appendChild(probe)
-          const fromToken = luminance(getComputedStyle(probe).backgroundColor)
-          probe.remove()
-          if (fromToken !== null) return fromToken
-        }
-        let el = document.body
-        while (el) {
-          const fromBody = luminance(getComputedStyle(el).backgroundColor)
-          if (fromBody !== null) return fromBody
-          el = el.parentElement
-        }
-        return false
-      } catch (err) {
-        return false
-      }
-    })()
-
-    const resolvedTheme = () => (isDark ? 'dark' : 'light')
-    const T = TOKENS[resolvedTheme()]
     const ACCENT = T.accent
-    const ACCENT_LINE = isDark ? 'rgba(233,233,231,0.55)' : 'rgba(55,53,47,0.45)'
-    const ACCENT_SOFT = isDark ? 'rgba(233,233,231,0.16)' : 'rgba(55,53,47,0.09)'
+    const ACCENT_LINE = 'color-mix(in srgb, currentColor 45%, transparent)'
+    const ACCENT_SOFT = 'color-mix(in srgb, currentColor 9%, transparent)'
     const HAIRLINE = 'var(--dsw-alias-border-l1)'
     const STATE_INFO = 'var(--dsw-alias-state-info-primary, ' + T.ink2 + ')'
     const PRIMARY_BG = T.accent
@@ -585,21 +565,22 @@ window.__ModuleLoader__.load({
       page: {
         minHeight: '100%', overflowY: 'auto',
         background: 'var(--dsw-alias-bg-base)', color: 'var(--dsw-alias-label-primary)',
-      },
-      inner: {
-        maxWidth: 1000, margin: '0 auto', padding: '36px 32px 64px',
-        display: 'flex', flexDirection: 'column', gap: 36,
+        fontSize: 13, lineHeight: 1.55,
       },
 
-      header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap' },
-      brandRow: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 8, minWidth: 0 },
+      /* Layout lives in the scoped stylesheet (dsw-frame / dsw-body / dsw-rail)
+         so the narrow-window breakpoint can collapse the rail. */
+      footWrap: { marginTop: 34 },
+
+      header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap', width: '100%' },
+      brandRow: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, minWidth: 0 },
       title: {
-        margin: 0, fontSize: 26, fontWeight: 650,
+        margin: 0, fontSize: 25, fontWeight: 650,
         letterSpacing: '-0.024em', lineHeight: 1.14,
       },
       statusLine: {
-        display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap',
-        marginTop: 7, fontSize: 12, color: 'var(--dsw-alias-label-secondary)',
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap',
+        marginTop: 2, fontSize: 12, color: 'var(--dsw-alias-label-secondary)',
         minWidth: 0, overflowWrap: 'anywhere',
       },
       statusStrong: { fontWeight: 650, color: 'var(--dsw-alias-label-primary)' },
@@ -608,7 +589,26 @@ window.__ModuleLoader__.load({
       select: {
         font: 'inherit', fontSize: 13, color: 'var(--dsw-alias-label-primary)',
         background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid ' + HAIRLINE,
-        borderRadius: 8, padding: '8px 10px', outline: 'none',
+        borderRadius: 8, padding: '8px 10px', outline: 'none', maxWidth: 260,
+      },
+
+      /* One page header rhythm for every route: title (+ count) left,
+         one action right. */
+      pageHead: {
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        gap: 12, flexWrap: 'wrap', minWidth: 0,
+      },
+      pageHeadText: { display: 'flex', alignItems: 'baseline', gap: 9, minWidth: 0, flexWrap: 'wrap' },
+      pageTitle: { margin: 0, fontSize: 18, fontWeight: 650, letterSpacing: '-0.012em' },
+      pageCount: {
+        fontSize: 12, color: 'var(--dsw-alias-label-secondary)',
+        fontVariantNumeric: 'tabular-nums',
+      },
+      smallButton: {
+        font: 'inherit', fontSize: 12, fontWeight: 600, cursor: 'pointer',
+        color: 'var(--dsw-alias-label-primary)', background: 'transparent',
+        border: '1px solid ' + T.border, borderRadius: 7, padding: '5px 10px',
+        whiteSpace: 'nowrap',
       },
       button: {
         font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer',
@@ -636,13 +636,23 @@ window.__ModuleLoader__.load({
         border: '1px solid ' + (on ? T.sel : T.border),
       }),
       card: {
-        display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0,
-        border: '1px solid ' + T.border, borderRadius: 6, padding: 12,
+        display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0,
+        border: '1px solid ' + T.border, borderRadius: 10, padding: '14px 16px',
+        background: 'var(--dsw-alias-bg-layer-2)',
+      },
+      statGrid: {
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10,
+      },
+      fpChip: {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10.5,
+        color: 'var(--dsw-alias-label-secondary)', background: 'var(--dsw-alias-bg-layer-2)',
+        border: '1px solid ' + HAIRLINE, borderRadius: 5, padding: '1px 6px',
+        fontVariantNumeric: 'tabular-nums',
       },
       cardLabel: { fontSize: 11.5, letterSpacing: '0.01em', fontWeight: 550, color: T.ink2 },
       cardValue: (tone) => ({
-        fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em',
-        fontVariantNumeric: 'tabular-nums', lineHeight: 1.3,
+        fontSize: 24, fontWeight: 650, letterSpacing: '-0.02em',
+        fontVariantNumeric: 'tabular-nums', lineHeight: 1.25,
         color: tone === 'danger' ? T.danger : T.ink,
       }),
       emptyCenter: {
@@ -761,10 +771,29 @@ window.__ModuleLoader__.load({
       },
 
       footer: {
-        display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap',
-        borderTop: '1px solid ' + HAIRLINE, paddingTop: 18,
+        display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+        gap: 12, flexWrap: 'wrap', minWidth: 0,
+        borderTop: '1px solid ' + HAIRLINE, paddingTop: 16,
         fontSize: 11.5, color: 'var(--dsw-alias-label-secondary)',
       },
+      footerMeta: { flexShrink: 0, textAlign: 'right' },
+      footerNote: { flex: '1 1 220px', minWidth: 0, textAlign: 'center' },
+
+      envBar: {
+        display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap',
+        fontSize: 11.5, color: 'var(--dsw-alias-label-secondary)', minWidth: 0,
+      },
+      envLabel: {
+        fontSize: 10.5, fontWeight: 650, letterSpacing: '0.06em',
+        color: T.ink3, flex: 'none',
+      },
+      envPath: {
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11,
+        color: 'var(--dsw-alias-label-secondary)',
+        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        maxWidth: '52ch', minWidth: 0,
+      },
+      envNote: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)' },
       banner: (kind) => ({
         fontSize: 12, lineHeight: 1.55, borderRadius: 8, padding: '9px 12px',
         border: '1px solid ' + (kind === 'error' ? T.danger : HAIRLINE),
@@ -885,15 +914,14 @@ window.__ModuleLoader__.load({
         padding: '9px 14px 10px', marginBottom: -1,
       },
       tabOn: { color: ACCENT, borderBottom: '2px solid ' + ACCENT },
-      sidebar: { display: 'flex', flexDirection: 'column', minWidth: 0 },
-      navGroup: { display: 'flex', flexDirection: 'column', gap: 1, paddingBottom: 6 },
       navGroupTitle: {
-        fontSize: 10, fontWeight: 650, letterSpacing: '0.08em', textTransform: 'uppercase',
-        color: T.ink3, padding: '10px 8px 4px',
+        fontSize: 10.5, fontWeight: 650, letterSpacing: '0.06em',
+        color: T.ink3, padding: '0 10px 6px',
       },
       navItem: {
-        fontSize: 13, fontWeight: 550, color: T.ink2, textDecoration: 'none',
-        padding: '5px 8px', borderRadius: 6,
+        display: 'block', fontSize: 13, fontWeight: 500, lineHeight: 1.45,
+        color: T.ink2, textDecoration: 'none',
+        padding: '6px 10px', borderRadius: 7,
       },
       navItemOn: { background: T.sel, color: T.ink, fontWeight: 650 },
       tabCount: {
@@ -925,7 +953,7 @@ window.__ModuleLoader__.load({
       injectHead: {
         display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap',
         padding: '9px 14px', borderBottom: '1px solid ' + HAIRLINE,
-        background: isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.022)',
+        background: 'color-mix(in srgb, var(--dsw-alias-label-primary) 3%, transparent)',
       },
       injectSectionName: {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11.5, fontWeight: 650,
@@ -959,8 +987,8 @@ window.__ModuleLoader__.load({
         fontSize: 10, lineHeight: 1.75, fontWeight: 650, letterSpacing: '0.01em',
         borderRadius: 4, padding: '0 6px', whiteSpace: 'nowrap',
         color: kind === 'project' ? ACCENT : kind === 'session' ? STATE_INFO : 'var(--dsw-alias-label-secondary)',
-        background: kind === 'project' ? ACCENT_SOFT : kind === 'session' ? (isDark ? 'rgba(96,150,255,0.14)' : 'rgba(30,90,200,0.08)') : 'transparent',
-        border: '1px solid ' + (kind === 'project' ? ACCENT_LINE : kind === 'session' ? (isDark ? 'rgba(96,150,255,0.45)' : 'rgba(30,90,200,0.35)') : HAIRLINE),
+        background: kind === 'project' ? ACCENT_SOFT : kind === 'session' ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 14%, transparent)' : 'transparent',
+        border: '1px solid ' + (kind === 'project' ? ACCENT_LINE : kind === 'session' ? 'color-mix(in srgb, var(--dsw-alias-brand-primary) 45%, transparent)' : HAIRLINE),
       }),
       ruleRowV5: {
         display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto', gap: 11,
@@ -1048,13 +1076,51 @@ window.__ModuleLoader__.load({
       }
       #dsw-root a:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 2px; border-radius: 6px; }
       #dsw-root [role="tab"]:focus-visible { outline-offset: -2px; }
+      /* Two-column shell: sticky route rail + reading column. */
+      #dsw-root .dsw-frame {
+        max-width: 1180px; margin: 0 auto; padding: 30px 40px 64px;
+        display: flex; flex-direction: column; container-type: inline-size;
+      }
+      #dsw-root .dsw-masthead { padding-bottom: 20px; border-bottom: 1px solid ${HAIRLINE}; }
+      #dsw-root .dsw-body {
+        display: flex; align-items: flex-start; gap: 44px; padding-top: 26px;
+      }
+      #dsw-root .dsw-rail {
+        flex: 0 0 200px; width: 200px; position: sticky; top: 24px; align-self: flex-start;
+      }
+      #dsw-root .dsw-content {
+        flex: 1 1 auto; min-width: 0;
+        display: flex; flex-direction: column; gap: 22px;
+      }
+      #dsw-root .dsw-nav { display: flex; flex-direction: column; gap: 18px; }
+      #dsw-root .dsw-nav-group { display: flex; flex-direction: column; gap: 1px; }
+      #dsw-root .dsw-nav-item { transition: background-color .12s ease, color .12s ease; }
+      #dsw-root .dsw-nav-item:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); }
+      #dsw-root .dsw-nav-item-on:hover { background: ${T.sel}; }
+      @media (max-width: 920px) {
+        #dsw-root .dsw-frame { padding: 20px 20px 48px; }
+        #dsw-root .dsw-body { flex-direction: column; gap: 18px; padding-top: 18px; }
+        #dsw-root .dsw-rail { position: static; width: 100%; flex: 0 0 auto; }
+        #dsw-root .dsw-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+        #dsw-root .dsw-nav-group { display: contents; }
+        #dsw-root .dsw-nav-group-title { display: none; }
+      }
+      /* The panel can be narrower than the window (slot beside the chat rail),
+         so collapse on the frame's own width too. */
+      @container (max-width: 760px) {
+        #dsw-root .dsw-body { flex-direction: column; gap: 18px; padding-top: 18px; }
+        #dsw-root .dsw-rail { position: static; width: 100%; flex: 0 0 auto; }
+        #dsw-root .dsw-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+        #dsw-root .dsw-nav-group { display: contents; }
+        #dsw-root .dsw-nav-group-title { display: none; }
+      }
       @media (prefers-reduced-motion: reduce) {
         #dsw-root *, #dsw-root *::before, #dsw-root *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
       }
       #dsw-root input[type="checkbox"] {
         -webkit-appearance: none; appearance: none;
         width: 14px; height: 14px; margin: 0; flex: none;
-        border: 1px solid ${isDark ? 'rgba(255,255,255,0.30)' : 'rgba(0,0,0,0.30)'};
+        border: 1px solid color-mix(in srgb, var(--dsw-alias-label-primary) 30%, transparent);
         border-radius: 4px; background: transparent; position: relative; cursor: pointer;
         transition: background-color .12s ease, border-color .12s ease;
       }
@@ -1097,7 +1163,9 @@ window.__ModuleLoader__.load({
         type: 'button', style: S.stateChip(on), 'aria-pressed': on ? 'true' : 'false',
         onClick,
       },
-        label, count === undefined || count === null ? null : ' ' + String(count))
+        label, count === undefined || count === null ? null : h('span', {
+          style: { marginLeft: 5, fontWeight: 600, fontVariantNumeric: 'tabular-nums', opacity: 0.72 },
+        }, String(count)))
     }
 
     function Loading(props) {
@@ -1127,15 +1195,16 @@ window.__ModuleLoader__.load({
 
     function Sidebar(props) {
       const { route, navigate, t } = props
-      return h('nav', { 'aria-label': t('navWorkstyle'), style: S.sidebar },
-        NAV_GROUPS.map(([groupKey, items]) => h('div', { key: groupKey, style: S.navGroup },
-          h('div', { style: S.navGroupTitle }, t(groupKey)),
+      return h('nav', { 'aria-label': t('navWorkstyle'), className: 'dsw-nav' },
+        NAV_GROUPS.map(([groupKey, items]) => h('div', { key: groupKey, className: 'dsw-nav-group' },
+          h('div', { className: 'dsw-nav-group-title', style: S.navGroupTitle }, t(groupKey)),
           items.map(([page, labelKey]) => {
             const on = route.page === page
             return h('a', {
               key: page,
               href: '#/' + page,
               'aria-current': on ? 'page' : undefined,
+              className: on ? 'dsw-nav-item dsw-nav-item-on' : 'dsw-nav-item',
               style: on ? { ...S.navItem, ...S.navItemOn } : S.navItem,
               onClick: (event) => {
                 if (event && event.preventDefault) event.preventDefault()
@@ -1158,14 +1227,13 @@ window.__ModuleLoader__.load({
 
     function EnvironmentContextBar({ environment }) {
       return h('div', {
-        role: 'region', 'aria-label': scopedT('envLabel'),
-        style: { ...S.rail, marginBottom: 16 },
+        role: 'region', 'aria-label': scopedT('envLabel'), className: 'dsw-env',
+        style: S.envBar,
       },
-        h('span', { style: S.railLabel }, scopedT('envLabel')),
-        h('span', { style: S.railValue }, environment.cwd || scopedT('noCwd')),
-        h('span', { style: S.railLabel }, environment.sessionId ? scopedT('sessionPrefix') + environment.sessionId : scopedT('noSession')),
-        environment.loading ? h('span', { style: S.railLabel }, scopedT('loadingShort')) : null,
-        environment.error ? h('span', { style: { ...S.railLabel, color: T.danger } }, environment.error) : null)
+        h('span', { style: S.envLabel }, scopedT('envLabel')),
+        h('span', { style: S.envPath, title: environment.cwd || '' }, environment.cwd || scopedT('noCwd')),
+        environment.loading ? h('span', { style: S.envNote }, scopedT('loadingShort')) : null,
+        environment.error ? h('span', { style: { ...S.envNote, color: T.danger } }, environment.error) : null)
     }
 
     /* --------------------------------- panel ------------------------------- */
@@ -1716,24 +1784,20 @@ window.__ModuleLoader__.load({
       }
       const primaryNav = h(Sidebar, { route, navigate, t })
       const environmentBar = h(EnvironmentContextBar, { environment })
-      const rootStyle = {
-        ...S.page,
-        '--dsw-color-bg': T.bg, '--dsw-color-surface': T.surface, '--dsw-color-sel': T.sel,
-        '--dsw-color-border': T.border, '--dsw-color-ink': T.ink, '--dsw-color-ink2': T.ink2,
-        '--dsw-color-ink3': T.ink3, '--dsw-color-accent': T.accent,
-        '--dsw-color-danger': T.danger, '--dsw-color-ok': T.ok,
-      }
+      const rootStyle = { ...S.page }
       const shell = (mainChildren, headerContent, footerContent, showBanners) => h('div', { id: 'dsw-root', style: rootStyle },
         h('style', null, CSS),
-        h('div', { style: S.inner },
-          primaryNav,
-          environmentBar,
-          headerContent || null,
-          showBanners && error ? h(ErrorState, { operation: t('opRun'), message: error, onRetry: load }) : null,
-          showBanners && notice ? h(Notice, null, notice) : null,
-          showBanners && envError ? h(ErrorState, { operation: t('opRefreshEnv'), message: envError, onRetry: load }) : null,
-          h('main', { id: 'dsw-main', 'aria-live': 'polite' }, mainChildren),
-          footerContent || null))
+        h('div', { className: 'dsw-frame' },
+          headerContent ? h('header', { className: 'dsw-masthead' }, headerContent) : null,
+          h('div', { className: 'dsw-body' },
+            h('div', { className: 'dsw-rail' }, primaryNav),
+            h('div', { className: 'dsw-content' },
+              environmentBar,
+              showBanners && error ? h(ErrorState, { operation: t('opRun'), message: error, onRetry: load }) : null,
+              showBanners && notice ? h(Notice, null, notice) : null,
+              showBanners && envError ? h(ErrorState, { operation: t('opRefreshEnv'), message: envError, onRetry: load }) : null,
+              h('main', { id: 'dsw-main', 'aria-live': 'polite' }, mainChildren),
+              footerContent ? h('div', { style: S.footWrap }, footerContent) : null))))
 
       if (!status) {
         if (error) {
@@ -2470,9 +2534,6 @@ window.__ModuleLoader__.load({
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
           h('section', { style: S.section },
-            h('div', { style: S.sectionHead },
-              h('span', { style: S.sectionLabel }, t('distributionTitle')),
-              h('span', { style: S.chip }, active.displayName + ' v' + active.version)),
             h('div', { style: { ...S.hint, paddingTop: 8 } }, t('exportScopeHint')),
             h('div', { style: { ...S.distPrimaryRow, paddingTop: 14 } },
               h('button', {
@@ -2522,13 +2583,13 @@ window.__ModuleLoader__.load({
 
       const DistillPage = ({ onNavigate, onScan, historyError, onRetryHistory }) => {
         const sourceEntries = Object.entries((report && report.sources) || {})
+          .filter(([, source]) => source && typeof source === 'object')
         const sourceLabels = { claude: 'Claude Code', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' }
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
           h('section', { style: S.section },
-            h('div', { style: S.sectionHead },
-              h('span', { style: S.sectionLabel }, t('distillReview')),
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 8 } },
+              h('span', { style: S.hint }, t('scanHint')),
               h('span', { style: S.chip }, t('localData'))),
-            h('div', { style: { ...S.hint, paddingTop: 8 } }, t('scanHint')),
             h('div', { style: { ...S.actionsBar, paddingTop: 12 } },
               h('button', { style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary, disabled: !!busy, onClick: onScan },
                 busy === 'distill' ? t('distilling') : t('distill')),
@@ -2627,15 +2688,23 @@ window.__ModuleLoader__.load({
             skill.enabled === false ? t('disabled') : (skill.inPreset ? t('presetCurrent') : t('enabled'))))))
         : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + t('skillsLabel')))
 
+      /* Shared route header: title + optional count/fingerprint chip, one action. */
+      const PageHead = ({ id, title, count, chip, action }) => h('div', { style: S.pageHead },
+        h('div', { style: S.pageHeadText },
+          h('h2', { id, style: S.pageTitle }, title),
+          count != null ? h('span', { style: S.pageCount }, count) : null,
+          chip || null),
+        action || null)
+
       const pageBody = route.page === 'overview'
         ? h('section', { 'aria-labelledby': 'dsw-overview-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
-          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
-            h('h2', { id: 'dsw-overview-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navOverview')),
-            h('button', { type: 'button', style: S.linkButton, onClick: () => navigate({ page: 'pack' }) }, t('packSwitch') + ' ▾')),
-          h('div', { style: S.hint },
-            active.displayName + ' · v' + active.version + ' · ',
-            h('code', { style: S.mono }, inj && inj.fingerprint ? inj.fingerprint : '-')),
-          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(158px, 1fr))', gap: 10 } },
+          PageHead({
+            id: 'dsw-overview-title',
+            title: t('navOverview'),
+            chip: h('code', { style: S.fpChip, title: t('fingerprint') }, inj && inj.fingerprint ? inj.fingerprint : '-'),
+            action: h('button', { type: 'button', style: S.smallButton, onClick: () => navigate({ page: 'pack' }) }, t('packSwitch') + ' ▾'),
+          }),
+          h('div', { style: S.statGrid },
             Card({ value: rules.length, label: t('statRules') }),
             Card({ value: suggestions.length, label: t('statSuggestions'), tone: suggestions.length > 0 ? 'danger' : undefined }),
             Card({ value: scopedSkills.length, label: t('statSkills') })),
@@ -2646,7 +2715,7 @@ window.__ModuleLoader__.load({
             h('button', { type: 'button', style: S.linkButton, onClick: onDistill }, t('quickDistill'))))
       : route.page === 'pack'
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
-            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? t('pagePackDetail') : t('navRail')), packDetailPageBody)
+            h('h2', { id: 'dsw-packs-title', style: S.pageTitle }, route.packId ? t('pagePackDetail') : t('navRail')), packDetailPageBody)
           : route.page === 'rules'
             ? (() => {
               /* Rules page: scope chips + document-style list. Counts and
@@ -2700,9 +2769,12 @@ window.__ModuleLoader__.load({
                     ? h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule.id) }, t('removeRule'))
                     : null))
               return h('section', { 'aria-labelledby': 'dsw-rules-page-title' },
-                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
-                  h('h2', { id: 'dsw-rules-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navRules')),
-                  h('button', { type: 'button', style: S.linkButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('newRule'))),
+                PageHead({
+                  id: 'dsw-rules-page-title',
+                  title: t('navRules'),
+                  count: filteredRules.length,
+                  action: h('button', { type: 'button', style: S.smallButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('newRule')),
+                }),
                 h('div', { role: 'group', 'aria-label': t('all'), style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
                   scopeChips.map(([key, label, count]) => Chip({
                     label, count,
@@ -2720,26 +2792,37 @@ window.__ModuleLoader__.load({
             })()
             : route.page === 'presets'
               ? h('section', { 'aria-labelledby': 'dsw-presets-page-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
-                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
-                  h('h2', { id: 'dsw-presets-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navPresets')),
-                  h('button', { type: 'button', style: S.linkButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew'))),
+                PageHead({
+                  id: 'dsw-presets-page-title',
+                  title: t('navPresets'),
+                  count: presets.length,
+                  action: h('button', { type: 'button', style: S.smallButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew')),
+                }),
                 presetsBody)
               : route.page === 'skills'
                 ? h('section', { 'aria-labelledby': 'dsw-skills-page-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
-                  h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
-                    h('h2', { id: 'dsw-skills-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navSkills')),
-                    h('span', { style: S.hint }, scopedSkills.length + ' ' + t('skillsUnit'))),
+                  PageHead({
+                    id: 'dsw-skills-page-title',
+                    title: t('navSkills'),
+                    count: scopedSkills.length + ' ' + t('skillsUnit'),
+                  }),
                   skillsBody)
                 : route.page === 'distill'
-                  ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('distillReview')), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
+                  ? h('section', { 'aria-labelledby': 'dsw-distill-title' },
+                    PageHead({ id: 'dsw-distill-title', title: t('distillReview') }),
+                    h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
                   : route.page === 'metrics'
                     ? h('section', { 'aria-labelledby': 'dsw-metrics-title' },
-                      h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('pageMetrics')),
+                      PageHead({ id: 'dsw-metrics-title', title: t('pageMetrics') }),
                       h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }),
                       /* The old run page survives as the lower half of metrics. */
                       h(Section, { id: 'dsw-run', label: t('pageRun') }, runBody))
                     : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
-                h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('pageDistribute')),
+                PageHead({
+                  id: 'dsw-distribute-title',
+                  title: t('pageDistribute'),
+                  chip: h('span', { style: S.chip }, active.displayName + ' v' + active.version),
+                }),
                 h(DistributionPage, {
                   exports,
                   cwd: environment.cwd,
@@ -2763,9 +2846,7 @@ window.__ModuleLoader__.load({
                 t('session') + ' ',
                 h('span', { style: S.statusStrong }, session && session.id ? session.id.slice(0, 12) : '-')),
               h('span', { style: S.statusDivider }),
-              h('span', null, projectFileText || t('noProjectFile')),
-              h('span', { style: S.statusDivider }),
-              h('span', null, active.displayName + ' v' + active.version)))),
+              h('span', null, projectFileText || t('noProjectFile'))))),
         h('div', { style: S.toolbar },
           h('select', {
             style: S.select, value: active.id, disabled: busy === 'apply',
@@ -2778,9 +2859,9 @@ window.__ModuleLoader__.load({
           }, t('refresh'))))
 
       const footerNode = h('div', { style: S.footer },
-        h('span', null, BUILD),
-        h('span', null, t('privacy')),
-        h('span', { style: S.mono }, 'dsh-workstyle v' + status.plugin.version))
+        h('span', { style: { whiteSpace: 'nowrap' } }, BUILD),
+        h('span', { style: S.footerNote }, t('privacy')),
+        h('span', { style: { ...S.mono, ...S.footerMeta } }, 'dsh-workstyle v' + status.plugin.version))
 
       return shell(pageBody, headerNode, footerNode, true)
     }

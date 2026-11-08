@@ -219,7 +219,7 @@ ok(!!findHost(view, (node) => node.props && node.props.id === 'dsw-main' && node
 const root = findHost(view, (node) => node.props && node.props.id === 'dsw-root')
 const style = findHost(view, (node) => node.type === 'style')
 ok(!!root && text.includes('当前环境'), 'dark-mode fixture keeps the shared context label')
-ok(!!root && root.props.style['--dsw-color-ink'] === '#37352F' && root.props.style['--dsw-color-surface'] === '#F7F6F3', 'theme token set is present on the themed root')
+ok(!!root && !root.props.style['--dsw-color-ink'] && !!style && textOf(style).includes('var(--dsw-alias-label-primary)'), 'theme tokens resolve through the harness token set')
 ok(!!style && textOf(style).includes('focus-visible') && textOf(style).includes('prefers-reduced-motion'), 'focus-visible and reduced-motion rules stay scoped')
 failEnv.emptyMetrics = false
 view = await panel.act(() => button(view, '刷新').props.onClick())
