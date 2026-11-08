@@ -1,0 +1,4 @@
+status: implemented Task 4 `/packs` and `/packs/:id` in `client.js`; added canonical pack navigation, portable detail loading, missing-pack recovery, rules/skills/presets/templates tabs, explicit read-only bundled resources, project rule validation/edit/remove, preset refresh, and fingerprint notices; updated focused panel route assertion and added multipage contract coverage.
+commits: ee12d3a (`feat(panel): add workstyle package pages`)
+ tests: `bun test/multipage-render.mjs` — 15 checks passed; `bun test/panel-render.mjs` — 86 checks passed; `bun test/smoke.mjs` — 144 checks passed; `git diff --check` passed.
+concerns: Node.js was unavailable, so Bun was used. The multipage test is contract-focused because the existing React shim suite owns full render execution; existing unrelated worktree changes were left untouched.

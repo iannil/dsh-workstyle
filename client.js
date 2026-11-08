@@ -976,6 +976,7 @@ window.__ModuleLoader__.load({
       const [envError, setEnvError] = React.useState('')
       const [injectOpen, setInjectOpen] = React.useState(false)
       const [presetTab, setPresetTab] = React.useState('rules')
+      const [packTab, setPackTab] = React.useState('rules')
       const [metricTab, setMetricTab] = React.useState('metrics')
       const [editing, setEditing] = React.useState(null)
       const ONBOARDING_KEY = 'dsw-workstyle:onboarding-v1'
@@ -1031,6 +1032,9 @@ window.__ModuleLoader__.load({
         .catch((err) => ({ ok: false, error: String(err && err.message ? err.message : err) }))
 
       const [route, setRoute] = React.useState(readRoute)
+      const [packDetail, setPackDetail] = React.useState(null)
+      const [packLoading, setPackLoading] = React.useState(false)
+      const [packError, setPackError] = React.useState('')
       const [envLoading, setEnvLoading] = React.useState(false)
       const navigate = React.useCallback((next) => {
         const target = typeof next === 'string' ? { page: next } : next
@@ -1048,9 +1052,31 @@ window.__ModuleLoader__.load({
         return () => window.removeEventListener && window.removeEventListener('hashchange', onHashChange)
       }, [])
 
+      React.useEffect(() => {
+        const id = route.page === 'packs' || route.page === 'pack' ? route.packId : undefined
+        if (!id) {
+          setPackDetail(null)
+          setPackError('')
+          return undefined
+        }
+        let cancelled = false
+        setPackLoading(true)
+        setPackError('')
+        getJson('pack?id=' + encodeURIComponent(id)).then((result) => {
+          if (cancelled) return
+          if (!result.ok || !result.data || !result.data.pack) {
+            setPackDetail(null)
+            setPackError(result.error || (result.data && result.data.error) || 'pack unavailable')
+            return
+          }
+          setPackDetail(result.data.pack)
+        }).finally(() => { if (!cancelled) setPackLoading(false) })
+        return () => { cancelled = true }
+      }, [route.page, route.packId])
+
       const loadEnv = React.useCallback(() => {
         setEnvLoading(true)
-        Promise.all([
+        return Promise.all([
           getJson('scope' + envQuery),
           getJson('inject' + envQuery),
           getJson('metrics' + envQuery),
@@ -1075,6 +1101,7 @@ window.__ModuleLoader__.load({
               ? { from: prev.inject.fingerprint, to: injectData.fingerprint }
               : (prev && prev.fingerprint) || null,
           }))
+          return { scope: scopeData, inject: injectData, metrics: metricsData }
         })
         .finally(() => setEnvLoading(false))
       }, [envQuery])
@@ -1126,7 +1153,10 @@ window.__ModuleLoader__.load({
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'apply failed')
             setStatus(data.status)
-            setNotice(t('applied') + '：' + data.applied.id)
+            return loadEnv().then((loaded) => {
+              const fingerprint = loaded && loaded.inject && loaded.inject.fingerprint
+              setNotice(t('applied') + '：' + data.applied.id + (fingerprint ? ' · ' + t('fingerprint') + ' ' + fingerprint : ''))
+            })
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1234,16 +1264,31 @@ window.__ModuleLoader__.load({
           .finally(() => setBusy(''))
       }
 
+      const refreshEnvironment = (changedId, message) => loadEnv().then((loaded) => {
+        const fingerprint = loaded && loaded.inject && loaded.inject.fingerprint
+        setNotice(message + '：' + changedId + (fingerprint ? ' · ' + t('fingerprint') + ' ' + fingerprint : ''))
+        navigate({ page: 'run' })
+        return loaded
+      })
+
       const onSaveRule = (draft) => {
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
+        const normalized = {
+          id: typeof draft.id === 'string' ? draft.id.trim() : '',
+          title: typeof draft.title === 'string' ? draft.title.trim() : '',
+          text: typeof draft.text === 'string' ? draft.text.trim() : '',
+        }
+        if (!normalized.id || !normalized.title || !normalized.text) {
+          setError(t('ruleIdLabel') + '、' + t('ruleTitleLabel') + '、' + t('ruleTextLabel') + '不能为空')
+          return Promise.resolve()
+        }
         if (!cwd) { setError(t('envUnavailable') + 'no cwd'); return Promise.resolve() }
         setBusy('rule'); setError(''); setNotice('')
-        return postJson('rule', { cwd, rule: draft })
+        return postJson('rule', { cwd, rule: normalized })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'rule save failed')
             setEditing(null)
-            setNotice(t('ruleSaved'))
-            loadEnv()
+            return refreshEnvironment(normalized.id, t('ruleSaved'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1251,13 +1296,13 @@ window.__ModuleLoader__.load({
 
       const onRemoveRule = (id) => {
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
-        if (!cwd) return
+        const normalizedId = typeof id === 'string' ? id.trim() : ''
+        if (!cwd || !normalizedId) return
         setBusy('rule'); setError(''); setNotice('')
-        postJson('rule', { cwd, rule: { id }, remove: true })
+        postJson('rule', { cwd, rule: { id: normalizedId }, remove: true })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'rule remove failed')
-            setNotice(t('ruleRemoved'))
-            loadEnv()
+            return refreshEnvironment(normalizedId, t('ruleRemoved'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1269,8 +1314,10 @@ window.__ModuleLoader__.load({
         postJson('preset', { action: 'use', preset: id, cwd })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'preset use failed')
-            setNotice(t('presetCurrent') + '：' + id)
-            loadEnv()
+            return loadEnv().then((loaded) => {
+              const fingerprint = loaded && loaded.inject && loaded.inject.fingerprint
+              setNotice(t('presetCurrent') + '：' + id + (fingerprint ? ' · ' + t('fingerprint') + ' ' + fingerprint : ''))
+            })
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -2052,27 +2099,64 @@ window.__ModuleLoader__.load({
             : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null),
         }, reviewSectionBody) : null)
 
+      const packListBody = h('div', null,
+        h('div', { style: S.hint }, '选择一个包查看它的规则、技能、预设与模板。'),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10, paddingTop: 14 } },
+          packs.map((pack) => h('a', {
+            key: pack.id, href: routeHash('packs', pack.id), style: { ...S.tile, textDecoration: 'none' },
+            onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs', packId: pack.id }) },
+          },
+            h('div', { style: S.ruleTitleRow },
+              h('span', { style: S.ruleTitle }, pack.displayName || pack.name || pack.id),
+              pack.id === active.id ? h('span', { style: S.badge }, '当前') : null),
+            h('span', { style: S.mono }, pack.id + ' · v' + pack.version),
+            h('span', { style: S.tileSub }, '来源：' + (pack.source || '本地内置') + ' · ' + (pack.ruleCount || 0) + ' 条规则 · ' + (pack.skillCount || 0) + ' 个技能'),
+            pack.id === active.id ? h('span', { style: S.hint }, '当前生效') : h('span', { style: S.hint }, '可查看')))))
+
+      const selectedPack = packDetail || packs.find((pack) => pack.id === route.packId) || null
+      const selectedIsActive = !!selectedPack && selectedPack.id === active.id
+      const detailTabs = [
+        ['rules', '规则', selectedPack ? (selectedIsActive ? scopedRules.length : (selectedPack.rules || []).length) : 0],
+        ['skills', '技能', selectedPack ? (selectedIsActive ? scopedSkills.length : (selectedPack.skills || []).length) : 0],
+        ['presets', '预设', selectedPack ? (selectedIsActive ? presets.length : (selectedPack.presets || []).length) : 0],
+        ['templates', '模板', selectedPack ? (selectedIsActive ? templates.length : (selectedPack.templates || []).length) : 0],
+      ]
+      const readOnlyResource = (label, items, render) => h('section', { style: S.section },
+        h('div', { style: S.sectionHead }, h('span', { style: S.sectionLabel }, label), h('span', { style: S.sectionCount }, String(items.length)),
+          h('span', { style: S.sectionRight }, '只读')),
+        items.length ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, items.map(render))
+          : h('div', { style: S.empty }, h('div', { style: S.hint }, '暂无' + label)))
+      const nonActiveDetail = selectedPack
+        ? packTab === 'rules'
+          ? readOnlyResource('规则', selectedPack.rules || [], (rule) => h('div', { key: rule.id, style: S.ruleRowV5 },
+            h('span', { style: S.scopeBadge('workspace') }, '包'), h('div', { style: { minWidth: 0 } }, h('div', { style: S.ruleTitle }, rule.title), h('div', { style: S.ruleText }, rule.text)), h('span', { style: S.mutedBadge }, '只读')))
+          : packTab === 'skills'
+            ? readOnlyResource('技能', selectedPack.skills || [], (skill) => h('div', { key: skill.name, style: S.skillRow },
+              h('div', { style: S.skillHead }, h('span', { style: S.skillName }, skill.name), h('span', { style: S.skillDesc }, skill.description || ''), h('span', { style: S.mutedBadge }, '只读'))))
+            : packTab === 'presets'
+              ? readOnlyResource('预设', selectedPack.presets || [], (preset) => h('div', { key: preset.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, preset.title || preset.id), h('span', { style: S.ruleSideText }, preset.description || ''), h('span', { style: S.mutedBadge }, '只读')))
+              : readOnlyResource('模板', selectedPack.templates || [], (template) => h('div', { key: template.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, template.title || template.id), h('span', { style: S.ruleSideText }, template.text || ''), h('span', { style: S.mutedBadge }, '只读')))
+        : null
+      const packDetailPageBody = !route.packId
+        ? packListBody
+        : packLoading && !selectedPack
+          ? h('div', { style: S.empty }, h('div', { style: S.hint }, '正在加载工作方式包…'))
+          : (packError && !selectedPack) || !selectedPack
+            ? h('div', { style: S.empty }, h('div', { style: S.banner('error') }, '找不到工作方式包：' + (route.packId || '') ), h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, '返回工作方式包'))
+            : h('div', null,
+              h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, '当前') : h('span', { style: S.mutedBadge }, '未启用')), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, '来源：' + (selectedPack.source || '本地内置') + ' · ' + selectedPack.ruleCount + ' 条规则 · ' + selectedPack.skillCount + ' 个技能')),
+              h('div', { style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key), 'aria-pressed': packTab === key ? 'true' : 'false' }, label + ' · ' + count))),
+              selectedIsActive ? packDetailBody : nonActiveDetail)
+
       const pageBody = route.page === 'run'
         ? h('section', { 'aria-labelledby': 'dsw-run-title' },
           h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, '运行台'),
           runBody)
-        : route.page === 'packs'
+        : route.page === 'packs' || route.page === 'pack'
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
-            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, '工作方式包'),
-            route.packId
-              ? packDetailBody
-              : h('div', null,
-                h('div', { style: S.hint }, '选择一个包查看它的规则与技能。'),
-                h('div', { style: S.sourceList }, packs.map((pack) => h('a', {
-                  key: pack.id, href: routeHash('pack', pack.id), style: { ...S.sourceRow, textDecoration: 'none' },
-                  onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'pack', packId: pack.id }) },
-                }, (pack.displayName || pack.name || pack.id) + ' · v' + pack.version)))))
-          : route.page === 'pack'
-            ? h('section', { 'aria-labelledby': 'dsw-pack-title' },
-              h('h2', { id: 'dsw-pack-title', style: { ...S.sectionLabel, fontSize: 18 } }, '工作方式包详情'),
-              h('div', { style: S.hint }, route.packId || active.id),
-              packDetailBody)
-            : route.page === 'distill'
+            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? '工作方式包详情' : '工作方式包'),
+            packDetailPageBody)
+          : route.page === 'distill'
               ? h('section', { 'aria-labelledby': 'dsw-distill-title' },
                 h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏'),
                 h('div', { style: S.hint }, '从本机会话生成可审阅的工作方式建议。'),
