@@ -1552,9 +1552,9 @@ window.__ModuleLoader__.load({
       }
 
       const todoItems = [
-        { key: 'distill', label: t('todoDistill'), count: pendingCount, target: 'presets', review: true },
-        { key: 'evidence', label: t('todoEvidence'), count: enabledRules.filter((rule) => !rule.evidence).length, target: 'presets' },
-        { key: 'conflict', label: t('todoConflict'), count: scopedDisabled.filter((rule) => rule.disabledBy).length, target: 'presets' },
+        { key: 'distill', label: t('todoDistill'), count: pendingCount, target: 'distill' },
+        { key: 'evidence', label: t('todoEvidence'), count: enabledRules.filter((rule) => !rule.evidence).length, target: 'packs', packId: active.id },
+        { key: 'conflict', label: t('todoConflict'), count: scopedDisabled.filter((rule) => rule.disabledBy).length, target: 'packs', packId: active.id },
         { key: 'unverified', label: t('todoUnverified'), count: 0, target: 'metrics' },
       ]
 
@@ -1602,13 +1602,15 @@ window.__ModuleLoader__.load({
           h('span', { style: S.railLabel }, t('generated')),
           h('span', { style: S.railValue }, latest ? when(latest.generatedAt) : t('never'))))
 
-      const todoBar = h('div', { style: S.tidy },
-        todoItems.map((item) => h('button', {
+      const todoBar = h('div', { style: S.tidy, role: 'list', 'aria-label': t('pending') },
+        todoItems.map((item) => h('a', {
           key: item.key,
+          href: routeHash(item.target, item.packId),
           style: S.tidyItem,
-          onClick: () => {
-            onTab(item.target)
-            if (item.review) setReviewOpen(true)
+          role: 'listitem',
+          onClick: (event) => {
+            if (event && event.preventDefault) event.preventDefault()
+            navigate({ page: item.target, packId: item.packId })
           },
           title: item.label,
         },
@@ -1802,6 +1804,44 @@ window.__ModuleLoader__.load({
           h('span', null, t('presetRules') + ' ', h('span', { style: S.presetCountEm }, String(preset.rules.length))),
           h('span', null, t('presetSkills') + ' ', h('span', { style: S.presetCountEm }, String(preset.skills.length))),
           h('span', null, t('presetTemplates') + ' ', h('span', { style: S.presetCountEm }, String(preset.templates.length))))))
+
+      /* The run page is intentionally a compact operational surface. Full rule
+         and skill inventories live on their own routes; this page proves what
+         is active and offers only the next useful actions. */
+      const RunPage = ({ environment: runEnvironment, onNavigate, onRefresh, onUsePreset: usePreset }) => h(
+        'div',
+        null,
+        statusRail,
+        todoBar,
+        onboardingTip,
+        runEnvironment && runEnvironment.error
+          ? h('div', { style: S.banner('error'), role: 'alert' },
+            t('envUnavailable') + runEnvironment.error,
+            h('button', { style: S.linkAccent, type: 'button', onClick: onRefresh }, t('refresh')))
+          : null,
+        h('section', { 'aria-labelledby': 'dsw-quick-presets-title', style: { paddingTop: 14 } },
+          h('div', { style: S.sectionHead },
+            h('span', { id: 'dsw-quick-presets-title', style: S.sectionLabel }, t('presetsTitle')),
+            h('a', {
+              href: routeHash('pack', active.id), style: S.linkAccent,
+              onClick: (event) => {
+                if (event && event.preventDefault) event.preventDefault()
+                onNavigate({ page: 'pack', packId: active.id })
+              },
+            }, t('navPresets')),
+          ),
+          h('div', { style: { ...S.presetGrid, paddingTop: 10 } },
+            presets.slice(0, 3).map((preset) => h('button', {
+              key: preset.id,
+              type: 'button',
+              style: S.presetCard(preset.id === activePresetId),
+              onClick: () => usePreset(preset.id),
+              title: preset.description || preset.id,
+            },
+              h('span', { style: S.presetTitle }, preset.title),
+              preset.id === activePresetId ? h('span', { style: S.badge }, t('presetCurrent')) : null)))),
+        injectBlock,
+      )
 
       const presetTabs = [
         ['rules', t('presetRules'), scopedRules.length],
@@ -2022,26 +2062,12 @@ window.__ModuleLoader__.load({
               h('span', { style: S.sourcePath, title: (status.sources || {})[key] || '' }, (status.sources || {})[key] || '-')))),
           h('div', { style: { ...S.hint, paddingTop: 8 } }, t('aboutHint'))))
 
-      const runBody = h('div', null,
-        tabBar,
-        tab === 'inject' ? tabPanel('inject', injectBlock) : null,
-        tab === 'presets' ? tabPanel('presets', h('div', null,
-          rulesBlock,
-          presetsBlock,
-          (reviewOpen || pendingCount > 0 || allHandled) ? h(Section, {
-            id: 'dsw-review',
-            label: t('review'),
-            count: suggestions.length,
-            right: allHandled
-              ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 10 } },
-                h('span', null, t('allHandled') + ' · ' + handledSuggestions.length + ' ' + t('inPackUnit')),
-                h('button', { style: S.linkAccent, onClick: () => setShowHandled((prev) => !prev) },
-                  showHandled ? t('hideHandled') : t('viewHandled')))
-              : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null),
-          }, reviewSectionBody) : null,
-        )) : null,
-        tab === 'metrics' ? tabPanel('metrics', metricsBlock) : null,
-        tab === 'distribution' ? tabPanel('distribution', h('div', null, distributionBlock, evidenceSection)) : null)
+      const runBody = h(RunPage, {
+        environment,
+        onNavigate: navigate,
+        onRefresh: load,
+        onUsePreset,
+      })
       const pageBody = route.page === 'run'
         ? h('section', { 'aria-labelledby': 'dsw-run-title' },
           h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, '运行台'),
@@ -2100,13 +2126,11 @@ window.__ModuleLoader__.load({
                 onClick: load, disabled: !!busy,
               }, t('refresh')))),
 
-          route.page === 'run' ? statusRail : null,
-          route.page === 'run' ? todoBar : null,
-          route.page === 'run' ? onboardingTip : null,
-
           error ? h('div', { style: S.banner('error') }, t('error') + '：' + error) : null,
           notice ? h('div', { style: S.banner('info') }, notice) : null,
-          envError ? h('div', { style: S.banner('error') }, t('envUnavailable') + envError) : null,
+          route.page !== 'run' && envError ? h('div', { style: S.banner('error'), role: 'alert' },
+            t('envUnavailable') + envError,
+            h('button', { style: S.linkAccent, type: 'button', onClick: load }, t('refresh'))) : null,
 
           pageBody,
 

@@ -465,144 +465,50 @@ ok(text.includes('新开一个对话'), 'tip step 2 asks for a new chat proof')
 const dismiss = button(view, '知道了')
 ok(!!dismiss, 'tip has a dismiss button')
 
-/* tabs switch the page instead of scrolling one long sheet */
-const tabBar = findHost(view, (node) => node.props && node.props.role === 'tablist')
-ok(!!tabBar, 'a tablist renders')
-const tabLabels = ['载入预览', '预设与规则', '度量', '分发']
-ok(tabLabels.every((label) => text.includes(label)), 'four tabs are present')
-const selectedTabs = []
-const collectTabs = (node) => {
-  if (!node || typeof node !== 'object') return
-  if (Array.isArray(node)) { node.forEach(collectTabs); return }
-  if (node.props && node.props.role === 'tab' && node.props['aria-selected'] === 'true') selectedTabs.push(node)
-  collectTabs(node.props && node.props.children)
+/* run page keeps the operational surface compact */
+ok(!findHost(view, (node) => node.props && node.props.role === 'tablist'), 'run page has no full tab shell')
+ok(!text.includes('规则 > 预设（组合）> 技能 > 模板'), 'run page omits the full preset/rule inventory')
+ok(!text.includes('fde-job') && !text.includes('fde-qa'), 'run page omits the full skill inventory')
+ok(text.includes('systemPrompt · dsh-workstyle.rules'), 'run page names the real system-prompt section')
+ok(/sha256 [0-9a-f]{8}/.test(text), 'run page pins a sha256 fingerprint')
+ok(text.includes('渲染函数 renderRules()'), 'run page names the renderer')
+ok(text.includes('## 工作方式'), 'run page renders the actual injected markdown')
+ok(text.includes('规则正文-先方案'), 'run page shows rule text as sent, not a summary')
+ok(text.includes('来源：包 3 · 项目 +1 · 会话 −1'), 'run page explains where the text came from')
+
+const todoLinks = ['#/distill', '#/packs/fde-engineering', '#/metrics']
+for (const href of todoLinks) {
+  ok(!!findHost(view, (node) => node.type === 'a' && node.props && node.props.href === href), 'to-do bar links to ' + href)
 }
-collectTabs(view)
-ok(selectedTabs.length === 1, 'exactly one tab is selected (got ' + selectedTabs.length + ')')
+const evidenceTodo = findHost(view, (node) => node.type === 'a' && node.props
+  && node.props.href === '#/packs/fde-engineering' && textOf(node).includes('规则缺证据'))
+ok(!!evidenceTodo, 'evidence to-do is a semantic route link')
 
-/* the inject tab owns the loaded text */
-ok(text.includes('systemPrompt · dsh-workstyle.rules'), 'inject tab names the real system-prompt section')
-ok(/sha256 [0-9a-f]{8}/.test(text), 'inject tab pins a sha256 fingerprint')
-ok(text.includes('渲染函数 renderRules()'), 'inject tab names the renderer')
-ok(text.includes('## 工作方式'), 'inject tab renders the actual injected markdown')
-ok(text.includes('规则正文-先方案'), 'inject tab shows rule text as sent, not a summary')
-ok(text.includes('来源：包 3 · 项目 +1 · 会话 −1'), 'inject tab explains where the text came from')
+const quickPreset = findHost(view, (node) => node.type === 'button' && node.props && textOf(node).includes('写书'))
+ok(!!quickPreset, 'run page exposes a quick preset switch')
+view = await act(() => quickPreset.props.onClick())
+ok(fetchLog.some((url) => url.endsWith('/api/dsh-workstyle/preset')), 'quick preset switch calls the host preset action')
 
-/* other tabs' content must NOT be on screen at the same time */
-ok(!text.includes('规则 > 预设（组合）> 技能 > 模板'), 'the presets tab body is not rendered on the inject tab')
-ok(!text.includes('先方案率'), 'the metrics tab body is not rendered on the inject tab')
-ok(!text.includes('导出包 + 作用域快照'), 'the distribution tab body is not rendered on the inject tab')
-
-const tabButton = (label) => findHost(view, (node) => node.props && node.props.role === 'tab'
-  && textOf(node).includes(label))
-
-view = await act(() => tabButton('预设与规则').props.onClick())
+/* injection failure keeps the last successful proof visible and offers retry */
+failEnv.inject = true
+view = await act(() => button(view, '刷新').props.onClick())
 text = textOf(view)
-ok(text.includes('规则 > 预设（组合）> 技能 > 模板'), 'presets tab explains the four-layer order')
-ok(text.includes('FDE 交付') && text.includes('写书') && text.includes('RC 探讨'), 'presets tab renders preset cards')
-ok(text.includes('新建预设'), 'presets tab offers preset creation')
-ok(text.includes('项目：只改 docs/'), 'presets tab lists the project-layer rule')
-ok(text.includes('被覆盖 · 会话'), 'presets tab names the session override')
-ok(text.includes('紧凑交付'), 'a disabled rule stays visible so the override is legible')
-ok(text.includes('新建规则'), 'presets tab offers rule editing')
-ok(!text.includes('## 工作方式'), 'the inject body is gone after switching tabs')
-
-view = await act(() => tabButton('度量').props.onClick())
+ok(text.includes('环境视图不可用：inject failed to load'), 'inject failure names the failed route')
+ok(/sha256 [0-9a-f]{8}/.test(text), 'inject failure keeps the previous fingerprint visible')
+const retry = findHost(view, (node) => node.type === 'button' && textOf(node) === '刷新')
+ok(!!retry, 'environment failure exposes a retry button')
+failEnv.inject = false
+view = await act(() => retry.props.onClick())
 text = textOf(view)
-ok(text.includes('规则命中') && text.includes('先方案率') && text.includes('验证率') && text.includes('蒸馏覆盖'),
-  'metrics tab renders four metrics')
-ok(text.includes('815 / 20056'), 'metric card prints the working, not just the number')
-ok(text.includes('不能说明模型是否遵守规则'), 'metrics state the proxy caveat')
-ok(!text.includes('遵守率') && !text.includes('违反率'), 'no compliance or violation metric is invented')
-ok(!text.includes('FDE 交付'), 'the presets body is gone on the metrics tab')
-
-view = await act(() => tabButton('分发').props.onClick())
-text = textOf(view)
-ok(text.includes('导出包 + 作用域快照') && text.includes('导出包（仅包）'), 'distribution tab offers both exports')
-ok(text.includes('复制安装命令'), 'distribution tab offers the install command')
-ok(text.includes('home v5'), 'footer exposes the v5 build marker')
-ok(!text.includes('面向工程交付'), 'pack marketing description removed')
-
-view = await act(() => tabButton('载入预览').props.onClick())
-view = await act(() => button(view, '展开全文').props.onClick())
-text = textOf(view)
-ok(text.includes('收起全文'), 'inject block can expand to the full text')
+ok(!text.includes('环境视图不可用：inject failed to load'), 'retry clears the inject failure')
 
 const rootHost = findHost(view, (node) => node.props && node.props.id === 'dsw-root')
 ok(!!rootHost, 'panel root carries the dsw-root style scope')
 const styleHost = findHost(view, (node) => node.type === 'style' && textOf(node).includes('#dsw-root'))
 ok(!!styleHost, 'scoped stylesheet mounts with the panel')
-ok(!checkbox(view, '先方案后实现'), 'rule toggles are absent on the inject tab (rules live on the presets tab)')
-
-/* review queue lives on the presets tab, behind its own toggle */
-view = await act(() => tabButton('预设与规则').props.onClick())
-text = textOf(view)
-ok(text.includes('中文短句') && text.includes('采纳选中'), 'review queue and adopt action are visible')
-ok(!!checkbox(view, '先方案后实现'), 'preset rule rows expose a real toggle checkbox')
-
-/* review queue interactions */
-
-view = await act(() => button(view, '查看已处理').props.onClick())
-text = textOf(view)
-ok(text.includes('先列风险') && text.includes('蒸馏采纳'), 'expanding handled suggestions marks adopted rules')
-
-/* to-do bar navigates */
-const evidenceTodo = findHost(view, (node) => node.type === 'button' && node.props
-  && textOf(node).includes('规则缺证据'))
-ok(!!evidenceTodo, 'to-do items are clickable')
-
-/* presets: switching goes through the host */
-const writingCard = findHost(view, (node) => node.type === 'button' && node.props && textOf(node).includes('写书'))
-ok(!!writingCard, 'preset cards are switch buttons')
-view = await act(() => writingCard.props.onClick())
-
-/* metric sub-tabs switch between cards and the source availability list */
-view = await act(() => tabButton('度量').props.onClick())
-const sourcesTab = findHost(view, (node) => node.type === 'button' && node.props && textOf(node) === '来源')
-ok(!!sourcesTab, 'metrics view exposes the sources sub-tab')
-view = await act(() => sourcesTab.props.onClick())
-text = textOf(view)
-ok(text.includes('✗'), 'sources sub-tab marks unavailable sources')
-ok(!text.includes('规则命中'), 'metric cards give way to the source list')
-const metricsSubTab = findHost(view, (node) => node.type === 'button' && node.props && textOf(node) === '度量')
-ok(!!metricsSubTab, 'metrics sub-tab is reachable again')
-view = await act(() => metricsSubTab.props.onClick())
-text = textOf(view)
-ok(text.includes('规则命中'), 'metric cards return after switching back')
-
-/* rule editor lives on the presets tab */
-view = await act(() => tabButton('预设与规则').props.onClick())
-view = await act(() => button(view, '新建规则').props.onClick())
-text = textOf(view)
-ok(text.includes('规则 id') && text.includes('正文'), 'rule editor opens with id and body fields')
-view = await act(() => button(view, '取消').props.onClick())
-ok(!textOf(view).includes('规则 id'), 'rule editor closes on cancel')
-
-/* distill lives on the metrics tab */
-view = await act(() => tabButton('度量').props.onClick())
-view = await act(() => button(view, '重新蒸馏').props.onClick())
-ok(textOf(view).includes('蒸馏完成'), 'distill action reports completion')
-
-/* copy install command lives on the distribution tab */
-view = await act(() => tabButton('分发').props.onClick())
-view = await act(() => button(view, '复制安装命令').props.onClick())
-ok(textOf(view).includes('已复制：dsh plugin add dsh-workstyle'), 'copy install command reports success')
-
-/* refresh keeps the environment */
-view = await act(() => button(view, '刷新').props.onClick())
-ok(textOf(view).includes('注入中'), 'refresh keeps the status rail')
-
-/* all handled folds into the section header on the presets tab */
-const collapseAgain = button(view, '收起已处理')
-if (collapseAgain) view = await act(() => collapseAgain.props.onClick())
-currentStatus.suggestions[0].adopted = true
-currentStatus.suggestions[1].adopted = true
-recomputeSummary()
-view = await act(() => button(view, '刷新').props.onClick())
-view = await act(() => tabButton('预设与规则').props.onClick())
-text = textOf(view)
-ok(text.includes('已全部处理') && text.includes('查看已处理'), 'all-handled review folds into the header')
-ok(!text.includes('建议正文-短句'), 'all-handled review does not repeat the body rows')
+ok(textOf(styleHost).includes('prefers-reduced-motion: reduce'), 'reduced-motion CSS remains scoped')
+const runRefresh = findHost(view, (node) => node.type === 'button' && textOf(node) === '刷新')
+ok(!!runRefresh, 'refresh remains a keyboard reachable button')
 
 /* dismiss the first-run tip and confirm it stays gone */
 const tipDismiss = button(view, '知道了')
