@@ -149,6 +149,20 @@ view = await panel.act(() => sourcePill.props.onClick())
 const pressedSource = findHost(view, (node) => node.type === 'button' && textOf(node) === '来源' && node.props['aria-pressed'] === 'true')
 ok(!!pressedSource, 'sources pill becomes pressed after switching')
 
+/* Distribution page: explicit export modes, install command, metadata-only history. */
+view = await navigateHash('#/distribute')
+text = textOf(view)
+ok(text.includes('导出包 + 作用域快照'), 'distribution page offers scoped export')
+ok(text.includes('导出包（仅包）'), 'distribution page offers pack-only export')
+ok(text.includes('复制安装命令'), 'distribution page offers install command copy')
+ok(text.includes('最近导出'), 'distribution page lists export history')
+ok(fetchLog.some((url) => url.includes('/api/dsh-workstyle/exports')), 'distribution page refresh loads export metadata')
+ok(!text.includes('先给方案') && !text.includes('规则正文'), 'distribution history carries no rule, report or archive contents')
+const exportsBefore = fetchLog.filter((url) => url.endsWith('/api/dsh-workstyle/export')).length
+view = await panel.act(() => button(view, '导出包（仅包）').props.onClick())
+const exportsAfter = fetchLog.filter((url) => url.endsWith('/api/dsh-workstyle/export')).length
+ok(exportsAfter === exportsBefore + 1, 'distribution export posts to the export route')
+
 /* Fix round 1: distill history, revoke, and the adopt selection contract. */
 view = await navigateHash('#/distill')
 text = textOf(view)

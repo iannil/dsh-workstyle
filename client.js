@@ -958,6 +958,8 @@ window.__ModuleLoader__.load({
       const [statusLoading, setStatusLoading] = React.useState(true)
       const [report, setReport] = React.useState(null)
       const [reports, setReports] = React.useState([])
+      const [exports, setExports] = React.useState([])
+      const [exportResult, setExportResult] = React.useState(null)
       const [busy, setBusy] = React.useState('')
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
@@ -1124,6 +1126,11 @@ window.__ModuleLoader__.load({
             setReports(result.data.reports)
           }
         })
+        getJson('exports').then((result) => {
+          if (requestId === statusRequest.current && result.ok && result.data && Array.isArray(result.data.exports)) {
+            setExports(result.data.exports)
+          }
+        })
         fetch('/api/dsh-workstyle/status', { headers: { accept: 'application/json' } })
           .then((response) => {
             if (!response.ok) throw new Error('status unavailable')
@@ -1238,12 +1245,18 @@ window.__ModuleLoader__.load({
           .finally(() => setBusy(''))
       }
 
-      const onExport = () => {
-        setBusy('export'); setError(''); setNotice('')
-        call('export', {})
+      const onExport = (withProject) => {
+        const kind = withProject ? 'scoped' : 'pack'
+        setBusy('export:' + kind); setError(''); setNotice(''); setExportResult(null)
+        call('export', withProject ? { withProject: true, cwd: (env && env.scope && env.scope.cwd) || props.cwd || '' } : { withProject: false })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'export failed')
+            setExportResult(data)
             setNotice(t('exported') + '：' + data.file)
+            return getJson('exports')
+          })
+          .then((result) => {
+            if (result && result.ok && result.data && Array.isArray(result.data.exports)) setExports(result.data.exports)
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1968,23 +1981,6 @@ window.__ModuleLoader__.load({
           : t('noProjectFile') + '（' + t('projectFile') + ' ' + sc.project.file + '）'
       })()
 
-      /* ⑤ distribution */
-      const distributionBlock = h(Section, {
-        id: 'dsw-distribution',
-        label: '⑤ ' + t('distributionTitle'),
-        right: h('span', null, t('packs')),
-      },
-        h('div', { style: S.distHeadRow },
-          h('div', { style: S.distPrimaryRow },
-            h('button', {
-              style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
-              onClick: onExport, disabled: !!busy,
-            }, busy === 'export' ? t('exporting') : t('exportWithScope')),
-            h('button', { style: S.button, onClick: onExport, disabled: !!busy }, t('exportPackOnly')),
-            h('button', { style: S.button, onClick: () => onCopy(installCommand, installCommand) }, t('copyCommand'))),
-          h('span', { style: S.hint }, projectFileText)))
-
-
       const reviewSectionBody = suggestions.length === 0
               ? h('div', { style: S.empty }, h('div', { style: S.hint }, t('reviewEmpty')))
               : allHandled
@@ -2133,6 +2129,51 @@ window.__ModuleLoader__.load({
               h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
               h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
+      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, error: exportError }) => {
+        const history = Array.isArray(exportHistory) ? exportHistory : []
+        const copyInstall = () => copyAction(installCommand, installCommand)
+        const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
+        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+          h('div', { style: S.tile },
+            h('div', { style: S.ruleTitleRow },
+              h('span', { style: S.ruleTitle }, t('distributionTitle')),
+              h('span', { style: S.badge }, active.displayName + ' v' + active.version)),
+            h('div', { style: S.hint }, '导出只包含可移植的工作方式包；作用域快照只保存项目规则、停用项与预设，不包含任意文件内容。'),
+            h('div', { style: { ...S.distPrimaryRow, paddingTop: 14 } },
+              h('button', {
+                style: exportBusy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+                onClick: () => exportAction(true), disabled: !!exportBusy,
+              }, exportBusy === 'export:scoped' ? t('exporting') : t('exportWithScope')),
+              h('button', {
+                style: exportBusy ? { ...S.button, ...S.disabled } : S.button,
+                onClick: () => exportAction(false), disabled: !!exportBusy,
+              }, exportBusy === 'export:pack' ? t('exporting') : t('exportPackOnly'))),
+            h('div', { style: S.installRow },
+              h('span', { style: S.hint }, '安装命令'),
+              h('code', { style: S.code }, installCommand),
+              h('button', { style: S.linkAccent, onClick: copyInstall }, t('copyCommand'))),
+            cwd ? h('div', { style: { ...S.hint, paddingTop: 8 } }, '当前项目：', h('span', { style: S.mono }, cwd)) : null,
+            result
+              ? h('div', { style: { ...S.banner('info'), marginTop: 12 } },
+                h('div', null, t('exported') + '：', h('span', { style: S.mono }, result.file)),
+                h('div', { style: S.hint }, nf(result.files) + ' 个文件 · ' + nf(result.bytes) + ' bytes'),
+                copyArchive ? h('button', { style: { ...S.linkAccent, marginTop: 6 }, onClick: copyArchive }, t('copyPath')) : null)
+              : null,
+            exportError ? h('div', { style: { ...S.banner('error'), marginTop: 12 }, role: 'alert' }, exportError) : null),
+          h(Section, { id: 'dsw-distribution-history', label: '最近导出', count: history.length },
+            history.length
+              ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, history.map((item) =>
+                h('div', { key: item.file, style: S.ruleRowV5 },
+                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                    h('span', { style: S.ruleTitle }, item.file || '—'),
+                    h('span', { style: S.hint }, when(item.modifiedAt) || '—')),
+                  h('span', { style: S.ruleSideText }, (item.packId || '—') + ' v' + (item.packVersion || '—')),
+                  h('span', { style: S.mutedBadge }, nf(item.bytes) + ' bytes'))))
+              : h('div', { style: S.empty },
+                h('div', { style: S.hint }, '还没有导出记录。复制安装命令后，导出一个包交给队友。'),
+                h('button', { style: S.buttonPrimary, disabled: !!exportBusy, onClick: () => exportAction(false) }, t('exportPackOnly')))))
+      }
+
       const DistillPage = ({ onNavigate, onScan }) => {
         const sourceEntries = Object.entries((report && report.sources) || {})
         const sourceLabels = { claude: 'Claude Code', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' }
@@ -2226,7 +2267,17 @@ window.__ModuleLoader__.load({
             ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏审阅'), h(DistillPage, { onNavigate: navigate, onScan: onDistill }))
             : route.page === 'metrics'
               ? h('section', { 'aria-labelledby': 'dsw-metrics-title' }, h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, '度量台'), h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }))
-              : h('section', { 'aria-labelledby': 'dsw-distribute-title' }, h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, '分发'), h('div', null, distributionBlock, evidenceSection))
+              : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
+                h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, '分发'),
+                h(DistributionPage, {
+                  exports,
+                  cwd: environment.cwd,
+                  onExport,
+                  onCopy,
+                  result: exportResult,
+                  busy: busy.indexOf('export:') === 0 ? busy : '',
+                  error: error,
+                }))
 
       return h('div', { id: 'dsw-root', style: S.page },
         h('style', null, CSS),

@@ -229,6 +229,8 @@ const json = (data) => ({ ok: true, json: async () => data })
 /* Test levers: fetchLog records every URL the panel requested; failEnv makes
    one environment route fail while the others succeed. */
 const fetchLog = []
+const exportCalls = []
+const exportControl = { fail: false }
 const failEnv = { scope: false, inject: false, metrics: false, adopt: false }
 
 globalThis.fetch = async (url, options = {}) => {
@@ -240,6 +242,17 @@ globalThis.fetch = async (url, options = {}) => {
       { file: 'report-2026-11-07.json', generatedAt: '2026-11-07T17:00:00.000Z', sources: { claude: true, codex: true, dsh: true, pi: false }, suggestionCount: 2 },
       { file: 'report-2026-11-06.json', generatedAt: '2026-11-06T09:30:00.000Z', sources: { claude: true, codex: false, dsh: false, pi: false }, suggestionCount: 0 },
     ] })
+  }
+  if (target.endsWith('/api/dsh-workstyle/exports')) {
+    return json({ exports: [
+      { file: 'fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz', modifiedAt: '2026-11-08T01:00:00.000Z', bytes: 12345, packId: 'fde-engineering', packVersion: '0.1.0' },
+    ] })
+  }
+  if (target.endsWith('/api/dsh-workstyle/export')) {
+    const body = JSON.parse(options.body || '{}')
+    exportCalls.push(body)
+    if (exportControl.fail) return { ok: false, json: async () => ({ error: 'export rejected' }) }
+    return json({ file: '/tmp/exports/fde-engineering-v0.1.0-new.tar.gz', bytes: 4567, files: 6, packId: 'fde-engineering', ruleCount: 4, skillCount: 3 })
   }
   if (target.endsWith('/api/dsh-workstyle/adopt')) {
     if (failEnv.adopt) return { ok: false, json: async () => ({ error: 'adopt rejected' }) }
@@ -685,9 +698,22 @@ const distributeNav = findHost(view, (node) => node.type === 'a' && node.props &
 view = await act(() => distributeNav.props.onClick({ preventDefault() {} }))
 text = textOf(view)
 ok(text.includes('导出包 + 作用域快照') && text.includes('导出包（仅包）'), 'distribute route offers both exports')
+ok(text.includes('最近导出') && text.includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz'), 'distribute route renders export history metadata')
+ok(/12,?345 bytes/.test(text) && text.includes('fde-engineering v0.1.0'), 'export history shows size and pack version')
 view = await act(() => button(view, '复制安装命令').props.onClick())
 text = textOf(view)
 ok(text.includes('已复制：dsh plugin add dsh-workstyle'), 'copy install command reports success')
+view = await act(() => button(view, '导出包 + 作用域快照').props.onClick())
+ok(exportCalls.some((body) => body.withProject === true && body.cwd === '/tmp/live-cwd'), 'scoped export sends cwd and withProject=true')
+ok(/4,?567 bytes/.test(textOf(view)) && !!button(view, '复制路径'), 'successful export shows archive metadata and copy path')
+view = await act(() => button(view, '导出包（仅包）').props.onClick())
+ok(exportCalls.some((body) => body.withProject === false), 'pack-only export sends withProject=false')
+exportControl.fail = true
+view = await act(() => button(view, '导出包 + 作用域快照').props.onClick())
+text = textOf(view)
+ok(text.includes('export rejected'), 'export failure is visible')
+ok(button(view, '导出包 + 作用域快照') && !button(view, '导出包 + 作用域快照').props.disabled, 'failed export keeps the selected action available for retry')
+exportControl.fail = false
 ok(text.includes('home v5'), 'footer exposes the v5 build marker')
 ok(!text.includes('面向工程交付'), 'pack marketing description removed')
 

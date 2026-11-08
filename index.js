@@ -137,7 +137,16 @@ function listExportMetadata() {
     .map((file) => {
       try {
         const stat = fs.statSync(path.join(exportsDir(), file))
-        return { file, bytes: stat.size, modifiedAt: stat.mtime.toISOString() }
+        const timestampAt = file.search(/-\d{4}-\d{2}-\d{2}T/)
+        const stem = timestampAt > 0 ? file.slice(0, timestampAt) : file.replace(/\.tar\.gz$/, '')
+        const versionAt = stem.lastIndexOf('-v')
+        return {
+          file,
+          bytes: stat.size,
+          modifiedAt: stat.mtime.toISOString(),
+          packId: versionAt > 0 ? stem.slice(0, versionAt) : null,
+          packVersion: versionAt > 0 ? stem.slice(versionAt + 2) : null,
+        }
       } catch { return undefined }
     })
     .filter(Boolean)
