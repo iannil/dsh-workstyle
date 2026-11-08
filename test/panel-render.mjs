@@ -417,12 +417,6 @@ const collectTabs = (node) => {
   collectTabs(node.props && node.props.children)
 }
 collectTabs(view)
-console.error('DBG', selectedTabs.length, JSON.stringify((() => {
-  const out = []
-  const walk = (n) => { if (!n || typeof n !== 'object') return; if (Array.isArray(n)) return n.forEach(walk)
-    if (n.props && n.props.role) out.push(n.props.role + ':' + n.props['aria-selected'])
-    walk(n.props && n.props.children) }
-  walk(view); return out })()))
 ok(selectedTabs.length === 1, 'exactly one tab is selected (got ' + selectedTabs.length + ')')
 
 /* the inject tab owns the loaded text */
