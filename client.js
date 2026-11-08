@@ -135,7 +135,11 @@ window.__ModuleLoader__.load({
       loadingEnv: '正在读取当前环境的数据，请稍候。',
       envLabel: '当前环境',
       tabRun: '运行台',
+      pageRun: '运行台',
       tabPacks: '工作方式包',
+      pageMetrics: '指标与运行',
+      pageDistribute: '分发',
+      pagePackDetail: '状态轨',
       tabDistill: '蒸馏',
       tabMetrics: '度量台',
       tabDistribute: '分发',
@@ -186,7 +190,17 @@ window.__ModuleLoader__.load({
       tabMetricsPill: '度量',
       tabSources: '来源',
       defaultCaveat: '这些是代理指标，只描述可观察信号。',
-      noMetricsYet: '还没有可用度量',
+      navOverview: '概览',
+      navRail: '状态轨',
+      navRules: '规则',
+      navPresets: '预设',
+      navSkills: '技能',
+      navDistill: '蒸馏审查',
+      navMetrics: '指标与运行',
+      navDistribute: '分发',
+      navGroupState: '状态',
+      navGroupContent: '内容',
+      navGroupMaintain: '维护',
       distillFirstHint: '先蒸馏一次本机会话，再回来查看代理度量。',
       goDistill: '先去蒸馏 →',
       metricsEmptyNoun: '可用度量',
@@ -342,7 +356,11 @@ window.__ModuleLoader__.load({
       loadingEnv: 'Loading the current environment, please wait.',
       envLabel: 'Current environment',
       tabRun: 'Run console',
+      pageRun: 'Run console',
       tabPacks: 'Workstyle packs',
+      pageMetrics: 'Metrics & run',
+      pageDistribute: 'Distribute',
+      pagePackDetail: 'Status rail',
       tabDistill: 'Distill',
       tabMetrics: 'Metrics',
       tabDistribute: 'Distribute',
@@ -393,7 +411,17 @@ window.__ModuleLoader__.load({
       tabMetricsPill: 'Metrics',
       tabSources: 'Sources',
       defaultCaveat: 'These are agent metrics over observable signals only.',
-      noMetricsYet: 'No metrics yet',
+      navOverview: 'Overview',
+      navRail: 'Status rail',
+      navRules: 'Rules',
+      navPresets: 'Presets',
+      navSkills: 'Skills',
+      navDistill: 'Distill review',
+      navMetrics: 'Metrics & run',
+      navDistribute: 'Distribute',
+      navGroupState: 'Status',
+      navGroupContent: 'Content',
+      navGroupMaintain: 'Maintain',
       distillFirstHint: 'Distill local sessions once, then come back to agent metrics.',
       goDistill: 'Distill first →',
       metricsEmptyNoun: 'metrics',
@@ -573,14 +601,6 @@ window.__ModuleLoader__.load({
         border: '1px solid ' + HAIRLINE, borderRadius: 12,
         background: 'var(--dsw-alias-bg-layer-2)', padding: '16px 18px',
       },
-      tileLabel: {
-        fontSize: 11.5, letterSpacing: '0.01em', fontWeight: 550,
-        color: 'var(--dsw-alias-label-secondary)',
-      },
-      tileValue: {
-        fontSize: 24, fontWeight: 600, letterSpacing: '-0.024em',
-        fontVariantNumeric: 'tabular-nums', lineHeight: 1.28,
-      },
       tileSub: {
         fontSize: 11.5, color: 'var(--dsw-alias-label-secondary)',
         overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
@@ -733,7 +753,6 @@ window.__ModuleLoader__.load({
         color: kind === 'error' ? T.danger : 'var(--dsw-alias-label-secondary)',
         background: kind === 'error' ? 'transparent' : 'var(--dsw-alias-bg-layer-2)',
       }),
-      tileClickable: { cursor: 'pointer' },
       actionsBar: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
       actionsNote: { marginLeft: 'auto', fontSize: 10.5, color: 'var(--dsw-alias-label-secondary)' },
 
@@ -848,6 +867,17 @@ window.__ModuleLoader__.load({
         padding: '9px 14px 10px', marginBottom: -1,
       },
       tabOn: { color: ACCENT, borderBottom: '2px solid ' + ACCENT },
+      sidebar: { display: 'flex', flexDirection: 'column', minWidth: 0 },
+      navGroup: { display: 'flex', flexDirection: 'column', gap: 1, paddingBottom: 6 },
+      navGroupTitle: {
+        fontSize: 10, fontWeight: 650, letterSpacing: '0.08em', textTransform: 'uppercase',
+        color: T.ink3, padding: '10px 8px 4px',
+      },
+      navItem: {
+        fontSize: 13, fontWeight: 550, color: T.ink2, textDecoration: 'none',
+        padding: '5px 8px', borderRadius: 6,
+      },
+      navItemOn: { background: T.sel, color: T.ink, fontWeight: 650 },
       tabCount: {
         fontSize: 10.5, lineHeight: '16px', minWidth: 17, textAlign: 'center', fontWeight: 650,
         color: 'var(--dsw-alias-label-secondary)', border: '1px solid ' + HAIRLINE,
@@ -1024,8 +1054,6 @@ window.__ModuleLoader__.load({
       #dsw-root input[type="checkbox"]:disabled { opacity: .45; cursor: default; }
       #dsw-root .dsw-row { transition: background-color .12s ease; }
       #dsw-root .dsw-row:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); }
-      #dsw-root .dsw-tile-click { transition: box-shadow .12s ease; }
-      #dsw-root .dsw-tile-click:hover { box-shadow: inset 0 0 0 1px ${ACCENT_LINE}; }
       #dsw-review, #dsw-rules, #dsw-skills, #dsw-distribution, #dsw-evidence { scroll-margin-top: 16px; }
       @media (prefers-reduced-motion: reduce) {
         #dsw-root *, #dsw-root *::before, #dsw-root *::after { transition: none !important; }
@@ -1076,6 +1104,33 @@ window.__ModuleLoader__.load({
           primary ? h('button', { type: 'button', style: S.linkButton, onClick: onPrimary }, primary) : null,
           source ? ' 或 ' : null,
           source ? h('button', { type: 'button', style: S.linkButton, onClick: onSource }, source) : null))
+    }
+
+    /* Grouped sidebar IA: three groups, labels via t(), selection via T.sel. */
+    const NAV_GROUPS = [
+      ['navGroupState', [['overview', 'navOverview'], ['pack', 'navRail']]],
+      ['navGroupContent', [['rules', 'navRules'], ['presets', 'navPresets'], ['skills', 'navSkills']]],
+      ['navGroupMaintain', [['distill', 'navDistill'], ['metrics', 'navMetrics'], ['distribute', 'navDistribute']]],
+    ]
+
+    function Sidebar(props) {
+      const { route, navigate, t } = props
+      return h('nav', { 'aria-label': t('navWorkstyle'), style: S.sidebar },
+        NAV_GROUPS.map(([groupKey, items]) => h('div', { key: groupKey, style: S.navGroup },
+          h('div', { style: S.navGroupTitle }, t(groupKey)),
+          items.map(([page, labelKey]) => {
+            const on = route.page === page
+            return h('a', {
+              key: page,
+              href: '#/' + page,
+              'aria-current': on ? 'page' : undefined,
+              style: on ? { ...S.navItem, ...S.navItemOn } : S.navItem,
+              onClick: (event) => {
+                if (event && event.preventDefault) event.preventDefault()
+                navigate({ page })
+              },
+            }, t(labelKey))
+          }))))
     }
 
     function ErrorState(props) {
@@ -1183,13 +1238,25 @@ window.__ModuleLoader__.load({
         envContextRef.current = { query: envQuery, loadedQuery: null }
       }
 
-      const ROUTES = new Set(['run', 'packs', 'pack', 'distill', 'metrics', 'distribute'])
+      const ROUTES = new Set(['overview', 'pack', 'rules', 'presets', 'skills', 'distill', 'metrics', 'distribute'])
+      /* Legacy hash values keep working: run folded into metrics, packs
+         folded into overview (deep pack links keep landing on the pack page). */
+      const LEGACY_ROUTES = { run: 'metrics', packs: 'overview' }
       const readRoute = () => {
         const raw = typeof location !== 'undefined' ? String(location.hash || '') : '#/run'
-        const [, page = 'run', packId] = raw.match(/^#\/?([^/]+)?(?:\/(.*))?$/) || []
-        return ROUTES.has(page) ? { page, packId: packId || undefined } : { page: 'run' }
+        const [, rawPage = 'run', rawPackId] = raw.match(/^#\/?([^/]+)?(?:\/(.*))?$/) || []
+        const packId = rawPackId || undefined
+        const page = LEGACY_ROUTES[rawPage]
+          ? (rawPage === 'packs' && packId ? 'pack' : LEGACY_ROUTES[rawPage])
+          : rawPage
+        return ROUTES.has(page) ? { page, packId } : { page: 'overview' }
       }
-      const routeHash = (page, packId) => '#/' + page + (packId ? '/' + encodeURIComponent(packId) : '')
+      const routeHash = (page, packId) => {
+        const canonical = LEGACY_ROUTES[page]
+          ? (page === 'packs' && packId ? 'pack' : LEGACY_ROUTES[page])
+          : page
+        return '#/' + canonical + (packId ? '/' + encodeURIComponent(packId) : '')
+      }
 
       const getJson = (path) => fetch('/api/dsh-workstyle/' + path, { headers: { accept: 'application/json' } })
         .then((response) => {
@@ -1228,7 +1295,7 @@ window.__ModuleLoader__.load({
       }, [])
 
       React.useEffect(() => {
-        const id = route.page === 'packs' || route.page === 'pack' ? route.packId : undefined
+        const id = route.page === 'pack' ? route.packId : undefined
         if (!id) {
           setPackDetail(null)
           setPackError('')
@@ -1634,21 +1701,7 @@ window.__ModuleLoader__.load({
         loading: statusLoading || envLoading,
         error: error || envError,
       }
-      const pageLinks = [
-        ['run', t('tabRun')], ['packs', t('tabPacks')], ['distill', t('tabDistill')],
-        ['metrics', t('tabMetrics')], ['distribute', t('tabDistribute')],
-      ]
-      const primaryNav = h('nav', { 'aria-label': t('navWorkstyle'), style: S.tabs },
-        pageLinks.map(([page, label]) => h('a', {
-          key: page,
-          href: routeHash(page),
-          'aria-current': route.page === page ? 'page' : undefined,
-          style: route.page === page ? { ...S.tab, ...S.tabOn, textDecoration: 'none' } : { ...S.tab, textDecoration: 'none' },
-          onClick: (event) => {
-            if (event && event.preventDefault) event.preventDefault()
-            navigate({ page })
-          },
-        }, label)))
+      const primaryNav = h(Sidebar, { route, navigate, t })
       const environmentBar = h(EnvironmentContextBar, { environment })
       const rootStyle = {
         ...S.page,
@@ -2339,8 +2392,8 @@ window.__ModuleLoader__.load({
         h('div', { style: S.hint }, t('packHint')),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10, paddingTop: 14 } },
           packs.map((pack) => h('a', {
-            key: pack.id, href: routeHash('packs', pack.id), style: { ...S.tile, textDecoration: 'none' },
-            onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs', packId: pack.id }) },
+            key: pack.id, href: routeHash('pack', pack.id), style: { ...S.tile, textDecoration: 'none' },
+            onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'pack', packId: pack.id }) },
           },
             h('div', { style: S.ruleTitleRow },
               h('span', { style: S.ruleTitle }, pack.displayName || pack.name || pack.id),
@@ -2381,7 +2434,7 @@ window.__ModuleLoader__.load({
           : (packError && !routePackDetail) || !selectedPack
             ? h('div', { style: S.empty },
               h(ErrorState, { operation: t('opLoadPack'), message: t('packNotFound') + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => setPackReload((n) => n + 1) }),
-              h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, t('backToPacks')))
+              h('a', { href: '#/overview', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'overview' }) } }, t('backToPacks')))
             : h('div', null,
               h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, t('packActiveBadge')) : h('span', { style: S.mutedBadge }, t('packInactiveBadge'))), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, t('sourcePrefix') + (selectedPack.source || t('sourceBuiltin')) + ' · ' + selectedPack.ruleCount + ' ' + t('rulesUnit') + ' · ' + selectedPack.skillCount + ' ' + t('skillsUnit'))),
               h('div', { role: 'tablist', 'aria-label': scopedT('packResourcesAria'), style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
@@ -2524,24 +2577,59 @@ window.__ModuleLoader__.load({
                 : h('div', { style: S.evidenceGrid }, (metrics.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
                   h('span', { style: S.statLabel }, item.label), h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
                   h('span', { style: S.statSub }, item.available ? t('sourceAvailable') : t('sourceMissing'))))))
-            : h(EmptyState, {
-              noun: t('metricsEmptyNoun'),
-              primary: t('metricsEmptyPrimary'), onPrimary: () => onNavigate({ page: 'distill' }),
-              source: t('tabSources'), onSource: () => setMetricTab('sources'),
-            }))
+            : h('div', null,
+              h(EmptyState, {
+                noun: t('metricsEmptyNoun'),
+                primary: t('metricsEmptyPrimary'), onPrimary: () => onNavigate({ page: 'distill' }),
+                source: t('tabSources'), onSource: () => setMetricTab('sources'),
+              }),
+              h('div', { style: { ...S.hint, paddingTop: 10, textAlign: 'center' } }, t('metricsUnavailable'))))
       }
 
-      const pageBody = route.page === 'run'
-        ? h('section', { 'aria-labelledby': 'dsw-run-title' },
-          h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, t('pageRun')), runBody)
-        : route.page === 'packs' || route.page === 'pack'
+      /* Rules / presets / skills own their deep content on dedicated routes
+         (reskin comes later); for now each page reuses the existing block. */
+      const skillsBlock = h(Section, {
+        id: 'dsw-skills',
+        label: t('skillsLabel'),
+        count: scopedSkills.length,
+      },
+        scopedSkills.length
+          ? h('div', null, scopedSkills.map((skill) => h('div', {
+            key: skill.name,
+            className: 'dsw-row',
+            style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + HAIRLINE },
+          },
+            h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
+              h('span', { style: S.skillName }, skill.name),
+              h('span', { style: S.skillDesc, title: skill.description }, skill.description || '')),
+            h('span', { style: skill.enabled === false ? S.mutedBadge : S.scopeBadge('workspace') },
+              skill.enabled === false ? t('disabled') : (skill.inPreset ? t('presetCurrent') : t('enabled'))))))
+          : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + t('skillsLabel'))))
+
+      const pageBody = route.page === 'overview'
+        ? h('section', { 'aria-labelledby': 'dsw-overview-title' },
+          h('h2', { id: 'dsw-overview-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navOverview')), packListBody)
+        : route.page === 'pack'
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
-            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? t('pagePackDetail') : t('tabPacks')), packDetailPageBody)
-          : route.page === 'distill'
-            ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('distillReview')), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
-            : route.page === 'metrics'
-              ? h('section', { 'aria-labelledby': 'dsw-metrics-title' }, h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('pageMetrics')), h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }))
-              : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
+            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? t('pagePackDetail') : t('navRail')), packDetailPageBody)
+          : route.page === 'rules'
+            ? h('section', { 'aria-labelledby': 'dsw-rules-page-title' },
+              h('h2', { id: 'dsw-rules-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navRules')), rulesBlock)
+            : route.page === 'presets'
+              ? h('section', { 'aria-labelledby': 'dsw-presets-page-title' },
+                h('h2', { id: 'dsw-presets-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navPresets')), presetsBlock)
+              : route.page === 'skills'
+                ? h('section', { 'aria-labelledby': 'dsw-skills-page-title' },
+                  h('h2', { id: 'dsw-skills-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navSkills')), skillsBlock)
+                : route.page === 'distill'
+                  ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('distillReview')), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
+                  : route.page === 'metrics'
+                    ? h('section', { 'aria-labelledby': 'dsw-metrics-title' },
+                      h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('pageMetrics')),
+                      h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }),
+                      /* The old run page survives as the lower half of metrics. */
+                      h(Section, { id: 'dsw-run', label: t('pageRun') }, runBody))
+                    : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
                 h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('pageDistribute')),
                 h(DistributionPage, {
                   exports,

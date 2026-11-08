@@ -546,20 +546,23 @@ function ok(condition, label) {
 let view = await settle()
 let text = textOf(view)
 
-ok(text.includes('运行台'), 'default route renders the run page')
-ok(!!findHost(view, (node) => node.type === 'nav'), 'primary navigation is semantic')
-ok(!!findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs'), 'packs link uses a stable route')
+ok(text.includes('运行台'), 'default legacy #/run route renders metrics page with the run console')
+ok(!!findHost(view, (node) => node.type === 'nav' && node.props && node.props['aria-label']), 'primary navigation is semantic with aria-label')
+ok(!!findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/overview'), 'overview link uses a stable route')
 
 const metricsLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
 ok(!!metricsLink, 'metrics link uses a stable route')
 view = await act(() => metricsLink.props.onClick({ preventDefault() {} }))
 text = textOf(view)
-ok(text.includes('度量台'), 'metrics route renders its page')
-ok(!text.includes('systemPrompt · dsh-workstyle.rules'), 'run-only body is absent outside the run route')
-const runLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/run')
-view = await act(() => runLink.props.onClick({ preventDefault() {} }))
+ok(text.includes('指标与运行'), 'metrics route renders its page')
+ok(text.includes('运行台'), 'run console rides the metrics page as its lower section')
+const overviewLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/overview')
+view = await act(() => overviewLink.props.onClick({ preventDefault() {} }))
 text = textOf(view)
-ok(text.includes('运行台'), 'navigation returns to the run page')
+ok(text.includes('概览'), 'navigation returns to the overview page')
+const metricsBackLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
+view = await act(() => metricsBackLink.props.onClick({ preventDefault() {} }))
+text = textOf(view)
 
 /* ---------------------------- v5 environment ---------------------------- */
 
@@ -593,8 +596,8 @@ view = await act(() => metricsRouteLink.props.onClick({ preventDefault() {} }))
 text = textOf(view)
 ok(text.includes('先方案率') && text.includes('规则命中'), 'stale metrics stay visible after a failed metrics refresh')
 failEnv.metrics = false
-const runRouteLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/run')
-view = await act(() => runRouteLink.props.onClick({ preventDefault() {} }))
+const metricsReturnLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
+view = await act(() => metricsReturnLink.props.onClick({ preventDefault() {} }))
 view = await act(() => button(view, '刷新').props.onClick())
 text = textOf(view)
 ok(!text.includes('环境视图不可用'), 'a successful refresh clears the failure banner')
@@ -622,12 +625,12 @@ ok(text.includes('## 工作方式'), 'run page renders the actual injected markd
 ok(text.includes('规则正文-先方案'), 'run page shows rule text as sent, not a summary')
 ok(text.includes('来源：包 3 · 项目 +1 · 会话 −1'), 'run page explains where the text came from')
 
-const todoLinks = ['#/distill', '#/packs/fde-engineering', '#/metrics']
+const todoLinks = ['#/distill', '#/pack/fde-engineering', '#/metrics']
 for (const href of todoLinks) {
   ok(!!findHost(view, (node) => node.type === 'a' && node.props && node.props.href === href), 'to-do bar links to ' + href)
 }
 const evidenceTodo = findHost(view, (node) => node.type === 'a' && node.props
-  && node.props.href === '#/packs/fde-engineering' && textOf(node).includes('规则缺证据'))
+  && node.props.href === '#/pack/fde-engineering' && textOf(node).includes('规则缺证据'))
 ok(!!evidenceTodo, 'evidence to-do is a semantic route link')
 ok(!evidenceTodo.props.role, 'todo links keep native anchor semantics (no listitem role)')
 
@@ -660,7 +663,7 @@ ok(!!runRefresh, 'refresh remains a keyboard reachable button')
 
 /* dedicated routes keep the deep inventories the run page omits */
 const packsTodoLink = findHost(view, (node) => node.type === 'a' && node.props
-  && node.props.href === '#/packs/fde-engineering' && textOf(node).includes('规则缺证据'))
+  && node.props.href === '#/pack/fde-engineering' && textOf(node).includes('规则缺证据'))
 view = await act(() => packsTodoLink.props.onClick({ preventDefault() {} }))
 text = textOf(view)
 ok(text.includes('规则 > 预设（组合）> 技能 > 模板'), 'pack route keeps the four-layer order')
@@ -796,9 +799,9 @@ hostContext.sessionId = 'sess-b'
 envControl.delayed = true
 view = renderPass()
 await settle(1)
-const packsDuringTransition = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs')
+const packsDuringTransition = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/overview')
 view = await act(() => packsDuringTransition.props.onClick({ preventDefault() {} }))
-const packDetailDuringTransition = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs/fde-engineering')
+const packDetailDuringTransition = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/pack/fde-engineering')
 view = await act(() => packDetailDuringTransition.props.onClick({ preventDefault() {} }))
 const newRuleButton = button(view, '新建规则')
 ok(!!newRuleButton, 'project editor remains mounted during a context transition')
@@ -822,9 +825,9 @@ envControl.delayed = false
 while (envControl.pending.length) await act(() => envControl.pending.shift()())
 view = await settle()
 view = await act(() => button(view, '刷新').props.onClick())
-const bPacksLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs')
+const bPacksLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/overview')
 view = await act(() => bPacksLink.props.onClick({ preventDefault() {} }))
-const bRuleButton = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs/fde-engineering')
+const bRuleButton = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/pack/fde-engineering')
 view = await act(() => bRuleButton.props.onClick({ preventDefault() {} }))
 view = await act(() => button(view, '新建规则').props.onClick())
 const bIdField = input(view, 'my-project-rule')
@@ -841,7 +844,7 @@ ok(text.includes('home v5'), 'footer exposes the v5 build marker')
 ok(!text.includes('面向工程交付'), 'pack marketing description removed')
 
 /* returning to run keeps the compact surface */
-const runNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/run')
+const runNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
 view = await act(() => runNav.props.onClick({ preventDefault() {} }))
 text = textOf(view)
 ok(!text.includes('规则 > 预设（组合）> 技能 > 模板'), 'rule inventory stays off the run page')
@@ -858,9 +861,9 @@ currentStatus.suggestions[0].adopted = true
 currentStatus.suggestions[1].adopted = true
 recomputeSummary()
 view = await act(() => button(view, '刷新').props.onClick())
-const packsNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs')
+const packsNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/overview')
 view = await act(() => packsNav.props.onClick({ preventDefault() {} }))
-const packListLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs/fde-engineering')
+const packListLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/pack/fde-engineering')
 ok(!!packListLink, 'packs route lists installed packs')
 view = await act(() => packListLink.props.onClick({ preventDefault() {} }))
 const collapseAgain = button(view, '收起已处理')
@@ -870,7 +873,7 @@ ok(text.includes('已全部处理') && text.includes('查看已处理'), 'all-ha
 ok(!text.includes('建议正文-短句'), 'all-handled review does not repeat the body rows')
 
 /* dismiss the first-run tip and confirm it stays gone (tip lives on run) */
-const runNavAgain = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/run')
+const runNavAgain = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
 view = await act(() => runNavAgain.props.onClick({ preventDefault() {} }))
 const tipDismiss = button(view, '知道了')
 ok(!!tipDismiss, 'tip dismiss button still available before close')
@@ -911,6 +914,13 @@ assert.ok(/function Card\(/.test(src), 'Card component missing')
 assert.ok(/function Chip\(/.test(src), 'Chip component missing')
 assert.ok(/暂无/.test(src.match(/function EmptyState\([\s\S]*?\n\}/)?.[0] || ''), 'EmptyState must render 暂无文案')
 console.log('  ✓ shared state components (Card / Chip / EmptyState)')
+
+// --- sidebar IA ---
+assert.ok(/const NAV_GROUPS = \[/.test(src), 'NAV_GROUPS missing')
+assert.ok(/function Sidebar\(/.test(src), 'Sidebar component missing')
+assert.ok(src.includes("'run': 'metrics'") || src.includes("run: 'metrics'"), 'legacy run→metrics alias missing')
+assert.ok(src.includes('overview'), 'overview route missing')
+console.log('  ✓ sidebar IA (NAV_GROUPS / Sidebar / legacy route aliases)')
 
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 

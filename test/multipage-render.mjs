@@ -52,7 +52,7 @@ resolveMissing()
 view = await settle(10)
 text = textOf(view)
 ok(text.includes('找不到工作方式包：missing-pack'), 'missing detail renders a recoverable error')
-ok(!!findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs'), 'missing detail links back to #/packs')
+ok(!!findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/overview'), 'missing detail links back to #/overview')
 
 /* Environment responses are also generation-guarded. Resolve project A late
    after project B has become current; B must remain visible. */
@@ -219,7 +219,7 @@ ok(!!findHost(view, (node) => node.props && node.props.id === 'dsw-main' && node
 const root = findHost(view, (node) => node.props && node.props.id === 'dsw-root')
 const style = findHost(view, (node) => node.type === 'style')
 ok(!!root && text.includes('当前环境'), 'dark-mode fixture keeps the shared context label')
-ok(!!root && root.props.style['--dsw-color-ink'] === '#14171C' && root.props.style['--dsw-color-surface'] === '#FBF9F5', 'theme token set is present on the themed root')
+ok(!!root && root.props.style['--dsw-color-ink'] === '#37352F' && root.props.style['--dsw-color-surface'] === '#F7F6F3', 'theme token set is present on the themed root')
 ok(!!style && textOf(style).includes('focus-visible') && textOf(style).includes('prefers-reduced-motion'), 'focus-visible and reduced-motion rules stay scoped')
 failEnv.emptyMetrics = false
 view = await panel.act(() => button(view, '刷新').props.onClick())
@@ -241,6 +241,7 @@ ok(text.includes('FDE 工程工作方式') && text.includes('先方案后实现'
 ok(route.hash === '#/pack/fde-engineering', '#/pack/<id> retry preserves the route hash')
 
 detailControl.fail = true
+view = await navigateHash('#/overview')
 view = await navigateHash('#/packs/fde-engineering')
 const packsRetry = findHost(view, (node) => node.type === 'button' && textOf(node) === '重试')
 detailControl.fail = false
