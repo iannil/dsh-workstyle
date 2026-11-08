@@ -289,6 +289,25 @@ view = await panel.act(() => exportsRetry.props.onClick())
 const distributionHistoryAfter = findHost(view, (node) => node.props && node.props.id === 'dsw-distribution-history')
 ok(!!distributionHistoryAfter && textOf(distributionHistoryAfter).includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz') && !textOf(distributionHistoryAfter).includes('加载导出历史失败'), 'export history retry restores the metadata rows')
 
+/* Export success followed by a failed /exports refresh: the export result
+   stands, the history error explains with retry, and rows are preserved. */
+view = await navigateHash('#/distribute')
+exportControl.failHistory = true
+view = await panel.act(() => button(view, '导出包（仅包）').props.onClick())
+const postExportHistory = findHost(view, (node) => node.props && node.props.id === 'dsw-distribution-history')
+const postExportErrNode = postExportHistory && findHost(postExportHistory, (node) => node.props && node.props.role === 'alert')
+ok(textOf(view).includes('已导出'), 'the export itself still reports success')
+ok(!!postExportErrNode && textOf(postExportErrNode).includes('加载导出历史失败') && textOf(postExportErrNode).includes('重试'), 'failed post-export history refresh explains with retry')
+ok(!!postExportHistory && textOf(postExportHistory).includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz'), 'post-export history failure keeps the previous rows')
+exportControl.failHistory = false
+const postExportRetry = postExportErrNode && findHost(postExportErrNode, (node) => node.type === 'button' && textOf(node) === '重试')
+const exportsGetsBefore = fetchLog.filter((url) => url.endsWith('/api/dsh-workstyle/exports')).length
+view = await panel.act(() => postExportRetry.props.onClick())
+const exportsGetsAfter = fetchLog.filter((url) => url.endsWith('/api/dsh-workstyle/exports')).length
+ok(exportsGetsAfter === exportsGetsBefore + 1, 'post-export history retry refetches /exports')
+const postExportHistoryAfter = findHost(view, (node) => node.props && node.props.id === 'dsw-distribution-history')
+ok(!!postExportHistoryAfter && textOf(postExportHistoryAfter).includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz') && !textOf(postExportHistoryAfter).includes('加载导出历史失败'), 'post-export history retry restores the metadata rows')
+
 /* 2. Initial loading, initial status failure, and a status without an active
    pack all render inside the shared shell. */
 route.hash = '#/run'

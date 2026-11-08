@@ -1328,8 +1328,14 @@ window.__ModuleLoader__.load({
           .then((result) => {
             if (requestId !== exportRequest.current) return
             // History refresh failure is not an export failure: keep the
-            // result and the previous history rows exactly as they are.
-            if (result && result.ok && result.data && Array.isArray(result.data.exports)) setExports(result.data.exports)
+            // result and the previous rows exactly as they are, but surface
+            // the same per-history error and retry as load() would.
+            if (result && result.ok && result.data && Array.isArray(result.data.exports)) {
+              setExports(result.data.exports)
+              setExportsError('')
+            } else {
+              setExportsError(result && result.error ? result.error : (result && result.data && result.data.error) || '导出历史不可用')
+            }
           })
           .catch((err) => {
             if (requestId === exportRequest.current) setError(String(err && err.message ? err.message : err))

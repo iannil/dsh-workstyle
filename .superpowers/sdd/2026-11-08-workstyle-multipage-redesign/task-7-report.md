@@ -24,10 +24,11 @@ Five high-confidence review findings were fixed in a follow-up commit on top of 
 3. Distribution export failures render the shared ErrorState with operation-specific copy (`导出工作方式包失败`) and a retry action that re-posts the preserved export mode (scoped vs pack-only) with fresh scope inputs.
 4. GET /reports and GET /exports failures are no longer silently discarded: `reportsError`/`exportsError` state renders an operation-specific ErrorState with retry on the Distill/Distribution history sections, while stale metadata rows stay visible next to the error.
 5. Mounted coverage added for both `#/pack/<id>` and `#/packs/<id>` retry, initial loading, initial status failure, missing active pack, export retry mode preservation, and both history failure/recovery flows, using new `detailControl.fail`, `statusControl.fail`, `statusControl.noActive`, and `exportControl.failReports` levers and an exported `remount()` helper.
+6. Scoped re-review gap: `onExport`’s chained GET /exports no longer silently ignores failures. A failed post-export history refresh now sets the same operation-specific `exportsError` (explaining with a retry action on the Distribution history section) while the export result, its success notice, and the previous history rows all stay visible; a successful refresh clears the error.
 
 ## Validation
 
-- `bun test/multipage-render.mjs` — PASS, 92 checks (62 base + 30 fix-round checks).
+- `bun test/multipage-render.mjs` — PASS, 97 checks (62 base + 30 fix-round + 5 post-export history-refresh regression checks).
 - `bun test/panel-render.mjs` — PASS, 104 checks.
 - `grep -nE '遵守率|违反率|color:.*#fff|text-transform: uppercase' client.js` — no matches.
 
