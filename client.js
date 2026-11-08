@@ -191,6 +191,14 @@ window.__ModuleLoader__.load({
       tabSources: '来源',
       defaultCaveat: '这些是代理指标，只描述可观察信号。',
       navOverview: '概览',
+      packSwitch: '切换包',
+      quickActions: '快捷动作',
+      statRules: '生效规则',
+      statSuggestions: '待审查建议',
+      statSkills: '技能数',
+      quickEditRules: '编辑规则',
+      quickLoadPreview: '载入预览',
+      quickDistill: '蒸馏一次',
       navRail: '状态轨',
       navRules: '规则',
       navPresets: '预设',
@@ -412,6 +420,14 @@ window.__ModuleLoader__.load({
       tabSources: 'Sources',
       defaultCaveat: 'These are agent metrics over observable signals only.',
       navOverview: 'Overview',
+      packSwitch: 'Switch pack',
+      quickActions: 'Quick actions',
+      statRules: 'Active rules',
+      statSuggestions: 'Pending suggestions',
+      statSkills: 'Skills',
+      quickEditRules: 'Edit rules',
+      quickLoadPreview: 'Load preview',
+      quickDistill: 'Distill now',
       navRail: 'Status rail',
       navRules: 'Rules',
       navPresets: 'Presets',
@@ -592,10 +608,6 @@ window.__ModuleLoader__.load({
       },
       disabled: { opacity: 0.45, cursor: 'default' },
 
-      overview: { display: 'flex', flexDirection: 'column', gap: 16 },
-      tiles: {
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(158px, 1fr))', gap: 10,
-      },
       tile: {
         display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0,
         border: '1px solid ' + HAIRLINE, borderRadius: 12,
@@ -2607,9 +2619,23 @@ window.__ModuleLoader__.load({
           : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + t('skillsLabel'))))
 
       const pageBody = route.page === 'overview'
-        ? h('section', { 'aria-labelledby': 'dsw-overview-title' },
-          h('h2', { id: 'dsw-overview-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navOverview')), packListBody)
-        : route.page === 'pack'
+        ? h('section', { 'aria-labelledby': 'dsw-overview-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
+            h('h2', { id: 'dsw-overview-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navOverview')),
+            h('button', { type: 'button', style: S.linkButton, onClick: () => navigate({ page: 'pack' }) }, t('packSwitch') + ' ▾')),
+          h('div', { style: S.hint },
+            active.displayName + ' · v' + active.version + ' · ',
+            h('code', { style: S.mono }, inj && inj.fingerprint ? inj.fingerprint : '-')),
+          h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(158px, 1fr))', gap: 10 } },
+            Card({ value: rules.length, label: t('statRules') }),
+            Card({ value: suggestions.length, label: t('statSuggestions'), tone: suggestions.length > 0 ? 'danger' : undefined }),
+            Card({ value: scopedSkills.length, label: t('statSkills') })),
+          h('div', { role: 'group', 'aria-label': t('quickActions'), style: { display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' } },
+            h('span', { style: S.sectionLabel }, t('quickActions')),
+            h('button', { type: 'button', style: S.linkButton, onClick: () => navigate({ page: 'rules' }) }, t('quickEditRules')),
+            h('button', { type: 'button', style: S.linkButton, onClick: () => navigate({ page: 'pack', packId: active.id }) }, t('quickLoadPreview')),
+            h('button', { type: 'button', style: S.linkButton, onClick: onDistill }, t('quickDistill'))))
+      : route.page === 'pack'
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
             h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? t('pagePackDetail') : t('navRail')), packDetailPageBody)
           : route.page === 'rules'
