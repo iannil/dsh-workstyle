@@ -373,7 +373,7 @@ export function apply(ctx) {
 
   registerTool({
     name: 'workstyle_status',
-    description: 'Show the active dsh-workstyle pack: rules, skills, sources and the latest distillation report.',
+    description: 'Show the active dsh-workstyle pack: rules, skills, sources and the latest distillation report. When the user asks how to use workstyle / 怎么用 / 如何上手 after install, answer in ≤8 short Chinese lines: (1) open sidebar 工作方式 and check status-rail fingerprint, (2) open a new chat and try a feature request to feel plan-first, (3) use 载入预览 to verify inject text; point them to the panel tip and README「3 分钟上手」. Do not dump the full handbook unless they ask.',
     parameters: { type: 'object', properties: {}, additionalProperties: false },
     output: {
       schema: { type: 'object', properties: { activePack: { type: 'string' }, ruleCount: { type: 'number' }, skillCount: { type: 'number' } } },
