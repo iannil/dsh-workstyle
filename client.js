@@ -1014,6 +1014,8 @@ window.__ModuleLoader__.load({
         if (session && session.id) parts.push('session=' + encodeURIComponent(session.id))
         return parts.length ? '?' + parts.join('&') : ''
       })()
+      const envQueryRef = React.useRef(envQuery)
+      envQueryRef.current = envQuery
 
       const ROUTES = new Set(['run', 'packs', 'pack', 'distill', 'metrics', 'distribute'])
       const readRoute = () => {
@@ -1032,6 +1034,7 @@ window.__ModuleLoader__.load({
         .catch((err) => ({ ok: false, error: String(err && err.message ? err.message : err) }))
 
       const [route, setRoute] = React.useState(readRoute)
+      const statusRequest = React.useRef(0)
       const [packDetail, setPackDetail] = React.useState(null)
       const envRequest = React.useRef(0)
       const [packLoading, setPackLoading] = React.useState(false)
@@ -1111,6 +1114,8 @@ window.__ModuleLoader__.load({
       }, [envQuery])
 
       const load = React.useCallback(() => {
+        const requestId = ++statusRequest.current
+        const requestEnvQuery = envQuery
         setError('')
         setStatusLoading(true)
         fetch('/api/dsh-workstyle/status', { headers: { accept: 'application/json' } })
@@ -1119,6 +1124,7 @@ window.__ModuleLoader__.load({
             return response.json()
           })
           .then((data) => {
+            if (requestId !== statusRequest.current || requestEnvQuery !== envQueryRef.current) return null
             setStatus(data)
             // A refresh reloads the environment; keep the handled list folded
             // until the user asks to open it again.
@@ -1131,8 +1137,14 @@ window.__ModuleLoader__.load({
             }
             loadEnv()
           })
-          .catch((err) => setError(String(err && err.message ? err.message : err)))
-          .finally(() => setStatusLoading(false))
+          .catch((err) => {
+            if (requestId === statusRequest.current && requestEnvQuery === envQueryRef.current) {
+              setError(String(err && err.message ? err.message : err))
+            }
+          })
+          .finally(() => {
+            if (requestId === statusRequest.current && requestEnvQuery === envQueryRef.current) setStatusLoading(false)
+          })
       }, [loadEnv])
 
       React.useEffect(() => { load() }, [load])

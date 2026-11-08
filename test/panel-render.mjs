@@ -144,6 +144,7 @@ const sampleStatus = {
 const currentStatus = JSON.parse(JSON.stringify(sampleStatus))
 const detailControl = { delayed: false, pending: [] }
 const envControl = { delayed: false, pending: [] }
+const statusControl = { delayed: false, pending: [] }
 const detailPacks = {
   'fde-engineering': {
     id: 'fde-engineering', displayName: 'FDE 工程工作方式', version: '0.1.0', format: 'json',
@@ -233,7 +234,11 @@ const failEnv = { scope: false, inject: false, metrics: false }
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
   fetchLog.push(target)
-  if (target.endsWith('/api/dsh-workstyle/status')) return json(currentStatus)
+  if (target.endsWith('/api/dsh-workstyle/status')) {
+    const response = json(currentStatus)
+    if (statusControl.delayed) return new Promise((resolve) => statusControl.pending.push(() => resolve(response)))
+    return response
+  }
   if (target.endsWith('/api/dsh-workstyle/evidence')) {
     return json(currentStatus.latestDistill
       ? {
@@ -699,4 +704,4 @@ ok(!text.includes('3 分钟上手'), 'tip stays hidden after remount when storag
 
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 
-export { route, hashChange, settle, act, textOf, findHost, button, input, currentStatus, detailPacks, detailControl, envControl, hostContext }
+export { route, hashChange, settle, act, textOf, findHost, button, input, currentStatus, detailPacks, detailControl, envControl, statusControl, hostContext }

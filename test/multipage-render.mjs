@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 const panel = await import('./panel-render.mjs')
-const { route, hashChange, settle, textOf, findHost, button, input, detailControl, envControl } = panel
+const { route, hashChange, settle, textOf, findHost, button, input, detailControl, envControl, statusControl } = panel
 let checks = 0
 function ok(condition, label) {
   checks += 1
@@ -72,6 +72,29 @@ ok(textOf(view).includes('/tmp/project-b'), 'current project B environment wins 
 resolveScopeA()
 view = await settle(10)
 ok(textOf(view).includes('/tmp/project-b') && !textOf(view).includes('/tmp/project-a'), 'late project A environment cannot overwrite B')
+
+/* A stale status response must not call its captured A loadEnv after B is current. */
+statusControl.delayed = true
+envControl.delayed = true
+panel.hostContext.cwd = '/tmp/status-a'
+view = await navigateHash('#/run')
+const resolveStatusA = statusControl.pending.shift()
+assert.ok(resolveStatusA, 'project A status request was captured')
+panel.hostContext.cwd = '/tmp/status-b'
+view = await navigateHash('#/packs')
+const resolveStatusB = statusControl.pending.shift()
+assert.ok(resolveStatusB, 'project B status request was captured')
+statusControl.delayed = false
+resolveStatusB()
+view = await settle(10)
+const resolveStatusEnvB = envControl.pending.shift()
+assert.ok(resolveStatusEnvB, 'project B status started a B environment request')
+envControl.delayed = false
+resolveStatusEnvB()
+view = await settle(10)
+resolveStatusA()
+view = await settle(10)
+ok(textOf(view).includes('/tmp/status-b') && envControl.pending.length === 0, 'late project A status cannot start an old environment load')
 
 // Existing active route behavior remains available after recovery.
 view = await navigateHash('#/packs/fde-engineering')
