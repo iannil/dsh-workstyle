@@ -1040,6 +1040,7 @@ window.__ModuleLoader__.load({
       const [route, setRoute] = React.useState(readRoute)
       const statusRequest = React.useRef(0)
       const exportRequest = React.useRef(0)
+      const exportBusyRef = React.useRef('')
       const [packDetail, setPackDetail] = React.useState(null)
       const envRequest = React.useRef(0)
       const [packLoading, setPackLoading] = React.useState(false)
@@ -1250,14 +1251,18 @@ window.__ModuleLoader__.load({
       /**
        * Exports keep their own in-flight state, separate from the global
        * `busy`: switching the header pack or finishing another action must
-       * neither clear it nor let a second export overlap. A request id keeps
-       * a stale run from writing history or errors over a newer one, and a
-       * failed history refresh leaves the export result untouched.
+       * neither clear it nor let a second export overlap. The guard is a ref,
+       * not the state — state updates are asynchronous, so two synchronous
+       * invocations before a rerender must not both start a request. A
+       * request id keeps a stale run from writing history or errors over a
+       * newer one, and a failed history refresh leaves the export result
+       * untouched.
        */
       const onExport = (withProject) => {
-        if (exportBusy) return
+        if (exportBusyRef.current) return
         const kind = withProject ? 'scoped' : 'pack'
         const requestId = ++exportRequest.current
+        exportBusyRef.current = kind
         setExportBusy(kind); setError(''); setNotice(''); setExportResult(null)
         call('export', withProject ? { withProject: true, cwd: (env && env.scope && env.scope.cwd) || props.cwd || '' } : { withProject: false })
           .then(({ ok, data }) => {
@@ -1277,7 +1282,10 @@ window.__ModuleLoader__.load({
             if (requestId === exportRequest.current) setError(String(err && err.message ? err.message : err))
           })
           .finally(() => {
-            if (requestId === exportRequest.current) setExportBusy('')
+            if (requestId === exportRequest.current) {
+              exportBusyRef.current = ''
+              setExportBusy('')
+            }
           })
       }
 

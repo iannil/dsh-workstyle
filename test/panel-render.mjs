@@ -750,6 +750,19 @@ ok(!text.includes('export rejected') && !text.includes('export failed'), 'histor
 ok(text.includes('最近导出') && text.includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz'), 'history keeps the previous metadata when its refresh fails')
 exportControl.failHistory = false
 
+/* Fix round 3: the in-flight guard must be synchronous — state updates are
+   async, so two onClicks in the same tick before a rerender must yield one
+   POST, not two. */
+const syncDoubleBefore = exportCalls.length
+const syncPackOnly = button(view, '导出包（仅包）')
+const syncScoped = button(view, '导出包 + 作用域快照')
+view = await act(() => {
+  syncPackOnly.props.onClick()
+  syncScoped.props.onClick()
+})
+ok(exportCalls.length === syncDoubleBefore + 1, 'a synchronous second export cannot start before rerender')
+ok(!button(view, '导出中…') && /4,?567 bytes/.test(textOf(view)), 'the double invocation resolves to a single export result')
+
 ok(text.includes('home v5'), 'footer exposes the v5 build marker')
 ok(!text.includes('面向工程交付'), 'pack marketing description removed')
 
