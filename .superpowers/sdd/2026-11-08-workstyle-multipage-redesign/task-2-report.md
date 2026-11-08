@@ -57,3 +57,9 @@ Implemented the Task 2 host contract and committed it in the focused Task 2 comm
 
 - Node.js was unavailable, so validation used Bun 1.3.12 as authorized by the task brief.
 - The worktree contained pre-existing redesign changes in several files; those changes were preserved and were not reset or cleaned.
+
+## Fix round 1
+
+- Updated `packDetail()` so `/api/dsh-workstyle/pack` projects each skill to `name`, `description`, and `whenToUse`, matching the portable summary shape and excluding local `dir`/`file` paths and frontmatter.
+- Added smoke assertions covering the portable fields and absence of local path/frontmatter fields.
+- Follow-up verification: `bun test/smoke.mjs` passed all 141 checks; `git diff --check` passed.

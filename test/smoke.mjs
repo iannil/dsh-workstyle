@@ -225,6 +225,11 @@ ok(adoptRoute.status === 200 && adoptRoute.data.ruleCount === 9, 'POST /adopt')
 const packDetail = await callRoute('/api/dsh-workstyle/pack?id=fde-engineering')
 ok(packDetail.status === 200 && packDetail.data.pack.id === 'fde-engineering', 'GET /pack returns a pack detail')
 ok(Array.isArray(packDetail.data.pack.rules), 'pack detail includes rules')
+const detailSkill = packDetail.data.pack.skills[0]
+ok(detailSkill && typeof detailSkill.name === 'string' && typeof detailSkill.description === 'string' && typeof detailSkill.whenToUse === 'string',
+  'pack detail skills expose portable metadata')
+ok(detailSkill && !('dir' in detailSkill) && !('file' in detailSkill) && !('frontmatter' in detailSkill),
+  'pack detail skills hide local paths and frontmatter')
 const reportList = await callRoute('/api/dsh-workstyle/reports')
 ok(reportList.status === 200 && Array.isArray(reportList.data.reports), 'GET /reports returns report metadata only')
 ok(!JSON.stringify(reportList.data).includes('先给方案再写代码'), 'report metadata excludes prompt and rule text')

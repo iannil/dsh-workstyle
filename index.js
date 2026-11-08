@@ -92,7 +92,11 @@ function packDetail(pack) {
     rules: pack.rules,
     presets: listPresets(pack.presets),
     templates: listTemplates(pack.templates),
-    skills: pack.skillList || [],
+    skills: (pack.skillList || []).map((skill) => ({
+      name: skill.name,
+      description: skill.description || '',
+      whenToUse: skill.whenToUse || '',
+    })),
   }
 }
 
