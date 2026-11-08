@@ -160,6 +160,9 @@ window.__ModuleLoader__.load({
       skillsUnit: '个技能',
       readonly: '只读',
       emptyNone: '暂无',
+      emptyPrefix: '暂无',
+      emptySuffix: '，',
+      emptyOr: ' 或 ',
       originPackBadge: '包',
       presetsLabel: '预设',
       templatesLabel: '模板',
@@ -393,6 +396,9 @@ window.__ModuleLoader__.load({
       skillsUnit: 'skills',
       readonly: 'read-only',
       emptyNone: 'none',
+      emptyPrefix: 'No',
+      emptySuffix: ' yet,',
+      emptyOr: ' or ',
       originPackBadge: 'pack',
       presetsLabel: 'Presets',
       templatesLabel: 'Templates',
@@ -1106,9 +1112,9 @@ window.__ModuleLoader__.load({
       const { noun, primary, source, onPrimary, onSource } = props
       return h('div', { style: S.emptyCenter },
         h('div', { style: S.emptyLine },
-          '暂无 ' + noun + '，',
+          scopedT('emptyPrefix') + ' ' + noun + scopedT('emptySuffix'),
           primary ? h('button', { type: 'button', style: S.linkButton, onClick: onPrimary }, primary) : null,
-          source ? ' 或 ' : null,
+          source ? scopedT('emptyOr') : null,
           source ? h('button', { type: 'button', style: S.linkButton, onClick: onSource }, source) : null))
     }
 

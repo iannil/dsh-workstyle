@@ -919,7 +919,9 @@ console.log('  ✓ semantic TOKENS layer replaces legacy colors')
 // --- shared state components ---
 assert.ok(/function Card\(/.test(src), 'Card component missing')
 assert.ok(/function Chip\(/.test(src), 'Chip component missing')
-assert.ok(/暂无/.test(src.match(/function EmptyState\([\s\S]*?\n\}/)?.[0] || ''), 'EmptyState must render 暂无文案')
+const emptyStateBody = src.match(/function EmptyState\([\s\S]*?\n    \}/)?.[0] || ''
+assert.ok(emptyStateBody.includes("scopedT('emptyPrefix')") && emptyStateBody.includes("scopedT('emptySuffix')") && emptyStateBody.includes("scopedT('emptyOr')"), 'EmptyState must render connectors via i18n keys, no hardcoded Chinese')
+assert.ok(!/[\u4e00-\u9fff]/.test(emptyStateBody), 'EmptyState must not hardcode Chinese literals')
 console.log('  ✓ shared state components (Card / Chip / EmptyState)')
 
 // --- overview page ---
