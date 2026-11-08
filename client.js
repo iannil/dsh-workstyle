@@ -15,9 +15,13 @@ window.__ModuleLoader__.load({
 
     /* ----------------------------- brand tokens ---------------------------- */
 
-    const INK = '#14171c'
-    const PAPER = '#f4f0e8'
-    const AMBER = '#d7913a'
+    const INK = '#14171C'
+    const PAPER = '#F4F0E8'
+    const SURFACE = '#FBF9F5'
+    const AMBER = '#E3A660'
+    const AMBER_DARK = '#95550F'
+    const BLUE_GRAY = '#47739A'
+    const ERROR = '#A44A3F'
 
     const luminance = (color) => {
       const match = color && color.match(/rgba?\(([^)]+)\)/)
@@ -52,11 +56,11 @@ window.__ModuleLoader__.load({
       }
     })()
 
-    const ACCENT = isDark ? '#e3a660' : '#95550f'
+    const ACCENT = isDark ? AMBER : AMBER_DARK
     const ACCENT_LINE = isDark ? 'rgba(227,166,96,0.55)' : 'rgba(149,85,15,0.45)'
     const ACCENT_SOFT = isDark ? 'rgba(227,166,96,0.16)' : 'rgba(149,85,15,0.09)'
     const HAIRLINE = 'var(--dsw-alias-border-l1)'
-    const STATE_INFO = 'var(--dsw-alias-state-info-primary)'
+    const STATE_INFO = 'var(--dsw-alias-state-info-primary, ' + BLUE_GRAY + ')'
     const PRIMARY_BG = isDark ? PAPER : INK
     const PRIMARY_FG = isDark ? INK : PAPER
     const BUILD = 'home v5 · 2026-11-08'
@@ -607,8 +611,8 @@ window.__ModuleLoader__.load({
       },
       banner: (kind) => ({
         fontSize: 12, lineHeight: 1.55, borderRadius: 8, padding: '9px 12px',
-        border: '1px solid ' + (kind === 'error' ? 'var(--dsw-alias-state-error-primary)' : HAIRLINE),
-        color: kind === 'error' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-secondary)',
+        border: '1px solid ' + (kind === 'error' ? ERROR : HAIRLINE),
+        color: kind === 'error' ? ERROR : 'var(--dsw-alias-label-secondary)',
         background: kind === 'error' ? 'transparent' : 'var(--dsw-alias-bg-layer-2)',
       }),
       tileClickable: { cursor: 'pointer' },
@@ -879,10 +883,14 @@ window.__ModuleLoader__.load({
       #dsw-root input::placeholder { color: var(--dsw-alias-label-secondary); opacity: .78; }
       #dsw-root button:hover:not(:disabled) { filter: brightness(0.97); }
       #dsw-root button:active:not(:disabled) { transform: translateY(0.5px); }
-      #dsw-root button:focus-visible, #dsw-root input:focus-visible, #dsw-root select:focus-visible {
+      #dsw-root button:focus-visible, #dsw-root input:focus-visible, #dsw-root select:focus-visible, #dsw-root textarea:focus-visible, #dsw-root [tabindex]:focus-visible {
         outline: 2px solid ${ACCENT}; outline-offset: 2px;
       }
       #dsw-root a:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 2px; border-radius: 6px; }
+      #dsw-root [role="tab"]:focus-visible { outline-offset: -2px; }
+      @media (prefers-reduced-motion: reduce) {
+        #dsw-root *, #dsw-root *::before, #dsw-root *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+      }
       #dsw-root input[type="checkbox"] {
         -webkit-appearance: none; appearance: none;
         width: 14px; height: 14px; margin: 0; flex: none;
@@ -936,18 +944,47 @@ window.__ModuleLoader__.load({
         sub ? h('span', { style: S.tileSub, title: String(sub) }, sub) : null)
     }
 
-    function Loading() {
-      return h('div', { style: S.page },
-        h('div', { style: S.inner },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 14 } },
-            h('div', { style: { ...S.skeleton, width: 44, height: 44, borderRadius: 14 } }),
-            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-              h('div', { style: { ...S.skeleton, width: 128, height: 9 } }),
-              h('div', { style: { ...S.skeleton, width: 220, height: 21 } }),
-              h('div', { style: { ...S.skeleton, width: 320, height: 11 } }))),
-          h('div', { style: { ...S.skeleton, height: 74, borderRadius: 10 } }),
-          h('div', { style: { ...S.skeleton, height: 26, width: '40%' } }),
-          h('div', { style: { ...S.skeleton, height: 180, borderRadius: 10 } })))
+    function Loading(props) {
+      const label = (props && props.label) || '正在加载…'
+      return h('div', { style: S.empty, role: 'status', 'aria-live': 'polite' },
+        h('div', { style: S.ruleTitle }, label),
+        h('div', { style: S.hint }, '正在读取当前环境的数据，请稍候。'),
+        h('div', { style: { ...S.skeleton, height: 8, width: '38%' }, 'aria-hidden': 'true' }))
+    }
+
+    function EmptyState(props) {
+      const { title, description, action, onAction, href } = props
+      return h('div', { style: S.empty },
+        h('div', { style: S.ruleTitle }, title),
+        description ? h('div', { style: S.hint }, description) : null,
+        action
+          ? href
+            ? h('a', { href, style: S.linkAccent, onClick: onAction }, action)
+            : h('button', { type: 'button', style: S.buttonPrimary, onClick: onAction }, action)
+          : null)
+    }
+
+    function ErrorState(props) {
+      const { operation, message, onRetry } = props
+      return h('div', { style: S.banner('error'), role: 'alert' },
+        h('span', null, operation + '失败：' + (message || '暂时无法完成。')),
+        onRetry ? h('button', { type: 'button', style: S.linkAccent, onClick: onRetry }, '重试') : null)
+    }
+
+    function Notice(props) {
+      return props && props.children ? h('div', { style: S.banner('info'), role: 'status', 'aria-live': 'polite' }, props.children) : null
+    }
+
+    function EnvironmentContextBar({ environment }) {
+      return h('div', {
+        role: 'region', 'aria-label': '当前环境',
+        style: { ...S.rail, marginBottom: 16 },
+      },
+        h('span', { style: S.railLabel }, '当前环境'),
+        h('span', { style: S.railValue }, environment.cwd || '未指定目录'),
+        h('span', { style: S.railLabel }, environment.sessionId ? '会话 ' + environment.sessionId : '未指定会话'),
+        environment.loading ? h('span', { style: S.railLabel }, '加载中…') : null,
+        environment.error ? h('span', { style: { ...S.railLabel, color: ERROR } }, environment.error) : null)
     }
 
     /* --------------------------------- panel ------------------------------- */
@@ -1404,9 +1441,9 @@ window.__ModuleLoader__.load({
       if (!status) {
         if (error) {
           return h('div', { style: S.page },
-            h('div', { style: S.inner }, h('div', { style: S.banner('error') }, t('error') + '：' + error)))
+            h('div', { style: S.inner }, h(ErrorState, { operation: '状态加载', message: error, onRetry: load })))
         }
-        return h(Loading, null)
+        return h(Loading, { label: '正在加载工作方式状态…' })
       }
 
       const active = status.activePack
@@ -1421,7 +1458,7 @@ window.__ModuleLoader__.load({
 
       if (!active) {
         return h('div', { style: S.page },
-          h('div', { style: S.inner }, h('div', { style: S.banner('error') }, t('error') + '：no active pack')))
+          h('div', { style: S.inner }, h(ErrorState, { operation: '读取当前工作方式包', message: '没有可用的当前工作方式包。', onRetry: load })))
       }
 
       const enabledRules = rules.filter((rule) => rule.enabled !== false)
@@ -2056,15 +2093,7 @@ window.__ModuleLoader__.load({
             navigate({ page })
           },
         }, label)))
-      const environmentBar = h('div', {
-        role: 'region', 'aria-label': '当前环境',
-        style: { ...S.rail, marginBottom: 16 },
-      },
-        h('span', { style: S.railLabel }, '环境'),
-        h('span', { style: S.railValue }, environment.cwd || '未指定目录'),
-        h('span', { style: S.railLabel }, environment.sessionId ? '会话 ' + environment.sessionId : '未指定会话'),
-        environment.loading ? h('span', { style: S.railLabel }, '加载中…') : null,
-        environment.error ? h('span', { style: S.railLabel }, environment.error) : null)
+      const environmentBar = h(EnvironmentContextBar, { environment })
 
       const evidenceSection = h(Section, {
         id: 'dsw-evidence',
@@ -2148,9 +2177,11 @@ window.__ModuleLoader__.load({
       const packDetailPageBody = !route.packId
         ? packListBody
         : packLoading && !selectedPack
-          ? h('div', { style: S.empty }, h('div', { style: S.hint }, '正在加载工作方式包…'))
+          ? h(Loading, { label: '正在加载工作方式包…' })
           : (packError && !selectedPack) || !selectedPack
-            ? h('div', { style: S.empty }, h('div', { style: S.banner('error') }, '找不到工作方式包：' + (route.packId || '') ), h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, '返回工作方式包'))
+            ? h('div', { style: S.empty },
+              h(ErrorState, { operation: '加载工作方式包', message: '找不到工作方式包：' + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => navigate({ page: 'pack', packId: route.packId }) }),
+              h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, '返回工作方式包'))
             : h('div', null,
               h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, '当前') : h('span', { style: S.mutedBadge }, '未启用')), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, '来源：' + (selectedPack.source || '本地内置') + ' · ' + selectedPack.ruleCount + ' 条规则 · ' + selectedPack.skillCount + ' 个技能')),
               h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
@@ -2276,12 +2307,12 @@ window.__ModuleLoader__.load({
                 : h('div', { style: S.evidenceGrid }, (metrics.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
                   h('span', { style: S.statLabel }, item.label), h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
                   h('span', { style: S.statSub }, item.available ? '可用' : '未发现')))))
-            : h('div', { style: S.empty },
-              h('div', { style: S.ruleTitle }, '还没有可用度量'),
-              h('div', { style: S.hint }, t('metricsUnavailable')),
-              h('div', { style: S.actions },
-                h('a', { href: '#/distill', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'distill' }) } }, '先去蒸馏 →'),
-                h('button', { style: S.buttonPrimary, disabled: !!busy, onClick: onScan }, '扫描并生成建议'))))
+            : h(EmptyState, {
+              title: '还没有可用度量',
+              description: t('metricsUnavailable') + '先蒸馏一次本机会话，再回来查看代理度量。',
+              action: '先去蒸馏 →', href: '#/distill',
+              onAction: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'distill' }) },
+            }))
       }
 
       const pageBody = route.page === 'run'
@@ -2307,7 +2338,7 @@ window.__ModuleLoader__.load({
                   error: error,
                 }))
 
-      return h('div', { id: 'dsw-root', style: S.page },
+      return h('div', { id: 'dsw-root', style: { ...S.page, '--dsw-color-ink': INK, '--dsw-color-paper': PAPER, '--dsw-color-surface': SURFACE, '--dsw-color-amber': AMBER, '--dsw-color-amber-dark': AMBER_DARK, '--dsw-color-blue-gray': BLUE_GRAY, '--dsw-color-error': ERROR } },
         h('style', null, CSS),
         h('div', { style: S.inner },
           primaryNav,
@@ -2335,13 +2366,11 @@ window.__ModuleLoader__.load({
                 onClick: load, disabled: !!busy,
               }, t('refresh')))),
 
-          error ? h('div', { style: S.banner('error') }, t('error') + '：' + error) : null,
-          notice ? h('div', { style: S.banner('info') }, notice) : null,
-          route.page !== 'run' && envError ? h('div', { style: S.banner('error'), role: 'alert' },
-            t('envUnavailable') + envError,
-            h('button', { style: S.linkAccent, type: 'button', onClick: load }, t('refresh'))) : null,
+          error ? h(ErrorState, { operation: '执行当前操作', message: error, onRetry: load }) : null,
+          notice ? h(Notice, null, notice) : null,
+          envError ? h(ErrorState, { operation: '刷新当前环境', message: envError, onRetry: load }) : null,
 
-          pageBody,
+          h('main', { id: 'dsw-main', 'aria-live': 'polite' }, pageBody),
 
           h('div', { style: S.footer },
             h('span', null, BUILD),

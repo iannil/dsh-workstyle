@@ -199,4 +199,29 @@ text = textOf(view)
 ok(text.includes('已采纳建议规则'), 'successful adopt reports its notice')
 ok(!checkbox(view, '中文短句'), 'successful adopt clears the selection from the pending queue')
 
+/* Task 7 shared state and accessibility coverage. */
+view = await navigateHash('#/run')
+const refresh = button(view, '刷新')
+assert.ok(refresh, 'shared header exposes a refresh action')
+failEnv.scope = true
+view = await panel.act(() => refresh.props.onClick())
+text = textOf(view)
+ok(text.includes('刷新当前环境失败') && text.includes('重试'), 'route failure offers retry')
+ok(text.includes('当前环境'), 'shared context remains visible after a route failure')
+failEnv.scope = false
+failEnv.emptyMetrics = true
+view = await panel.act(() => button(view, '刷新').props.onClick())
+view = await navigateHash('#/metrics')
+text = textOf(view)
+ok(text.includes('尚未蒸馏'), 'metrics empty state explains its next action')
+ok(!!findHost(view, (node) => node.props && node.props['aria-current'] === 'page'), 'active navigation is announced')
+ok(!!findHost(view, (node) => node.props && node.props.id === 'dsw-main' && node.type === 'main'), 'page content uses a main landmark')
+const root = findHost(view, (node) => node.props && node.props.id === 'dsw-root')
+const style = findHost(view, (node) => node.type === 'style')
+ok(!!root && text.includes('当前环境'), 'dark-mode fixture keeps the shared context label')
+ok(!!root && root.props.style['--dsw-color-ink'] === '#14171C' && root.props.style['--dsw-color-surface'] === '#FBF9F5', 'theme token set is present on the themed root')
+ok(!!style && textOf(style).includes('focus-visible') && textOf(style).includes('prefers-reduced-motion'), 'focus-visible and reduced-motion rules stay scoped')
+failEnv.emptyMetrics = false
+view = await panel.act(() => button(view, '刷新').props.onClick())
+
 console.log('\nMULTIPAGE RENDER: ' + checks + ' CHECKS PASSED')

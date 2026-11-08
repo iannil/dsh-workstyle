@@ -231,7 +231,7 @@ const json = (data) => ({ ok: true, json: async () => data })
 const fetchLog = []
 const exportCalls = []
 const exportControl = { fail: false, delayed: false, pending: [], failHistory: false }
-const failEnv = { scope: false, inject: false, metrics: false, adopt: false }
+const failEnv = { scope: false, inject: false, metrics: false, emptyMetrics: false, adopt: false }
 
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
@@ -346,6 +346,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   if (target.includes('/api/dsh-workstyle/metrics')) {
     if (failEnv.metrics) return { ok: false, json: async () => ({}) }
+    if (failEnv.emptyMetrics) return json({ available: false, metrics: [], sources: [] })
     return json({
       available: true,
       generatedAt: '2026-11-07T17:00:00.000Z',
