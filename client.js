@@ -957,6 +957,7 @@ window.__ModuleLoader__.load({
       const [status, setStatus] = React.useState(null)
       const [statusLoading, setStatusLoading] = React.useState(true)
       const [report, setReport] = React.useState(null)
+      const [reports, setReports] = React.useState([])
       const [busy, setBusy] = React.useState('')
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
@@ -1118,6 +1119,11 @@ window.__ModuleLoader__.load({
         const requestEnvQuery = envQuery
         setError('')
         setStatusLoading(true)
+        getJson('reports').then((result) => {
+          if (requestId === statusRequest.current && result.ok && result.data && Array.isArray(result.data.reports)) {
+            setReports(result.data.reports)
+          }
+        })
         fetch('/api/dsh-workstyle/status', { headers: { accept: 'application/json' } })
           .then((response) => {
             if (!response.ok) throw new Error('status unavailable')
@@ -1214,6 +1220,7 @@ window.__ModuleLoader__.load({
             setSelected([])
             setNotice(t('adoptedNotice') + '：' + data.added.length +
               (data.skipped && data.skipped.length ? '，' + data.skipped.length + ' skipped' : ''))
+            load()
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1225,6 +1232,7 @@ window.__ModuleLoader__.load({
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'unadopt failed')
             setStatus(data.status)
+            load()
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -2165,26 +2173,86 @@ window.__ModuleLoader__.load({
               h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
               h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
+      const DistillPage = ({ onNavigate, onScan }) => {
+        const sourceEntries = Object.entries((report && report.sources) || {})
+        const sourceLabels = { claude: 'Claude Code', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' }
+        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+          h('div', { style: S.tile },
+            h('div', { style: S.ruleTitleRow },
+              h('span', { style: S.ruleTitle }, '蒸馏审阅'),
+              h('span', { style: S.badge }, '本地数据')),
+            h('div', { style: S.hint }, '扫描本机会话生成聚合建议；不联网、不上传，不保存 prompt 原文。'),
+            h('div', { style: { ...S.actionsBar, paddingTop: 12 } },
+              h('button', { style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary, disabled: !!busy, onClick: onScan },
+                busy === 'distill' ? t('distilling') : t('distill')),
+              h('span', { style: S.actionsNote }, latest ? '最近生成：' + when(latest.generatedAt) : '尚未扫描')),
+            sourceEntries.length
+              ? h('div', { style: { ...S.sourceList, paddingBottom: 0 } }, sourceEntries.map(([key, source]) =>
+                h('div', { key, style: S.sourceRow },
+                  h('span', { style: S.sourceName }, sourceLabels[key] || key),
+                  h('span', { style: S.sourcePath }, source && source.available ? '可用' : '未发现'))))
+              : h('div', { style: S.hint }, '扫描后显示本机来源状态。')),
+          h(Section, { id: 'dsw-distill-review', label: '建议审阅', count: suggestions.length },
+            reviewSectionBody),
+          h(Section, { id: 'dsw-distill-history', label: '报告历史', count: reports.length },
+            reports.length
+              ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, reports.map((item) =>
+                h('div', { key: item.file, style: S.ruleRowV5 },
+                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                    h('span', { style: S.ruleTitle }, when(item.generatedAt) || item.file),
+                    h('span', { style: S.hint }, item.file)),
+                  h('span', { style: S.ruleSideText }, Object.entries(item.sources || {}).filter(([, available]) => available).map(([key]) => sourceLabels[key] || key).join(' · ') || '无可用来源'),
+                  h('span', { style: S.mutedBadge }, String(item.suggestionCount || 0) + ' 条建议'))))
+              : h('div', { style: S.empty }, h('div', { style: S.hint }, '还没有报告。扫描本地数据后，这里只显示生成时间、来源和建议数量。'))),
+          h('a', { href: '#/metrics', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'metrics' }) } }, '查看代理度量 →'))
+      }
+
+      const MetricsPage = ({ metrics, onNavigate, onScan }) => {
+        const available = metrics && metrics.available
+        const metricWindow = metrics && (metrics.window || metrics.scanned || (metrics.generatedAt ? '生成于 ' + when(metrics.generatedAt) : ''))
+        const metricCardsPage = (metrics && metrics.metrics || []).slice(0, 4).map((metric) => h('div', { key: metric.id, style: S.metricCard },
+          h('div', { style: S.metricTop }, h('span', { style: S.metricLabel }, metric.label),
+            metric.baselineDelta !== undefined && metric.baselineDelta !== null
+              ? h('span', { style: metric.baselineDelta > 0 ? S.deltaUp : S.deltaDown }, '较上次 ' + (metric.baselineDelta > 0 ? '+' : '') + metric.baselineDelta + '%') : null),
+          h('div', { style: S.metricValueRow }, h('span', { style: S.metricValue }, metric.value), h('span', { style: S.metricUnit }, metric.unit)),
+          h('div', { style: S.metricFormula }, h('strong', null, '公式：'), metric.formula || '—'),
+          h('div', { style: S.metricFormula }, h('strong', null, '分母：'), metric.denominator || '—'),
+          metric.window ? h('div', { style: S.hint }, '窗口：' + metric.window) : null,
+          metric.baseline ? h('div', { style: S.hint }, '较上次：' + metric.baseline) : null))
+        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+          h('div', { style: S.tile },
+            h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, '代理度量'), h('span', { style: S.badge }, '可复算')),
+            h('div', { style: S.hint }, '这些数字描述可观察的提示与来源覆盖，不能说明模型是否遵守规则。'),
+            metricWindow ? h('div', { style: { ...S.hint, paddingTop: 8 } }, '窗口：' + metricWindow) : null),
+          available
+            ? h('div', null,
+              h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
+                h('button', { style: metricTab === 'metrics' ? { ...S.pill, ...S.pillActive } : S.pill, onClick: () => setMetricTab('metrics') }, '度量'),
+                h('button', { style: metricTab === 'sources' ? { ...S.pill, ...S.pillActive } : S.pill, onClick: () => setMetricTab('sources') }, '来源')),
+              metricTab === 'metrics'
+                ? h('div', null, h('div', { style: S.metricGrid }, metricCardsPage), h('div', { style: S.caveat }, metrics.caveat || '这些是代理指标，只描述可观察信号。'))
+                : h('div', { style: S.evidenceGrid }, (metrics.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
+                  h('span', { style: S.statLabel }, item.label), h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
+                  h('span', { style: S.statSub }, item.available ? '可用' : '未发现')))))
+            : h('div', { style: S.empty },
+              h('div', { style: S.ruleTitle }, '还没有可用度量'),
+              h('div', { style: S.hint }, t('metricsUnavailable')),
+              h('div', { style: S.actions },
+                h('a', { href: '#/distill', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'distill' }) } }, '先去蒸馏 →'),
+                h('button', { style: S.buttonPrimary, disabled: !!busy, onClick: onScan }, '扫描并生成建议'))))
+      }
+
       const pageBody = route.page === 'run'
         ? h('section', { 'aria-labelledby': 'dsw-run-title' },
-          h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, '运行台'),
-          runBody)
+          h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, '运行台'), runBody)
         : route.page === 'packs' || route.page === 'pack'
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
-            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? '工作方式包详情' : '工作方式包'),
-            packDetailPageBody)
+            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? '工作方式包详情' : '工作方式包'), packDetailPageBody)
           : route.page === 'distill'
-              ? h('section', { 'aria-labelledby': 'dsw-distill-title' },
-                h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏'),
-                h('div', { style: S.hint }, '从本机会话生成可审阅的工作方式建议。'),
-                h('button', { style: S.buttonPrimary, onClick: onDistill, disabled: !!busy }, busy === 'distill' ? t('distilling') : t('distill')))
-              : route.page === 'metrics'
-                ? h('section', { 'aria-labelledby': 'dsw-metrics-title' },
-                  h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, '度量台'),
-                  metricsBlock)
-                : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
-                  h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, '分发'),
-                  h('div', null, distributionBlock, evidenceSection))
+            ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏审阅'), h(DistillPage, { onNavigate: navigate, onScan: onDistill }))
+            : route.page === 'metrics'
+              ? h('section', { 'aria-labelledby': 'dsw-metrics-title' }, h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, '度量台'), h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }))
+              : h('section', { 'aria-labelledby': 'dsw-distribute-title' }, h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, '分发'), h('div', null, distributionBlock, evidenceSection))
 
       return h('div', { id: 'dsw-root', style: S.page },
         h('style', null, CSS),
