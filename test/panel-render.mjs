@@ -230,7 +230,7 @@ const json = (data) => ({ ok: true, json: async () => data })
    one environment route fail while the others succeed. */
 const fetchLog = []
 const exportCalls = []
-const exportControl = { fail: false }
+const exportControl = { fail: false, delayed: false, pending: [], failHistory: false }
 const failEnv = { scope: false, inject: false, metrics: false, adopt: false }
 
 globalThis.fetch = async (url, options = {}) => {
@@ -244,6 +244,7 @@ globalThis.fetch = async (url, options = {}) => {
     ] })
   }
   if (target.endsWith('/api/dsh-workstyle/exports')) {
+    if (exportControl.failHistory) return { ok: false, json: async () => ({}) }
     return json({ exports: [
       { file: 'fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz', modifiedAt: '2026-11-08T01:00:00.000Z', bytes: 12345, packId: 'fde-engineering', packVersion: '0.1.0' },
     ] })
@@ -251,8 +252,12 @@ globalThis.fetch = async (url, options = {}) => {
   if (target.endsWith('/api/dsh-workstyle/export')) {
     const body = JSON.parse(options.body || '{}')
     exportCalls.push(body)
-    if (exportControl.fail) return { ok: false, json: async () => ({ error: 'export rejected' }) }
-    return json({ file: '/tmp/exports/fde-engineering-v0.1.0-new.tar.gz', bytes: 4567, files: 6, packId: 'fde-engineering', ruleCount: 4, skillCount: 3 })
+    const respond = () => {
+      if (exportControl.fail) return { ok: false, json: async () => ({ error: 'export rejected' }) }
+      return json({ file: '/tmp/exports/fde-engineering-v0.1.0-new.tar.gz', bytes: 4567, files: 6, packId: 'fde-engineering', ruleCount: 4, skillCount: 3 })
+    }
+    if (exportControl.delayed) return new Promise((resolve) => exportControl.pending.push(() => resolve(respond())))
+    return respond()
   }
   if (target.endsWith('/api/dsh-workstyle/adopt')) {
     if (failEnv.adopt) return { ok: false, json: async () => ({ error: 'adopt rejected' }) }
@@ -714,6 +719,37 @@ text = textOf(view)
 ok(text.includes('export rejected'), 'export failure is visible')
 ok(button(view, '导出包 + 作用域快照') && !button(view, '导出包 + 作用域快照').props.disabled, 'failed export keeps the selected action available for retry')
 exportControl.fail = false
+
+/* Fix round 2: export in-flight state is dedicated — finishing another action
+   (here a failed header-pack apply) must not clear it, and the sibling export
+   stays disabled so exports cannot overlap. */
+exportControl.delayed = true
+view = await act(() => button(view, '导出包（仅包）').props.onClick())
+const inFlightExport = button(view, '导出中…')
+ok(inFlightExport && inFlightExport.props.disabled === true, 'export button disables while an export is in flight')
+const siblingExport = button(view, '导出包 + 作用域快照')
+ok(siblingExport && siblingExport.props.disabled === true, 'sibling export stays disabled so exports cannot overlap')
+const headerSelect = findHost(view, (node) => node.type === 'select' && node.props && node.props.onChange)
+ok(!!headerSelect, 'header pack select remains reachable during an export')
+view = await act(() => headerSelect.props.onChange({ target: { value: 'minimal' } }))
+const stillInFlight = button(view, '导出中…')
+ok(stillInFlight && stillInFlight.props.disabled === true, 'switching the header pack cannot clear the export in-flight state')
+exportControl.delayed = false
+view = await act(() => exportControl.pending.shift()())
+const reEnabledExport = button(view, '导出包（仅包）')
+ok(reEnabledExport && reEnabledExport.props.disabled !== true, 'export actions re-enable after the export resolves')
+ok(/4,?567 bytes/.test(textOf(view)), 'resolved export still reports its archive metadata')
+
+/* Fix round 2: a failed history refresh is not an export failure — the
+   success result and the previous history rows stay visible, with no error. */
+exportControl.failHistory = true
+view = await act(() => button(view, '导出包（仅包）').props.onClick())
+text = textOf(view)
+ok(/4,?567 bytes/.test(text) && !!button(view, '复制路径'), 'export success keeps its result when the history refresh fails')
+ok(!text.includes('export rejected') && !text.includes('export failed'), 'history refresh failure does not surface as an export error')
+ok(text.includes('最近导出') && text.includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz'), 'history keeps the previous metadata when its refresh fails')
+exportControl.failHistory = false
+
 ok(text.includes('home v5'), 'footer exposes the v5 build marker')
 ok(!text.includes('面向工程交付'), 'pack marketing description removed')
 

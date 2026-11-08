@@ -960,6 +960,7 @@ window.__ModuleLoader__.load({
       const [reports, setReports] = React.useState([])
       const [exports, setExports] = React.useState([])
       const [exportResult, setExportResult] = React.useState(null)
+      const [exportBusy, setExportBusy] = React.useState('')
       const [busy, setBusy] = React.useState('')
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
@@ -1038,6 +1039,7 @@ window.__ModuleLoader__.load({
 
       const [route, setRoute] = React.useState(readRoute)
       const statusRequest = React.useRef(0)
+      const exportRequest = React.useRef(0)
       const [packDetail, setPackDetail] = React.useState(null)
       const envRequest = React.useRef(0)
       const [packLoading, setPackLoading] = React.useState(false)
@@ -1245,21 +1247,38 @@ window.__ModuleLoader__.load({
           .finally(() => setBusy(''))
       }
 
+      /**
+       * Exports keep their own in-flight state, separate from the global
+       * `busy`: switching the header pack or finishing another action must
+       * neither clear it nor let a second export overlap. A request id keeps
+       * a stale run from writing history or errors over a newer one, and a
+       * failed history refresh leaves the export result untouched.
+       */
       const onExport = (withProject) => {
+        if (exportBusy) return
         const kind = withProject ? 'scoped' : 'pack'
-        setBusy('export:' + kind); setError(''); setNotice(''); setExportResult(null)
+        const requestId = ++exportRequest.current
+        setExportBusy(kind); setError(''); setNotice(''); setExportResult(null)
         call('export', withProject ? { withProject: true, cwd: (env && env.scope && env.scope.cwd) || props.cwd || '' } : { withProject: false })
           .then(({ ok, data }) => {
+            if (requestId !== exportRequest.current) return null
             if (!ok) throw new Error(data && data.error ? data.error : 'export failed')
             setExportResult(data)
             setNotice(t('exported') + '：' + data.file)
             return getJson('exports')
           })
           .then((result) => {
+            if (requestId !== exportRequest.current) return
+            // History refresh failure is not an export failure: keep the
+            // result and the previous history rows exactly as they are.
             if (result && result.ok && result.data && Array.isArray(result.data.exports)) setExports(result.data.exports)
           })
-          .catch((err) => setError(String(err && err.message ? err.message : err)))
-          .finally(() => setBusy(''))
+          .catch((err) => {
+            if (requestId === exportRequest.current) setError(String(err && err.message ? err.message : err))
+          })
+          .finally(() => {
+            if (requestId === exportRequest.current) setExportBusy('')
+          })
       }
 
       const onCopy = (text, label) => {
@@ -2129,7 +2148,7 @@ window.__ModuleLoader__.load({
               h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
               h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
-      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, error: exportError }) => {
+      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError }) => {
         const history = Array.isArray(exportHistory) ? exportHistory : []
         const copyInstall = () => copyAction(installCommand, installCommand)
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
@@ -2141,13 +2160,13 @@ window.__ModuleLoader__.load({
             h('div', { style: S.hint }, '导出只包含可移植的工作方式包；作用域快照只保存项目规则、停用项与预设，不包含任意文件内容。'),
             h('div', { style: { ...S.distPrimaryRow, paddingTop: 14 } },
               h('button', {
-                style: exportBusy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
-                onClick: () => exportAction(true), disabled: !!exportBusy,
-              }, exportBusy === 'export:scoped' ? t('exporting') : t('exportWithScope')),
+                style: exportDisabled ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+                onClick: () => exportAction(true), disabled: exportDisabled,
+              }, exportBusy === 'scoped' ? t('exporting') : t('exportWithScope')),
               h('button', {
-                style: exportBusy ? { ...S.button, ...S.disabled } : S.button,
-                onClick: () => exportAction(false), disabled: !!exportBusy,
-              }, exportBusy === 'export:pack' ? t('exporting') : t('exportPackOnly'))),
+                style: exportDisabled ? { ...S.button, ...S.disabled } : S.button,
+                onClick: () => exportAction(false), disabled: exportDisabled,
+              }, exportBusy === 'pack' ? t('exporting') : t('exportPackOnly'))),
             h('div', { style: S.installRow },
               h('span', { style: S.hint }, '安装命令'),
               h('code', { style: S.code }, installCommand),
@@ -2171,7 +2190,7 @@ window.__ModuleLoader__.load({
                   h('span', { style: S.mutedBadge }, nf(item.bytes) + ' bytes'))))
               : h('div', { style: S.empty },
                 h('div', { style: S.hint }, '还没有导出记录。复制安装命令后，导出一个包交给队友。'),
-                h('button', { style: S.buttonPrimary, disabled: !!exportBusy, onClick: () => exportAction(false) }, t('exportPackOnly')))))
+                h('button', { style: S.buttonPrimary, disabled: exportDisabled, onClick: () => exportAction(false) }, t('exportPackOnly')))))
       }
 
       const DistillPage = ({ onNavigate, onScan }) => {
@@ -2275,7 +2294,8 @@ window.__ModuleLoader__.load({
                   onExport,
                   onCopy,
                   result: exportResult,
-                  busy: busy.indexOf('export:') === 0 ? busy : '',
+                  busy: exportBusy,
+                  disabled: !!exportBusy || !!busy,
                   error: error,
                 }))
 
