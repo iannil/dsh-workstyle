@@ -1033,6 +1033,7 @@ window.__ModuleLoader__.load({
 
       const [route, setRoute] = React.useState(readRoute)
       const [packDetail, setPackDetail] = React.useState(null)
+      const envRequest = React.useRef(0)
       const [packLoading, setPackLoading] = React.useState(false)
       const [packError, setPackError] = React.useState('')
       const [envLoading, setEnvLoading] = React.useState(false)
@@ -1060,6 +1061,7 @@ window.__ModuleLoader__.load({
           return undefined
         }
         let cancelled = false
+        setPackDetail(null)
         setPackLoading(true)
         setPackError('')
         getJson('pack?id=' + encodeURIComponent(id)).then((result) => {
@@ -1075,12 +1077,14 @@ window.__ModuleLoader__.load({
       }, [route.page, route.packId])
 
       const loadEnv = React.useCallback(() => {
+        const requestId = ++envRequest.current
         setEnvLoading(true)
         return Promise.all([
           getJson('scope' + envQuery),
           getJson('inject' + envQuery),
           getJson('metrics' + envQuery),
         ]).then(([scope, inject, metrics]) => {
+          if (requestId !== envRequest.current) return null
           const routeNames = ['scope', 'inject', 'metrics']
           const failed = routeNames.filter((name, index) => !([scope, inject, metrics][index]).ok)
           if (failed.length === routeNames.length) {
@@ -1103,7 +1107,7 @@ window.__ModuleLoader__.load({
           }))
           return { scope: scopeData, inject: injectData, metrics: metricsData }
         })
-        .finally(() => setEnvLoading(false))
+        .finally(() => { if (requestId === envRequest.current) setEnvLoading(false) })
       }, [envQuery])
 
       const load = React.useCallback(() => {
@@ -2113,7 +2117,8 @@ window.__ModuleLoader__.load({
             h('span', { style: S.tileSub }, '来源：' + (pack.source || '本地内置') + ' · ' + (pack.ruleCount || 0) + ' 条规则 · ' + (pack.skillCount || 0) + ' 个技能'),
             pack.id === active.id ? h('span', { style: S.hint }, '当前生效') : h('span', { style: S.hint }, '可查看')))))
 
-      const selectedPack = packDetail || packs.find((pack) => pack.id === route.packId) || null
+      const routePackDetail = packDetail && packDetail.id === route.packId ? packDetail : null
+      const selectedPack = routePackDetail || packs.find((pack) => pack.id === route.packId) || null
       const selectedIsActive = !!selectedPack && selectedPack.id === active.id
       const detailTabs = [
         ['rules', '规则', selectedPack ? (selectedIsActive ? scopedRules.length : (selectedPack.rules || []).length) : 0],
@@ -2145,8 +2150,8 @@ window.__ModuleLoader__.load({
             ? h('div', { style: S.empty }, h('div', { style: S.banner('error') }, '找不到工作方式包：' + (route.packId || '') ), h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, '返回工作方式包'))
             : h('div', null,
               h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, '当前') : h('span', { style: S.mutedBadge }, '未启用')), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, '来源：' + (selectedPack.source || '本地内置') + ' · ' + selectedPack.ruleCount + ' 条规则 · ' + selectedPack.skillCount + ' 个技能')),
-              h('div', { style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key), 'aria-pressed': packTab === key ? 'true' : 'false' }, label + ' · ' + count))),
-              selectedIsActive ? packDetailBody : nonActiveDetail)
+              h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
+              h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
       const pageBody = route.page === 'run'
         ? h('section', { 'aria-labelledby': 'dsw-run-title' },

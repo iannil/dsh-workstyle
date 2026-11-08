@@ -19,7 +19,11 @@ const root = path.dirname(path.dirname(new URL(import.meta.url).pathname))
 /* ----------------------------- React shim ----------------------------- */
 
 const stateStore = []
+const refStore = []
+const callbackStore = []
+const callbackDeps = []
 const effectRan = []
+const effectDeps = []
 let cursor = 0
 let effectQueue = []
 let dirty = false
@@ -41,22 +45,43 @@ const React = {
       dirty = true
     }]
   },
-  useEffect(fn) {
+  useRef(initial) {
     const index = cursor++
-    if (!effectRan[index]) {
+    if (!(index in refStore)) refStore[index] = { current: initial }
+    return refStore[index]
+  },
+  useEffect(fn, deps) {
+    const index = cursor++
+    const previous = effectDeps[index]
+    const changed = !effectRan[index] || !Array.isArray(deps)
+      ? !effectRan[index]
+      : !previous || deps.length !== previous.length || deps.some((value, i) => !Object.is(value, previous[i]))
+    if (changed) {
       effectRan[index] = true
+      effectDeps[index] = Array.isArray(deps) ? deps.slice() : undefined
       effectQueue.push(fn)
     }
   },
-  useCallback(fn) { return fn },
+  useCallback(fn, deps) {
+    const index = cursor++
+    const previous = callbackDeps[index]
+    const changed = !previous || (Array.isArray(deps) && (deps.length !== previous.length
+      || deps.some((value, i) => !Object.is(value, previous[i]))))
+    if (changed) {
+      callbackDeps[index] = Array.isArray(deps) ? deps.slice() : []
+      callbackStore[index] = fn
+    }
+    return callbackStore[index]
+  },
 }
 
 /* --------------------------- window / DOM ----------------------------- */
 
 let mod = null
+let hashChange = null
 globalThis.window = {
   __ModuleLoader__: { load(value) { mod = value } },
-  addEventListener() {},
+  addEventListener(name, fn) { if (name === 'hashchange') hashChange = fn },
   removeEventListener() {},
 }
 const route = { hash: '#/run' }
@@ -117,6 +142,26 @@ const sampleStatus = {
 }
 
 const currentStatus = JSON.parse(JSON.stringify(sampleStatus))
+const detailControl = { delayed: false, pending: [] }
+const envControl = { delayed: false, pending: [] }
+const detailPacks = {
+  'fde-engineering': {
+    id: 'fde-engineering', displayName: 'FDE 工程工作方式', version: '0.1.0', format: 'json',
+    ruleCount: 4, skillCount: 3,
+    rules: [{ id: 'plan-first', title: '先方案后实现', text: '规则正文-先方案' }],
+    skills: [{ name: 'fde-job', description: 'FDE 技能', whenToUse: '工程项目' }],
+    presets: [{ id: 'fde-delivery', title: 'FDE 交付', description: '工程交付', rules: [], skills: [], templates: [] }],
+    templates: [{ id: 'tpl-a', title: '验收模板', text: '验收' }],
+  },
+  minimal: {
+    id: 'minimal', displayName: '极简工作方式', version: '0.2.0', format: 'json',
+    ruleCount: 1, skillCount: 1,
+    rules: [{ id: 'minimal-rule', title: '极简规则 B', text: 'B 包规则正文' }],
+    skills: [{ name: 'minimal-skill', description: 'B 包技能', whenToUse: 'B 包场景' }],
+    presets: [{ id: 'minimal-default', title: 'B 包预设', description: 'B 包预设说明', rules: [], skills: [], templates: [] }],
+    templates: [{ id: 'minimal-template', title: 'B 包模板', text: 'B 模板正文' }],
+  },
+}
 
 /* v5 environment payloads: a project layer and a session layer are present,
    so the panel has something real to explain. */
@@ -202,6 +247,13 @@ globalThis.fetch = async (url, options = {}) => {
       }
       : null)
   }
+  if (target.includes('/api/dsh-workstyle/pack?id=')) {
+    const id = new URL(target, 'http://panel.test').searchParams.get('id')
+    const pack = detailPacks[id]
+    const response = pack ? json({ pack }) : { ok: false, json: async () => ({ error: 'unknown pack: ' + id }) }
+    if (detailControl.delayed) return new Promise((resolve) => detailControl.pending.push(() => resolve(response)))
+    return response
+  }
   if (target.includes('/api/dsh-workstyle/scope')) {
     if (failEnv.scope) return { ok: false, json: async () => ({}) }
     if (options.method === 'POST') {
@@ -218,7 +270,9 @@ globalThis.fetch = async (url, options = {}) => {
       }
       return json({ saved: body.layer, project: currentScope.project, session: currentScope.session, counts: currentScope.counts })
     }
-    return json(currentScope)
+    const scope = { ...currentScope, cwd: new URL(target, 'http://panel.test').searchParams.get('cwd') || currentScope.cwd }
+    if (envControl.delayed) return new Promise((resolve) => envControl.pending.push(() => resolve(json(scope))))
+    return json(scope)
   }
   if (target.includes('/api/dsh-workstyle/inject')) {
     if (failEnv.inject) return { ok: false, json: async () => ({}) }
@@ -258,6 +312,29 @@ globalThis.fetch = async (url, options = {}) => {
       caveat: '这些是代理指标：能说明提示里出现过什么，不能说明模型是否遵守规则。',
       baseline: { available: false },
     })
+  }
+  if (target.endsWith('/api/dsh-workstyle/rule')) {
+    const body = JSON.parse(options.body || '{}')
+    const rule = body.rule || {}
+    currentScope.project.rules = (currentScope.project.rules || []).filter((item) => item.id !== rule.id)
+    currentScope.rules = currentScope.rules.filter((item) => item.id !== rule.id)
+    if (body.remove !== true) {
+      const saved = { id: rule.id, title: rule.title, text: rule.text, origin: 'project', textScope: 'project', enabled: true, severity: 'medium' }
+      currentScope.project.rules.push({ ...saved, source: 'project' })
+      currentScope.rules.push(saved)
+    }
+    currentScope.counts.project = currentScope.rules.filter((item) => item.origin === 'project').length
+    currentScope.counts.total = currentScope.rules.length
+    currentScope.counts.injected = currentScope.rules.filter((item) => item.enabled !== false).length
+    return json({ saved: body.remove === true ? 'removed' : 'rule', id: rule.id, scope: currentScope })
+  }
+  if (target.endsWith('/api/dsh-workstyle/preset')) {
+    const body = JSON.parse(options.body || '{}')
+    if (body.action === 'use') {
+      currentScope.activePreset = { id: body.preset, title: body.preset, rules: [], skills: [], templates: [] }
+      return json({ used: body.preset, scope: currentScope })
+    }
+    return json({ saved: body.preset && body.preset.id, presets: [] })
   }
   if (target.endsWith('/api/dsh-workstyle/toggle')) {
     const body = JSON.parse(options.body || '{}')
@@ -621,3 +698,5 @@ text = textOf(view)
 ok(!text.includes('3 分钟上手'), 'tip stays hidden after remount when storage says done')
 
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
+
+export { route, hashChange, settle, act, textOf, findHost, button, input, currentStatus, detailPacks, detailControl, envControl, hostContext }
