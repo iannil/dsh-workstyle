@@ -934,6 +934,17 @@ assert.ok(rulesCase && /EmptyState\(/.test(rulesCase[0]), 'rules empty state mis
 assert.ok(rulesCase && /Chip\(/.test(rulesCase[0]), 'rules scope chips missing')
 assert.ok(rulesCase && /setScopeFilter\(/.test(rulesCase[0]), 'rules scope chips must drive scopeFilter')
 
+// --- standalone presets & skills pages ---
+assert.ok(/route\.page === 'presets'/.test(src), 'presets route missing')
+assert.ok(/route\.page === 'skills'/.test(src), 'skills route missing')
+const presetsCase = src.match(/route\.page === 'presets'[\s\S]*?(?=\n\s+: route\.page === 'skills')/)
+assert.ok(presetsCase && /presetNew/.test(presetsCase[0]), 'presets page header must offer the new-preset action')
+assert.ok(presetsCase && /presetsBody/.test(presetsCase[0]) && /S\.presetGrid/.test(src), 'presets page must render the preset card grid')
+const skillsCase = src.match(/route\.page === 'skills'[\s\S]*?(?=\n\s+: route\.page === 'distill')/)
+assert.ok(skillsCase && /skillsBody/.test(skillsCase[0]) && /skillsUnit/.test(skillsCase[0]), 'skills page must render the skill list with a count')
+assert.ok(/S\.skillName/.test(src) && /T\.ink/.test(src.match(/skillName: \{[^}]*\}/)[0]) && /WebkitLineClamp: 2/.test(src.match(/skillDesc: \{[^}]*\}/)[0]), 'skill rows must be doc-list styled (600/T.ink name, T.ink2 two-line desc)')
+console.log('  ✓ standalone presets & skills pages')
+
 // --- sidebar IA ---
 assert.ok(/const NAV_GROUPS = \[/.test(src), 'NAV_GROUPS missing')
 assert.ok(/function Sidebar\(/.test(src), 'Sidebar component missing')

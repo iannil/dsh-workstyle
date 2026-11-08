@@ -810,11 +810,11 @@ window.__ModuleLoader__.load({
       skillNameCell: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 },
       skillName: {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5, fontWeight: 600,
-        color: 'var(--dsw-alias-label-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        color: T.ink, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
       },
       skillDesc: {
-        fontSize: 12, color: 'var(--dsw-alias-label-secondary)', lineHeight: 1.55,
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        fontSize: 12, color: T.ink2, lineHeight: 1.55,
+        display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden',
       },
       skillBody: { padding: '0 0 14px 0', display: 'flex', flexDirection: 'column' },
 
@@ -982,12 +982,6 @@ window.__ModuleLoader__.load({
         border: '1px solid ' + (current ? ACCENT_LINE : HAIRLINE), borderRadius: 10,
         background: current ? ACCENT_SOFT : 'var(--dsw-alias-bg-layer-2)', padding: '13px 15px',
       }),
-      presetCardNew: {
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 6,
-        font: 'inherit', cursor: 'pointer', minHeight: 92,
-        border: '1px dashed ' + HAIRLINE, borderRadius: 10, background: 'transparent',
-        color: 'var(--dsw-alias-label-secondary)', fontSize: 12,
-      },
       presetTitleRow: { display: 'flex', alignItems: 'baseline', gap: 8 },
       presetTitle: { fontSize: 13.5, fontWeight: 650, letterSpacing: '-0.006em' },
       presetDesc: {
@@ -2300,24 +2294,29 @@ window.__ModuleLoader__.load({
               h('button', { style: S.linkButton, onClick: () => onCopy(tpl.text || '', tpl.title || tpl.id) }, t('injectCopy')))))
             : h('div', { style: S.empty }, h('div', { style: S.hint }, t('envUnavailable') + t('presetTemplates'))))
 
+      const presetGridBlock = h('div', { style: S.presetGrid }, presetCards)
+      const presetTabsBlock = h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 16, gap: 2 } },
+        presetTabs.map(([key, label, count]) => h('button', {
+          key,
+          style: presetTab === key ? { ...S.pill, ...S.pillActive } : S.pill,
+          onClick: () => setPresetTab(key),
+        }, label + ' · ' + count)))
+
+      /* Preset cards, tab strip and the editor keep their existing logic;
+         only the shell changes: the pack page wraps them in a Section, the
+         presets page wraps them in a page header. Creation moved to the
+         header-right primary action of whichever page is showing them. */
+      const presetsBody = h('div', { style: { display: 'flex', flexDirection: 'column' } },
+        h('div', { style: { ...S.hint, paddingTop: 8 } }, t('presetsHint')),
+        presetGridBlock,
+        presetTabsBlock,
+        presetDetail)
+
       const presetsBlock = h(Section, {
         id: 'dsw-presets',
         label: '③ ' + t('presetsTitle'),
         right: h('button', { style: S.linkAccent, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew')),
-      },
-        h('div', { style: { ...S.hint, paddingTop: 8 } }, t('presetsHint')),
-        h('div', { style: S.presetGrid },
-          presetCards,
-          h('button', { style: S.presetCardNew, onClick: () => setEditing({ id: '', title: '', text: '' }) },
-            h('span', { style: { fontSize: 17, lineHeight: 1 } }, '+'),
-            h('span', null, t('presetNew')))),
-        h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 16, gap: 2 } },
-          presetTabs.map(([key, label, count]) => h('button', {
-            key,
-            style: presetTab === key ? { ...S.pill, ...S.pillActive } : S.pill,
-            onClick: () => setPresetTab(key),
-          }, label + ' · ' + count))),
-        presetDetail)
+      }, presetsBody)
 
       /* The only honest comparison is against the previous report window:
          metrics.baseline.planRate.delta / metrics.baseline.verifyRate.delta. */
@@ -2607,25 +2606,20 @@ window.__ModuleLoader__.load({
               h('div', { style: { ...S.hint, paddingTop: 10, textAlign: 'center' } }, t('metricsUnavailable'))))
       }
 
-      /* Rules / presets / skills own their deep content on dedicated routes
-         (reskin comes later); for now each page reuses the existing block. */
-      const skillsBlock = h(Section, {
-        id: 'dsw-skills',
-        label: t('skillsLabel'),
-        count: scopedSkills.length,
-      },
-        scopedSkills.length
-          ? h('div', null, scopedSkills.map((skill) => h('div', {
-            key: skill.name,
-            className: 'dsw-row',
-            style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + HAIRLINE },
-          },
-            h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
-              h('span', { style: S.skillName }, skill.name),
-              h('span', { style: S.skillDesc, title: skill.description }, skill.description || '')),
-            h('span', { style: skill.enabled === false ? S.mutedBadge : S.scopeBadge('workspace') },
-              skill.enabled === false ? t('disabled') : (skill.inPreset ? t('presetCurrent') : t('enabled'))))))
-          : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + t('skillsLabel'))))
+      /* Skills own their inventory page: a doc-style list (mono 600 name,
+         two-line clamped description) with the live count in the header. */
+      const skillsBody = scopedSkills.length
+        ? h('div', null, scopedSkills.map((skill) => h('div', {
+          key: skill.name,
+          className: 'dsw-row',
+          style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + HAIRLINE },
+        },
+          h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
+            h('span', { style: S.skillName }, skill.name),
+            h('span', { style: S.skillDesc, title: skill.description }, skill.description || '')),
+          h('span', { style: skill.enabled === false ? S.mutedBadge : S.scopeBadge('workspace') },
+            skill.enabled === false ? t('disabled') : (skill.inPreset ? t('presetCurrent') : t('enabled'))))))
+        : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + t('skillsLabel')))
 
       const pageBody = route.page === 'overview'
         ? h('section', { 'aria-labelledby': 'dsw-overview-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
@@ -2719,11 +2713,17 @@ window.__ModuleLoader__.load({
                   }))
             })()
             : route.page === 'presets'
-              ? h('section', { 'aria-labelledby': 'dsw-presets-page-title' },
-                h('h2', { id: 'dsw-presets-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navPresets')), presetsBlock)
+              ? h('section', { 'aria-labelledby': 'dsw-presets-page-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
+                  h('h2', { id: 'dsw-presets-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navPresets')),
+                  h('button', { type: 'button', style: S.linkButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew'))),
+                presetsBody)
               : route.page === 'skills'
-                ? h('section', { 'aria-labelledby': 'dsw-skills-page-title' },
-                  h('h2', { id: 'dsw-skills-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navSkills')), skillsBlock)
+                ? h('section', { 'aria-labelledby': 'dsw-skills-page-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+                  h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
+                    h('h2', { id: 'dsw-skills-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navSkills')),
+                    h('span', { style: S.hint }, scopedSkills.length + ' ' + t('skillsUnit'))),
+                  skillsBody)
                 : route.page === 'distill'
                   ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('distillReview')), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
                   : route.page === 'metrics'
