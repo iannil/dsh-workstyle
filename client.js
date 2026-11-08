@@ -15,13 +15,14 @@ window.__ModuleLoader__.load({
 
     /* ----------------------------- brand tokens ---------------------------- */
 
-    const INK = '#14171C'
-    const PAPER = '#F4F0E8'
-    const SURFACE = '#FBF9F5'
-    const AMBER = '#E3A660'
-    const AMBER_DARK = '#95550F'
-    const BLUE_GRAY = '#47739A'
-    const ERROR = '#A44A3F'
+    const TOKENS = {
+      light: { bg:'#FFFFFF', surface:'#F7F6F3', sel:'#EFEDEA', border:'#EDECE9',
+               ink:'#37352F', ink2:'#787774', ink3:'#9B9A97', accent:'#37352F',
+               danger:'#EB5757', ok:'#2E9E5B' },
+      dark:  { bg:'#191919', surface:'#202020', sel:'#2C2C2C', border:'#313131',
+               ink:'#E9E9E7', ink2:'#9B9B98', ink3:'#6F6F6C', accent:'#E9E9E7',
+               danger:'#E5484D', ok:'#4CB782' },
+    }
 
     const luminance = (color) => {
       const match = color && color.match(/rgba?\(([^)]+)\)/)
@@ -56,13 +57,15 @@ window.__ModuleLoader__.load({
       }
     })()
 
-    const ACCENT = isDark ? AMBER : AMBER_DARK
-    const ACCENT_LINE = isDark ? 'rgba(227,166,96,0.55)' : 'rgba(149,85,15,0.45)'
-    const ACCENT_SOFT = isDark ? 'rgba(227,166,96,0.16)' : 'rgba(149,85,15,0.09)'
+    const resolvedTheme = () => (isDark ? 'dark' : 'light')
+    const T = TOKENS[resolvedTheme()]
+    const ACCENT = T.accent
+    const ACCENT_LINE = isDark ? 'rgba(233,233,231,0.55)' : 'rgba(55,53,47,0.45)'
+    const ACCENT_SOFT = isDark ? 'rgba(233,233,231,0.16)' : 'rgba(55,53,47,0.09)'
     const HAIRLINE = 'var(--dsw-alias-border-l1)'
-    const STATE_INFO = 'var(--dsw-alias-state-info-primary, ' + BLUE_GRAY + ')'
-    const PRIMARY_BG = isDark ? PAPER : INK
-    const PRIMARY_FG = isDark ? INK : PAPER
+    const STATE_INFO = 'var(--dsw-alias-state-info-primary, ' + T.ink2 + ')'
+    const PRIMARY_BG = T.accent
+    const PRIMARY_FG = T.bg
     const BUILD = 'home v5 · 2026-11-08'
 
     /* ------------------------------ dictionaries --------------------------- */
@@ -700,8 +703,8 @@ window.__ModuleLoader__.load({
       },
       banner: (kind) => ({
         fontSize: 12, lineHeight: 1.55, borderRadius: 8, padding: '9px 12px',
-        border: '1px solid ' + (kind === 'error' ? ERROR : HAIRLINE),
-        color: kind === 'error' ? ERROR : 'var(--dsw-alias-label-secondary)',
+        border: '1px solid ' + (kind === 'error' ? T.danger : HAIRLINE),
+        color: kind === 'error' ? T.danger : 'var(--dsw-alias-label-secondary)',
         background: kind === 'error' ? 'transparent' : 'var(--dsw-alias-bg-layer-2)',
       }),
       tileClickable: { cursor: 'pointer' },
@@ -1073,7 +1076,7 @@ window.__ModuleLoader__.load({
         h('span', { style: S.railValue }, environment.cwd || scopedT('noCwd')),
         h('span', { style: S.railLabel }, environment.sessionId ? scopedT('sessionPrefix') + environment.sessionId : scopedT('noSession')),
         environment.loading ? h('span', { style: S.railLabel }, scopedT('loadingShort')) : null,
-        environment.error ? h('span', { style: { ...S.railLabel, color: ERROR } }, environment.error) : null)
+        environment.error ? h('span', { style: { ...S.railLabel, color: T.danger } }, environment.error) : null)
     }
 
     /* --------------------------------- panel ------------------------------- */
@@ -1627,9 +1630,10 @@ window.__ModuleLoader__.load({
       const environmentBar = h(EnvironmentContextBar, { environment })
       const rootStyle = {
         ...S.page,
-        '--dsw-color-ink': INK, '--dsw-color-paper': PAPER, '--dsw-color-surface': SURFACE,
-        '--dsw-color-amber': AMBER, '--dsw-color-amber-dark': AMBER_DARK,
-        '--dsw-color-blue-gray': BLUE_GRAY, '--dsw-color-error': ERROR,
+        '--dsw-color-bg': T.bg, '--dsw-color-surface': T.surface, '--dsw-color-sel': T.sel,
+        '--dsw-color-border': T.border, '--dsw-color-ink': T.ink, '--dsw-color-ink2': T.ink2,
+        '--dsw-color-ink3': T.ink3, '--dsw-color-accent': T.accent,
+        '--dsw-color-danger': T.danger, '--dsw-color-ok': T.ok,
       }
       const shell = (mainChildren, headerContent, footerContent, showBanners) => h('div', { id: 'dsw-root', style: rootStyle },
         h('style', null, CSS),

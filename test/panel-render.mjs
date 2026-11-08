@@ -893,6 +893,19 @@ function remount() {
   effectRan.length = 0
 }
 
+/* --- semantic tokens (Notion refresh) --- */
+const src = fs.readFileSync(path.join(root, 'client.js'), 'utf8')
+const tokenDef = src.match(/const TOKENS = \{[\s\S]*?\n\}/)
+assert.ok(tokenDef, 'TOKENS map must exist in client.js')
+for (const key of ['bg','surface','sel','border','ink','ink2','ink3','accent','danger','ok']) {
+  assert.ok(tokenDef[0].includes(key), 'token missing: ' + key)
+}
+const legacyOutside = src.replace(tokenDef[0], '')
+for (const hex of ['#14171C','#F4F0E8','#FBF9F5','#E3A660','#95550F','#47739A','#A44A3F']) {
+  assert.ok(!legacyOutside.includes(hex), 'legacy color leaked outside TOKENS: ' + hex)
+}
+console.log('  ✓ semantic TOKENS layer replaces legacy colors')
+
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 
 export { route, hashChange, settle, act, remount, textOf, findHost, button, input, checkbox, currentStatus, detailPacks, detailControl, envControl, statusControl, exportControl, exportCalls, hostContext, fetchLog, failEnv }
