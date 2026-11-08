@@ -180,8 +180,14 @@ const recomputeSummary = () => {
 
 const json = (data) => ({ ok: true, json: async () => data })
 
+/* Test levers: fetchLog records every URL the panel requested; failEnv makes
+   one environment route fail while the others succeed. */
+const fetchLog = []
+const failEnv = { scope: false, inject: false, metrics: false }
+
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
+  fetchLog.push(target)
   if (target.endsWith('/api/dsh-workstyle/status')) return json(currentStatus)
   if (target.endsWith('/api/dsh-workstyle/evidence')) {
     return json(currentStatus.latestDistill
@@ -197,6 +203,7 @@ globalThis.fetch = async (url, options = {}) => {
       : null)
   }
   if (target.includes('/api/dsh-workstyle/scope')) {
+    if (failEnv.scope) return { ok: false, json: async () => ({}) }
     if (options.method === 'POST') {
       const body = JSON.parse(options.body || '{}')
       if (body.layer === 'session' && body.patch && Array.isArray(body.patch.disabledRules)) {
@@ -214,6 +221,7 @@ globalThis.fetch = async (url, options = {}) => {
     return json(currentScope)
   }
   if (target.includes('/api/dsh-workstyle/inject')) {
+    if (failEnv.inject) return { ok: false, json: async () => ({}) }
     const rules = currentScope.rules.filter((rule) => rule.enabled !== false)
     const textLines = ['## 工作方式：' + currentStatus.activePack.displayName + '（dsh-workstyle / fde-engineering v0.1.0）', '']
       .concat(rules.map((rule) => '- **' + rule.title + '**：' + rule.text))
@@ -230,6 +238,7 @@ globalThis.fetch = async (url, options = {}) => {
     })
   }
   if (target.includes('/api/dsh-workstyle/metrics')) {
+    if (failEnv.metrics) return { ok: false, json: async () => ({}) }
     return json({
       available: true,
       generatedAt: '2026-11-07T17:00:00.000Z',
@@ -321,7 +330,14 @@ function expand(node) {
 function renderPass() {
   cursor = 0
   effectQueue = []
-  return expand(mainRender())
+  return expand(mainRender(hostContext))
+}
+
+/* What the live host hands the main slot renderer on every render pass. */
+const hostContext = {
+  cwd: '/tmp/live-cwd',
+  sessionId: 'sess-abc',
+  sessionIds: ['sess-abc'],
 }
 
 async function settle(passes = 8) {
@@ -403,6 +419,14 @@ ok(text.includes('运行台'), 'navigation returns to the run page')
 
 ok(text.includes('FDE 工程工作方式'), 'header names the active pack and version')
 
+/* the host context reaches every environment fetch */
+ok(fetchLog.some((url) => url.includes('/api/dsh-workstyle/scope?cwd=%2Ftmp%2Flive-cwd&session=sess-abc')),
+  'environment fetches forward the live host cwd and session id')
+ok(fetchLog.some((url) => url.includes('/api/dsh-workstyle/inject?cwd=%2Ftmp%2Flive-cwd&session=sess-abc')),
+  'inject preview is fetched for the active context')
+ok(fetchLog.some((url) => url.includes('/api/dsh-workstyle/metrics?cwd=%2Ftmp%2Flive-cwd&session=sess-abc')),
+  'metrics are fetched for the active context')
+
 /* the status rail answers "what is loaded right now" in one line */
 const rail = findHost(view, (node) => node.props && node.props.role === 'status')
 ok(!!rail, 'status rail renders')
@@ -412,6 +436,22 @@ ok(railText.includes('全局') && railText.includes('项目 +1') && railText.inc
 ok(railText.includes('2/3'), 'rail reports enabled/total skills')
 ok(railText.includes('fde-delivery'), 'rail names the active preset')
 ok(/[0-9a-f]{8}/.test(railText), 'rail shows the injected-text fingerprint')
+
+/* a partial environment failure keeps the last good data and names the route */
+failEnv.metrics = true
+view = await act(() => button(view, '刷新').props.onClick())
+text = textOf(view)
+ok(text.includes('环境视图不可用：metrics failed to load'), 'partial environment failure names the failed route')
+const metricsRouteLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
+view = await act(() => metricsRouteLink.props.onClick({ preventDefault() {} }))
+text = textOf(view)
+ok(text.includes('先方案率') && text.includes('规则命中'), 'stale metrics stay visible after a failed metrics refresh')
+failEnv.metrics = false
+const runRouteLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/run')
+view = await act(() => runRouteLink.props.onClick({ preventDefault() {} }))
+view = await act(() => button(view, '刷新').props.onClick())
+text = textOf(view)
+ok(!text.includes('环境视图不可用'), 'a successful refresh clears the failure banner')
 
 /* to-do bar replaces the four static tiles */
 const todoLabels = ['蒸馏建议待审', '规则缺证据', '作用域冲突', '未验证宣称']
@@ -492,12 +532,13 @@ const rootHost = findHost(view, (node) => node.props && node.props.id === 'dsw-r
 ok(!!rootHost, 'panel root carries the dsw-root style scope')
 const styleHost = findHost(view, (node) => node.type === 'style' && textOf(node).includes('#dsw-root'))
 ok(!!styleHost, 'scoped stylesheet mounts with the panel')
-ok(!!checkbox(view, '先方案后实现') || true, 'inject tab renders without rule rows (rules live on the presets tab)')
+ok(!checkbox(view, '先方案后实现'), 'rule toggles are absent on the inject tab (rules live on the presets tab)')
 
 /* review queue lives on the presets tab, behind its own toggle */
 view = await act(() => tabButton('预设与规则').props.onClick())
 text = textOf(view)
 ok(text.includes('中文短句') && text.includes('采纳选中'), 'review queue and adopt action are visible')
+ok(!!checkbox(view, '先方案后实现'), 'preset rule rows expose a real toggle checkbox')
 
 /* review queue interactions */
 
@@ -515,12 +556,22 @@ const writingCard = findHost(view, (node) => node.type === 'button' && node.prop
 ok(!!writingCard, 'preset cards are switch buttons')
 view = await act(() => writingCard.props.onClick())
 
-/* metric tabs */
+/* metric sub-tabs switch between cards and the source availability list */
+view = await act(() => tabButton('度量').props.onClick())
 const sourcesTab = findHost(view, (node) => node.type === 'button' && node.props && textOf(node) === '来源')
-if (sourcesTab) view = await act(() => sourcesTab.props.onClick())
-ok(true, 'metric tabs switch without throwing')
+ok(!!sourcesTab, 'metrics view exposes the sources sub-tab')
+view = await act(() => sourcesTab.props.onClick())
+text = textOf(view)
+ok(text.includes('✗'), 'sources sub-tab marks unavailable sources')
+ok(!text.includes('规则命中'), 'metric cards give way to the source list')
+const metricsSubTab = findHost(view, (node) => node.type === 'button' && node.props && textOf(node) === '度量')
+ok(!!metricsSubTab, 'metrics sub-tab is reachable again')
+view = await act(() => metricsSubTab.props.onClick())
+text = textOf(view)
+ok(text.includes('规则命中'), 'metric cards return after switching back')
 
-/* rule editor */
+/* rule editor lives on the presets tab */
+view = await act(() => tabButton('预设与规则').props.onClick())
 view = await act(() => button(view, '新建规则').props.onClick())
 text = textOf(view)
 ok(text.includes('规则 id') && text.includes('正文'), 'rule editor opens with id and body fields')

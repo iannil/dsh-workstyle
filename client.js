@@ -994,8 +994,15 @@ window.__ModuleLoader__.load({
         try {
           if (typeof props.sessionId !== 'string' || !props.sessionId) return null
           const ids = props.sessionIds || null
-          const known = Array.isArray(ids) ? ids.find((id) => id === props.sessionId) : null
-          return { id: props.sessionId, cwd: known && known.cwd ? known.cwd : (props.cwd || '') }
+          // The host may pass plain ids or { id, cwd } records; accept both.
+          const known = Array.isArray(ids)
+            ? ids.find((id) => id === props.sessionId
+              || (id && typeof id === 'object' && id.id === props.sessionId))
+            : null
+          return {
+            id: props.sessionId,
+            cwd: (known && typeof known === 'object' && known.cwd) ? known.cwd : (props.cwd || ''),
+          }
         } catch (err) {
           return null
         }
@@ -1017,8 +1024,12 @@ window.__ModuleLoader__.load({
       const routeHash = (page, packId) => '#/' + page + (packId ? '/' + encodeURIComponent(packId) : '')
 
       const getJson = (path) => fetch('/api/dsh-workstyle/' + path, { headers: { accept: 'application/json' } })
-        .then((response) => (response.ok ? response.json() : null))
-        .catch(() => null)
+        .then((response) => {
+          if (!response.ok) throw new Error('HTTP ' + response.status)
+          return response.json()
+        })
+        .then((data) => ({ ok: true, data }))
+        .catch((err) => ({ ok: false, error: String(err && err.message ? err.message : err) }))
 
       const [route, setRoute] = React.useState(readRoute)
       const [envLoading, setEnvLoading] = React.useState(false)
@@ -1039,23 +1050,30 @@ window.__ModuleLoader__.load({
       }, [])
 
       const loadEnv = React.useCallback(() => {
-        setEnvError('')
         setEnvLoading(true)
         Promise.all([
           getJson('scope' + envQuery),
           getJson('inject' + envQuery),
           getJson('metrics' + envQuery),
         ]).then(([scope, inject, metrics]) => {
-          if (!scope && !inject) {
+          const routeNames = ['scope', 'inject', 'metrics']
+          const failed = routeNames.filter((name, index) => !([scope, inject, metrics][index]).ok)
+          if (failed.length === routeNames.length) {
+            // Every route failed: keep the last successful values and say so.
             setEnvError('routes unavailable')
             return
           }
+          if (failed.length) setEnvError(failed.join(', ') + ' failed to load')
+          else setEnvError('')
+          const scopeData = scope.ok ? scope.data : null
+          const injectData = inject.ok ? inject.data : null
+          const metricsData = metrics.ok ? metrics.data : null
           setEnv((prev) => ({
-            scope: scope || (prev && prev.scope) || null,
-            inject: inject || (prev && prev.inject) || null,
-            metrics: metrics || (prev && prev.metrics) || null,
-            fingerprint: prev && prev.inject && inject && prev.inject.fingerprint !== inject.fingerprint
-              ? { from: prev.inject.fingerprint, to: inject.fingerprint }
+            scope: scopeData || (prev && prev.scope) || null,
+            inject: injectData || (prev && prev.inject) || null,
+            metrics: metricsData || (prev && prev.metrics) || null,
+            fingerprint: prev && prev.inject && injectData && prev.inject.fingerprint !== injectData.fingerprint
+              ? { from: prev.inject.fingerprint, to: injectData.fingerprint }
               : (prev && prev.fingerprint) || null,
           }))
         })
@@ -2110,7 +2128,12 @@ window.__ModuleLoader__.load({
         key: NS,
         locale: NS,
         inject: () => ({ t }),
-      }, () => h(Panel, { t })))
+      }, (host) => h(Panel, {
+        t,
+        cwd: host && host.cwd,
+        sessionId: host && host.sessionId,
+        sessionIds: host && host.sessionIds,
+      })))
 
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
         name: 'sidebar.panellist',
