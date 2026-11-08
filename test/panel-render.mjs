@@ -927,12 +927,44 @@ const overview = src.match(/route\.page === 'overview'[\s\S]*?(?=\n      : )/)
 assert.ok(overview && /切换包|t\('packSwitch'\)/.test(overview[0]), 'overview pack switcher missing')
 assert.ok(overview && (overview[0].match(/Card\(/g) || []).length >= 3, 'overview needs >=3 stat cards')
 
+// --- rules page ---
+assert.ok(/scopeFilter/.test(src), 'scopeFilter state missing')
+const rulesCase = src.match(/route\.page === 'rules'[\s\S]*?(?=\n\s+: route\.page === 'presets')/)
+assert.ok(rulesCase && /EmptyState\(/.test(rulesCase[0]), 'rules empty state missing')
+assert.ok(rulesCase && /Chip\(/.test(rulesCase[0]), 'rules scope chips missing')
+assert.ok(rulesCase && /setScopeFilter\(/.test(rulesCase[0]), 'rules scope chips must drive scopeFilter')
+
 // --- sidebar IA ---
 assert.ok(/const NAV_GROUPS = \[/.test(src), 'NAV_GROUPS missing')
 assert.ok(/function Sidebar\(/.test(src), 'Sidebar component missing')
 assert.ok(src.includes("'run': 'metrics'") || src.includes("run: 'metrics'"), 'legacy run→metrics alias missing')
 assert.ok(src.includes('overview'), 'overview route missing')
 console.log('  ✓ sidebar IA (NAV_GROUPS / Sidebar / legacy route aliases)')
+
+/* --- rules page behavior: empty data renders the EmptyState copy --- */
+{
+  const originalScopeRules = currentScope.rules
+  const originalScopeCounts = currentScope.counts
+  currentScope.rules = []
+  currentScope.counts = { injected: 0, total: 0, project: 0, disabled: 0, skills: 0, skillTotal: 3 }
+  try {
+    // Load the emptied payload through the panel's own refresh path.
+    await act(() => button(view, '刷新').props.onClick())
+    route.hash = '#/rules'
+    hashChange()
+    const rulesView = await settle(10)
+    const rulesText = textOf(rulesView)
+    assert.ok(rulesText.includes('暂无'), 'rules page with empty data must render 「暂无」via EmptyState')
+    assert.ok(rulesText.includes('+ 新规则'), 'rules empty state must offer the new-rule action')
+    console.log('  ✓ rules page empty data renders EmptyState (暂无 / + 新规则)')
+  } finally {
+    currentScope.rules = originalScopeRules
+    currentScope.counts = originalScopeCounts
+    route.hash = '#/run'
+    hashChange()
+    await act(() => button(view, '刷新').props.onClick())
+  }
+}
 
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 

@@ -283,6 +283,10 @@ window.__ModuleLoader__.load({
       originPack: '包',
       originProject: '项目',
       newRule: '新建规则',
+      rulesEmptyNoun: '规则',
+      rulesEmptyPrimary: '+ 新规则',
+      rulesEmptySource: '蒸馏生成',
+      rulesDisabledNoun: '已停用',
       editRule: '编辑',
       saveRule: '保存',
       cancel: '取消',
@@ -512,6 +516,10 @@ window.__ModuleLoader__.load({
       originPack: 'pack',
       originProject: 'project',
       newRule: 'New rule',
+      rulesEmptyNoun: 'rules',
+      rulesEmptyPrimary: '+ New rule',
+      rulesEmptySource: 'Distill',
+      rulesDisabledNoun: 'Disabled',
       editRule: 'Edit',
       saveRule: 'Save',
       cancel: 'Cancel',
@@ -1208,6 +1216,7 @@ window.__ModuleLoader__.load({
       const [packTab, setPackTab] = React.useState('rules')
       const [metricTab, setMetricTab] = React.useState('metrics')
       const [editing, setEditing] = React.useState(null)
+      const [scopeFilter, setScopeFilter] = React.useState('all')
       const ONBOARDING_KEY = 'dsw-workstyle:onboarding-v1'
       const [onboardingOpen, setOnboardingOpen] = React.useState(() => {
         try { return window.localStorage.getItem(ONBOARDING_KEY) !== 'done' } catch (err) { return true }
@@ -2639,8 +2648,76 @@ window.__ModuleLoader__.load({
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
             h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? t('pagePackDetail') : t('navRail')), packDetailPageBody)
           : route.page === 'rules'
-            ? h('section', { 'aria-labelledby': 'dsw-rules-page-title' },
-              h('h2', { id: 'dsw-rules-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navRules')), rulesBlock)
+            ? (() => {
+              /* Rules page: scope chips + document-style list. Counts and
+                 filtering derive from the existing rule array fields. */
+              const ruleCounts = {
+                all: scopedRules.length,
+                workspace: scopedRules.filter((rule) => rule.enabled !== false && rule.disabledBy !== 'session' && rule.origin !== 'session').length,
+                session: scopedRules.filter((rule) => rule.disabledBy === 'session' || rule.origin === 'session').length,
+                disabled: scopedRules.filter((rule) => rule.enabled === false).length,
+              }
+              const scopeChips = [
+                ['all', t('all'), ruleCounts.all],
+                ['workspace', t('scopeWorkspace'), ruleCounts.workspace],
+                ['session', t('scopeSession'), ruleCounts.session],
+                ['disabled', t('rulesDisabledNoun'), ruleCounts.disabled],
+              ]
+              const filteredRules = scopeFilter === 'all'
+                ? scopedRules
+                : scopeFilter === 'workspace'
+                  ? scopedRules.filter((rule) => rule.enabled !== false && rule.disabledBy !== 'session' && rule.origin !== 'session')
+                  : scopeFilter === 'session'
+                    ? scopedRules.filter((rule) => rule.disabledBy === 'session' || rule.origin === 'session')
+                    : scopedRules.filter((rule) => rule.enabled === false)
+              const ruleCard = (rule) => h('div', {
+                key: rule.id,
+                className: 'dsw-row',
+                style: { ...S.ruleRowV5, ...(rule.enabled === false ? S.ruleRowOff : null) },
+              },
+                h('input', {
+                  type: 'checkbox',
+                  style: S.checkbox,
+                  checked: rule.enabled !== false,
+                  disabled: !!busy,
+                  'aria-label': rule.title,
+                  onChange: (event) => onRuleToggle(rule, event.target.checked),
+                }),
+                h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                  h('span', { style: S.ruleTitle }, rule.title),
+                  h('span', { style: S.hint }, rule.text || ''),
+                  rule.enabled === false && rule.disabledBy
+                    ? h('span', { style: S.overridden }, t('disabledBy') + ' · ' + (rule.disabledBy === 'session' ? t('scopeSession') : rule.disabledBy === 'project' ? t('project') : t('scopeWorkspace')))
+                    : null),
+                h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' } },
+                  scopeBadge(rule),
+                  h('span', { style: S.ruleSideText }, t('severity') + ' ' + (rule.severity === 'high' ? t('severityHigh') : rule.severity === 'low' ? t('severityLow') : t('severityMedium')))),
+                h('div', { style: { display: 'flex', gap: 8 } },
+                  rule.origin === 'project'
+                    ? h('button', { style: S.linkButton, onClick: () => setEditing({ id: rule.id, title: rule.title, text: rule.text, existing: true }) }, t('editRule'))
+                    : null,
+                  rule.origin === 'project'
+                    ? h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule.id) }, t('removeRule'))
+                    : null))
+              return h('section', { 'aria-labelledby': 'dsw-rules-page-title' },
+                h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 } },
+                  h('h2', { id: 'dsw-rules-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navRules')),
+                  h('button', { type: 'button', style: S.linkButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('newRule'))),
+                h('div', { role: 'group', 'aria-label': t('all'), style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
+                  scopeChips.map(([key, label, count]) => Chip({
+                    label, count,
+                    on: scopeFilter === key,
+                    onClick: () => setScopeFilter(key),
+                  }))),
+                editor,
+                filteredRules.length
+                  ? h('div', null, filteredRules.map(ruleCard))
+                  : EmptyState({
+                    noun: t('rulesEmptyNoun'),
+                    primary: t('rulesEmptyPrimary'), onPrimary: () => setEditing({ id: '', title: '', text: '' }),
+                    source: t('rulesEmptySource'), onSource: onDistill,
+                  }))
+            })()
             : route.page === 'presets'
               ? h('section', { 'aria-labelledby': 'dsw-presets-page-title' },
                 h('h2', { id: 'dsw-presets-page-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('navPresets')), presetsBlock)
