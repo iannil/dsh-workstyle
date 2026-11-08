@@ -189,6 +189,8 @@ window.__ModuleLoader__.load({
       noMetricsYet: '还没有可用度量',
       distillFirstHint: '先蒸馏一次本机会话，再回来查看代理度量。',
       goDistill: '先去蒸馏 →',
+      metricsEmptyNoun: '可用度量',
+      metricsEmptyPrimary: '先去蒸馏',
 
       privacy: '只读本机数据，不联网、不上传，不保存 prompt 原文',
       evidenceHint: '点「蒸馏证据」扫描本机会话，生成可审阅的聚合报告（不保存原文）。',
@@ -394,6 +396,8 @@ window.__ModuleLoader__.load({
       noMetricsYet: 'No metrics yet',
       distillFirstHint: 'Distill local sessions once, then come back to agent metrics.',
       goDistill: 'Distill first →',
+      metricsEmptyNoun: 'metrics',
+      metricsEmptyPrimary: 'distill first',
 
       privacy: 'Read-only local data. No network. No upload. Raw prompts never stored.',
       evidenceHint: 'Run "Distill evidence" to scan local sessions into a reviewable aggregate report (raw prompts are never stored).',
@@ -586,6 +590,28 @@ window.__ModuleLoader__.load({
         border: '1px solid ' + HAIRLINE, borderRadius: 999, padding: '0 7px',
         fontVariantNumeric: 'tabular-nums',
       },
+      stateChip: (on) => ({
+        font: 'inherit', fontSize: 12, lineHeight: 1.6, cursor: 'pointer',
+        borderRadius: 999, padding: '2px 10px',
+        background: on ? T.sel : 'transparent',
+        color: on ? T.ink : T.ink2,
+        border: '1px solid ' + (on ? T.sel : T.border),
+      }),
+      card: {
+        display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0,
+        border: '1px solid ' + T.border, borderRadius: 6, padding: 12,
+      },
+      cardLabel: { fontSize: 11.5, letterSpacing: '0.01em', fontWeight: 550, color: T.ink2 },
+      cardValue: (tone) => ({
+        fontSize: 20, fontWeight: 700, letterSpacing: '-0.02em',
+        fontVariantNumeric: 'tabular-nums', lineHeight: 1.3,
+        color: tone === 'danger' ? T.danger : T.ink,
+      }),
+      emptyCenter: {
+        padding: '24px 0', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', textAlign: 'center', gap: 8,
+      },
+      emptyLine: { fontSize: 13, color: T.ink2, display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', justifyContent: 'center' },
       badge: {
         fontSize: 10.5, lineHeight: 1.7, fontWeight: 650, color: ACCENT,
         background: ACCENT_SOFT, border: '1px solid ' + ACCENT_LINE,
@@ -1018,22 +1044,20 @@ window.__ModuleLoader__.load({
         children)
     }
 
-    function Tile(props) {
-      const { label, value, sub, compact, onClick, title } = props
-      return h('div', {
-        className: onClick ? 'dsw-tile-click' : undefined,
-        style: onClick ? { ...S.tile, ...S.tileClickable } : S.tile,
-        role: onClick ? 'button' : undefined,
-        tabIndex: onClick ? 0 : undefined,
-        title: title || undefined,
+    function Card(props) {
+      const { value, label, tone } = props
+      return h('div', { style: S.card },
+        label ? h('span', { style: S.cardLabel }, label) : null,
+        h('span', { style: S.cardValue(tone) }, String(value)))
+    }
+
+    function Chip(props) {
+      const { label, count, on, onClick } = props
+      return h('button', {
+        type: 'button', style: S.stateChip(on), 'aria-pressed': on ? 'true' : 'false',
         onClick,
-        onKeyDown: onClick ? (event) => {
-          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); onClick() }
-        } : undefined,
       },
-        h('span', { style: S.tileLabel }, label),
-        h('span', { style: compact ? { ...S.tileValue, fontSize: 15.5 } : S.tileValue }, String(value)),
-        sub ? h('span', { style: S.tileSub, title: String(sub) }, sub) : null)
+        label, count === undefined || count === null ? null : ' ' + String(count))
     }
 
     function Loading(props) {
@@ -1045,15 +1069,13 @@ window.__ModuleLoader__.load({
     }
 
     function EmptyState(props) {
-      const { title, description, action, onAction, href } = props
-      return h('div', { style: S.empty },
-        h('div', { style: S.ruleTitle }, title),
-        description ? h('div', { style: S.hint }, description) : null,
-        action
-          ? href
-            ? h('a', { href, style: S.linkAccent, onClick: onAction }, action)
-            : h('button', { type: 'button', style: S.buttonPrimary, onClick: onAction }, action)
-          : null)
+      const { noun, primary, source, onPrimary, onSource } = props
+      return h('div', { style: S.emptyCenter },
+        h('div', { style: S.emptyLine },
+          '暂无 ' + noun + '，',
+          primary ? h('button', { type: 'button', style: S.linkButton, onClick: onPrimary }, primary) : null,
+          source ? ' 或 ' : null,
+          source ? h('button', { type: 'button', style: S.linkButton, onClick: onSource }, source) : null))
     }
 
     function ErrorState(props) {
@@ -2503,10 +2525,9 @@ window.__ModuleLoader__.load({
                   h('span', { style: S.statLabel }, item.label), h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
                   h('span', { style: S.statSub }, item.available ? t('sourceAvailable') : t('sourceMissing'))))))
             : h(EmptyState, {
-              title: t('noMetricsYet'),
-              description: t('metricsUnavailable') + t('distillFirstHint'),
-              action: t('goDistill'), href: '#/distill',
-              onAction: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'distill' }) },
+              noun: t('metricsEmptyNoun'),
+              primary: t('metricsEmptyPrimary'), onPrimary: () => onNavigate({ page: 'distill' }),
+              source: t('tabSources'), onSource: () => setMetricTab('sources'),
             }))
       }
 

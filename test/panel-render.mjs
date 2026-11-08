@@ -906,6 +906,12 @@ for (const hex of ['#14171C','#F4F0E8','#FBF9F5','#E3A660','#95550F','#47739A','
 }
 console.log('  ✓ semantic TOKENS layer replaces legacy colors')
 
+// --- shared state components ---
+assert.ok(/function Card\(/.test(src), 'Card component missing')
+assert.ok(/function Chip\(/.test(src), 'Chip component missing')
+assert.ok(/暂无/.test(src.match(/function EmptyState\([\s\S]*?\n\}/)?.[0] || ''), 'EmptyState must render 暂无文案')
+console.log('  ✓ shared state components (Card / Chip / EmptyState)')
+
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 
 export { route, hashChange, settle, act, remount, textOf, findHost, button, input, checkbox, currentStatus, detailPacks, detailControl, envControl, statusControl, exportControl, exportCalls, hostContext, fetchLog, failEnv }
