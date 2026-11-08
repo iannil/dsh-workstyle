@@ -945,6 +945,12 @@ assert.ok(skillsCase && /skillsBody/.test(skillsCase[0]) && /skillsUnit/.test(sk
 assert.ok(/S\.skillName/.test(src) && /T\.ink/.test(src.match(/skillName: \{[^}]*\}/)[0]) && /WebkitLineClamp: 2/.test(src.match(/skillDesc: \{[^}]*\}/)[0]), 'skill rows must be doc-list styled (600/T.ink name, T.ink2 two-line desc)')
 console.log('  ✓ standalone presets & skills pages')
 
+// --- distill / metrics / distribute reskin ---
+assert.ok(!/route\.page === 'run'/.test(src), 'standalone run page must be merged into metrics')
+const metricsCase = src.match(/route\.page === 'metrics'[\s\S]*?(?=\n\s+: h\('section', \{ 'aria-labelledby': 'dsw-distribute-title')/)
+assert.ok(metricsCase && /dsw-run/.test(metricsCase[0]), 'metrics page must carry the run console section')
+console.log('  ✓ distill / metrics / distribute pages reskinned (run merged into metrics)')
+
 // --- sidebar IA ---
 assert.ok(/const NAV_GROUPS = \[/.test(src), 'NAV_GROUPS missing')
 assert.ok(/function Sidebar\(/.test(src), 'Sidebar component missing')

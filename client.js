@@ -2315,7 +2315,7 @@ window.__ModuleLoader__.load({
       const presetsBlock = h(Section, {
         id: 'dsw-presets',
         label: '③ ' + t('presetsTitle'),
-        right: h('button', { style: S.linkAccent, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew')),
+        right: h('button', { style: S.linkButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew')),
       }, presetsBody)
 
       /* The only honest comparison is against the previous report window:
@@ -2465,11 +2465,11 @@ window.__ModuleLoader__.load({
         const copyInstall = () => copyAction(installCommand, installCommand)
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
-          h('div', { style: S.tile },
-            h('div', { style: S.ruleTitleRow },
-              h('span', { style: S.ruleTitle }, t('distributionTitle')),
-              h('span', { style: S.badge }, active.displayName + ' v' + active.version)),
-            h('div', { style: S.hint }, t('exportScopeHint')),
+          h('section', { style: S.section },
+            h('div', { style: S.sectionHead },
+              h('span', { style: S.sectionLabel }, t('distributionTitle')),
+              h('span', { style: S.chip }, active.displayName + ' v' + active.version)),
+            h('div', { style: { ...S.hint, paddingTop: 8 } }, t('exportScopeHint')),
             h('div', { style: { ...S.distPrimaryRow, paddingTop: 14 } },
               h('button', {
                 style: exportDisabled ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
@@ -2520,11 +2520,11 @@ window.__ModuleLoader__.load({
         const sourceEntries = Object.entries((report && report.sources) || {})
         const sourceLabels = { claude: 'Claude Code', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' }
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
-          h('div', { style: S.tile },
-            h('div', { style: S.ruleTitleRow },
-              h('span', { style: S.ruleTitle }, t('distillReview')),
-              h('span', { style: S.badge }, t('localData'))),
-            h('div', { style: S.hint }, t('scanHint')),
+          h('section', { style: S.section },
+            h('div', { style: S.sectionHead },
+              h('span', { style: S.sectionLabel }, t('distillReview')),
+              h('span', { style: S.chip }, t('localData'))),
+            h('div', { style: { ...S.hint, paddingTop: 8 } }, t('scanHint')),
             h('div', { style: { ...S.actionsBar, paddingTop: 12 } },
               h('button', { style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary, disabled: !!busy, onClick: onScan },
                 busy === 'distill' ? t('distilling') : t('distill')),
@@ -2575,9 +2575,11 @@ window.__ModuleLoader__.load({
           metric.window ? h('div', { style: S.hint }, t('window') + metric.window) : null)
         })
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
-          h('div', { style: S.tile },
-            h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, t('agentMetrics')), h('span', { style: S.badge }, t('recomputable'))),
-            h('div', { style: S.hint }, t('metricsCaveat')),
+          h('section', { style: S.section },
+            h('div', { style: S.sectionHead },
+              h('span', { style: S.sectionLabel }, t('agentMetrics')),
+              h('span', { style: S.chip }, t('recomputable'))),
+            h('div', { style: { ...S.hint, paddingTop: 8 } }, t('metricsCaveat')),
             metricWindow ? h('div', { style: { ...S.hint, paddingTop: 8 } }, t('window') + metricWindow) : null),
           available
             ? h('div', null,
