@@ -10,7 +10,7 @@
 
 - **像你**：把从真实会话里提炼的规则注入系统提示，模型按你的方式工作（先方案、证据优先、验证后才宣称完成、中文短句）。
 - **能复制**：工作方式是一个 `workstyle.json` 包，可导出、提交、安装。同事装上就获得同一套工作方式。
-- **可度量**：内置采纳指标（先方案率、改完验证率、规则遵守度），能看到「像不像」是否在变好。
+- **可度量**：内置采纳指标（先方案率、改完验证率、未验证宣称完成率；只统计可复算的代理指标，不推断模型是否遵守规则），能看到「像不像」是否在变好。
 
 ## 安装
 
@@ -53,12 +53,12 @@ dsh plugin --profile <你的 profile> add github:iannil/dsh-workstyle
 - 停用项只影响系统提示与技能候选，不写入导出包。
 - 命令：`/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export`
 - Agent 工具（8）：`workstyle_status`、`workstyle_list`、`workstyle_apply`、`workstyle_distill`、`workstyle_evidence`、`workstyle_adopt`、`workstyle_toggle`、`workstyle_export`
-- HTTP 路由（13）：`/api/dsh-workstyle/{status,evidence,apply,distill,adopt,unadopt,toggle,export,scope,inject,metrics,rule,preset}`
+- HTTP 路由（17 项注册）：`/api/dsh-workstyle/{status,pack,reports,exports,evidence,apply,distill,adopt,unadopt,toggle,export,scope,inject,metrics,rule,preset}`
 
 ## 蒸馏 → 采纳 → 导出
 
 1. `workstyle_distill`（或面板「蒸馏证据」）扫描本机会话，产出聚合报告与建议规则，写入 `$DSH_HOME/workstyle/reports/`。
-2. `workstyle_adopt` / 面板勾选，把建议规则并入当前包；`workstyle_unadopt`（命令 `/workstyle undo <id>`）撤销。
+2. `workstyle_adopt` / 面板勾选，把建议规则并入当前包；命令 `/workstyle undo <id>` 撤销（无独立 `workstyle_unadopt` 工具）。
 3. `workstyle_export` 生成 `$DSH_HOME/workstyle/exports/<pack>-<version>-<时间戳>.tar.gz`：
    - `workstyle.json`：合并采纳规则后的有效包；
    - `manifest.json`：导出清单（规则数、技能数、文件列表、来源）；
@@ -99,8 +99,9 @@ Pack 放在插件 `pack/<id>/` 或 `$DSH_HOME/workstyle/packs/<id>/`；技能放
 无运行时依赖，纯 ESM。Host 侧 `index.js` + `lib/`（`pack.js` 包模型、`distill.js` 蒸馏、`export.js` tar.gz 导出），Web 面板 `client.js`，清单 `cordis.patch.yml`。
 
 ```bash
-node test/smoke.mjs        # 82 项冒烟检查：8 工具 / 8 路由 / 命令 / 启停 / 采纳与撤销 / 导出 tar 往返
-node test/panel-render.mjs # 44 项面板渲染检查：状态/搜索/筛选/启停/折叠/分发/构建标记、无营销文案
+node test/smoke.mjs        # 146 项冒烟检查：工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 导出 tar 往返
+node test/panel-render.mjs # 115 项面板渲染检查：状态/搜索/筛选/启停/折叠/分发/构建标记、无营销文案
+node test/multipage-render.mjs # 97 项多页路由渲染检查：导航/分发/蒸馏/度量/缺失包恢复
 ```
 
 系统未装 Node 时可用 Harness 自带运行时：

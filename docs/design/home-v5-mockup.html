@@ -1,0 +1,692 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>工作方式 HOME v5 · 设计示意图</title>
+<style>
+  :root {
+    --ink: #14171c;
+    --paper: #f4f0e8;
+    --amber: #d7913a;
+    --accent: #95550f;
+    --accent-soft: rgba(149, 85, 15, .09);
+    --accent-line: rgba(149, 85, 15, .42);
+    --bg: #fbf9f5;
+    --card: #ffffff;
+    --line: #e6e0d4;
+    --line-soft: #efeae0;
+    --text: #1b1f26;
+    --text-2: #5c6470;
+    --text-3: #8d939c;
+    --ok: #3f7d52;
+    --warn: #b26a42;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Helvetica Neue", sans-serif;
+    --serif: "Songti SC", "Noto Serif CJK SC", Georgia, serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: #e9e3d8;
+    font-family: var(--sans);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+    padding: 48px 40px 72px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 44px;
+  }
+
+  /* ---------- sheet wrapper ---------- */
+  .sheet { width: 1360px; max-width: 100%; }
+  .sheet-head {
+    display: flex; align-items: baseline; gap: 14px;
+    margin: 0 0 14px 2px;
+  }
+  .sheet-head .tag {
+    font-family: var(--mono); font-size: 11px; letter-spacing: .12em;
+    text-transform: uppercase; color: var(--accent);
+    border: 1px solid var(--accent-line); background: rgba(255,255,255,.6);
+    padding: 3px 8px; border-radius: 4px;
+  }
+  .sheet-head h2 {
+    font-family: var(--serif); font-size: 20px; font-weight: 600; margin: 0; letter-spacing: .01em; color: #1b1f26;
+  }
+  .sheet-head .note { font-size: 12px; color: #7b7263; margin-left: auto; }
+
+  /* ---------- app frame ---------- */
+  .app {
+    display: flex; background: var(--bg);
+    border: 1px solid #d8d1c3; border-radius: 12px; overflow: hidden;
+    box-shadow: 0 18px 44px -22px rgba(30,26,20,.35), 0 2px 0 rgba(255,255,255,.7) inset;
+  }
+  .app.dark {
+    --bg: #101216; --card: #171a20; --line: #262a32; --line-soft: #1e222a;
+    --text: #e9e6df; --text-2: #a2a7b0; --text-3: #6f757f;
+    --accent: #e3a660; --accent-soft: rgba(227,166,96,.14); --accent-line: rgba(227,166,96,.48);
+    --ok: #79b98c; --warn: #d9926a;
+    border-color: #23262c;
+    box-shadow: 0 22px 50px -24px rgba(0,0,0,.7);
+  }
+
+  /* ---------- sidebar ---------- */
+  .side {
+    width: 232px; flex: 0 0 232px; border-right: 1px solid var(--line-soft);
+    padding: 14px 12px; display: flex; flex-direction: column; gap: 10px;
+    font-size: 12.5px; color: var(--text-2);
+  }
+  .brand { display: flex; align-items: center; gap: 7px; padding: 2px 4px 10px; color: var(--text); }
+  .brand b { font-size: 13px; letter-spacing: .02em; }
+  .brand .badge {
+    font-family: var(--mono); font-size: 8px; letter-spacing: .1em; padding: 2px 4px;
+    border: 1px solid var(--text-3); border-radius: 2px; color: var(--text-2);
+  }
+  .newchat {
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px;
+    background: var(--card); color: var(--text); font-size: 12px; font-weight: 500;
+  }
+  .nav-item { padding: 6px 8px; border-radius: 6px; display: flex; align-items: center; gap: 8px; }
+  .nav-item.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .nav-sep { height: 1px; background: var(--line-soft); margin: 6px 2px; }
+  .nav-label { font-size: 10.5px; letter-spacing: .1em; color: var(--text-3); padding: 2px 8px; text-transform: uppercase; }
+  .ws-item { padding: 4px 8px; display: flex; align-items: center; gap: 7px; font-size: 12px; }
+  .ws-item.active { color: var(--text); font-weight: 500; }
+  .ws-item .t { margin-left: auto; font-size: 10px; color: var(--text-3); }
+  .sub { padding-left: 22px; font-size: 11.5px; color: var(--text-3); }
+
+  /* ---------- main ---------- */
+  .main { flex: 1; min-width: 0; padding: 22px 30px 26px; }
+
+  /* header */
+  .head { display: flex; align-items: flex-start; gap: 16px; }
+  .head h1 { font-family: var(--serif); font-size: 25px; margin: 0 0 6px; letter-spacing: .01em; font-weight: 600; color: var(--text); }
+  .scribe { font-size: 11.5px; color: var(--text-3); font-family: var(--mono); }
+  .head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+  .select {
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 7px; padding: 7px 11px; font-size: 12px; display: flex; gap: 8px; align-items: center;
+  }
+  .btn {
+    border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 7px; padding: 7px 12px; font-size: 12px; cursor: default;
+  }
+  .btn.primary { background: var(--ink); color: var(--paper); border-color: var(--ink); font-weight: 600; }
+  .app.dark .btn.primary { background: var(--paper); color: var(--ink); border-color: var(--paper); }
+
+  /* status rail */
+  .rail {
+    margin-top: 14px; border: 1px solid var(--line); border-radius: 9px;
+    background: var(--card); padding: 9px 13px;
+    display: flex; align-items: center; gap: 0; flex-wrap: wrap; font-size: 11.5px; color: var(--text-2);
+  }
+  .rail .seg { display: flex; align-items: center; gap: 6px; padding: 0 11px; }
+  .rail .seg:first-child { padding-left: 0; }
+  .rail .seg + .seg { border-left: 1px solid var(--line-soft); }
+  .rail b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .rail .fp { font-family: var(--mono); color: var(--accent); font-size: 11px; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--text-3); display: inline-block; }
+  .dot.ok { background: var(--ok); }
+  .dot.warn { background: var(--warn); }
+
+  /* scope pills */
+  .scope-pill {
+    font-size: 10px; font-family: var(--mono); padding: 2px 6px; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--text-2); background: var(--bg); white-space: nowrap;
+  }
+  .scope-pill.g { border-color: var(--line); }
+  .scope-pill.p { border-color: var(--accent-line); color: var(--accent); background: var(--accent-soft); }
+  .scope-pill.s { border-color: #b9c6d8; color: #4a6480; background: rgba(74,100,128,.09); }
+  .app.dark .scope-pill.s { border-color: #40506a; color: #9db4d1; background: rgba(157,180,209,.1); }
+
+  /* todo strip */
+  .todo { margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap; }
+  .todo .chip {
+    display: flex; align-items: center; gap: 7px; font-size: 11.5px;
+    border: 1px solid var(--line); background: var(--card); border-radius: 7px; padding: 6px 10px; color: var(--text-2);
+  }
+  .todo .chip b { color: var(--text); font-variant-numeric: tabular-nums; }
+  .todo .chip .n {
+    font-family: var(--mono); font-size: 10px; min-width: 16px; height: 16px; padding: 0 4px;
+    border-radius: 4px; background: var(--accent-soft); color: var(--accent); display: inline-flex;
+    align-items: center; justify-content: center; font-weight: 600;
+  }
+  .todo .chip.quiet .n { background: var(--line-soft); color: var(--text-3); }
+
+  /* anchor nav */
+  .anchors {
+    margin-top: 16px; display: flex; gap: 2px; border-bottom: 1px solid var(--line);
+    position: sticky;
+  }
+  .anchors .a {
+    font-size: 12px; padding: 7px 12px 9px; color: var(--text-3); position: relative;
+  }
+  .anchors .a.on { color: var(--accent); font-weight: 600; }
+  .anchors .a.on::after {
+    content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent);
+  }
+  .anchors .a .c { font-family: var(--mono); font-size: 10px; color: var(--text-3); margin-left: 5px; }
+
+  /* section */
+  .sec { margin-top: 22px; }
+  .sec-head { display: flex; align-items: center; gap: 10px; margin-bottom: 11px; }
+  .sec-num {
+    font-family: var(--mono); font-size: 10px; width: 18px; height: 18px; border-radius: 4px;
+    background: var(--ink); color: var(--paper); display: inline-flex; align-items: center; justify-content: center;
+  }
+  .app.dark .sec-num { background: var(--paper); color: var(--ink); }
+  .sec-head h3 { font-size: 13.5px; margin: 0; font-weight: 600; letter-spacing: .01em; color: var(--text); }
+  .sec-head .hint { font-size: 11.5px; color: var(--text-3); }
+  .sec-head .right { margin-left: auto; display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--text-3); }
+  .link { color: var(--accent); font-size: 11.5px; }
+
+  /* inject preview */
+  .inject {
+    border: 1px solid var(--line); border-radius: 9px; background: var(--card); overflow: hidden;
+  }
+  .inject-bar {
+    display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+    border-bottom: 1px solid var(--line-soft); background: linear-gradient(180deg, rgba(0,0,0,.015), transparent);
+    font-size: 11.5px; color: var(--text-2);
+  }
+  .inject-bar .k { font-weight: 600; color: var(--text); }
+  .inject-bar .fp { font-family: var(--mono); font-size: 11px; color: var(--accent); background: var(--accent-soft); padding: 2px 6px; border-radius: 4px; }
+  .inject-bar .right { margin-left: auto; display: flex; gap: 8px; }
+  .inject-body {
+    font-family: var(--mono); font-size: 11.5px; line-height: 1.72; color: var(--text-2);
+    padding: 13px 15px 15px; white-space: pre-wrap;
+    background: var(--bg);
+    max-height: 210px; overflow: hidden; position: relative; padding-bottom: 34px;
+  }
+  .inject-body .h { color: var(--text); font-weight: 600; }
+  .inject-body .rl { color: var(--text); }
+  .inject-body .muted { color: var(--text-3); }
+  .inject-body::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 44px;
+    background: linear-gradient(180deg, transparent, var(--bg));
+  }
+  .inject-foot {
+    display: flex; gap: 14px; padding: 7px 12px; font-size: 11px; color: var(--text-3);
+    border-top: 1px solid var(--line-soft); font-family: var(--mono);
+  }
+
+  /* rule list */
+  .list { border: 1px solid var(--line); border-radius: 9px; background: var(--card); overflow: hidden; }
+  .row {
+    display: flex; align-items: center; gap: 10px; padding: 9px 13px; font-size: 12.5px;
+    border-top: 1px solid var(--line-soft);
+  }
+  .row:first-child { border-top: 0; }
+  .row.hi { background: var(--accent-soft); }
+  .row .cb {
+    width: 14px; height: 14px; border-radius: 3px; border: 1.5px solid var(--text-3); flex: 0 0 14px;
+    display: flex; align-items: center; justify-content: center; font-size: 9px; color: #fff;
+  }
+  .row .cb.on { background: var(--accent); border-color: var(--accent); }
+  .row .title { color: var(--text); }
+  .row.off .title { color: var(--text-3); text-decoration: line-through; text-decoration-color: var(--line); }
+  .row .meta { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--text-3); }
+  .sev { font-size: 10px; color: var(--text-3); display: flex; align-items: center; gap: 4px; }
+  .sev i { width: 5px; height: 5px; border-radius: 50%; background: var(--amber); display: inline-block; }
+  .cover { font-size: 10.5px; color: var(--warn); }
+
+  /* preset cards */
+  .presets { display: grid; grid-template-columns: repeat(3, 1fr) 132px; gap: 10px; }
+  .pcard {
+    border: 1px solid var(--line); border-radius: 9px; background: var(--card); padding: 11px 13px 12px;
+  }
+  .pcard.on { border-color: var(--accent-line); box-shadow: 0 0 0 1px var(--accent-line) inset, 0 6px 18px -12px rgba(149,85,15,.5); }
+  .pcard .pt { display: flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600; color: var(--text); }
+  .pcard.on .pt::after { content: "当前"; margin-left: auto; font-family: var(--mono); font-size: 9.5px; color: var(--accent); background: var(--accent-soft); padding: 1px 5px; border-radius: 3px; }
+  .pcard .pd { font-size: 11px; color: var(--text-3); margin-top: 5px; line-height: 1.5; min-height: 32px; }
+  .pcard .pf { display: flex; gap: 10px; font-family: var(--mono); font-size: 10.5px; color: var(--text-2); margin-top: 8px; }
+  .pcard.new { border-style: dashed; display: flex; align-items: center; justify-content: center; color: var(--text-3); font-size: 12px; }
+
+  /* tabs inside preset section */
+  .subtabs { display: flex; gap: 16px; font-size: 12px; color: var(--text-3); border-bottom: 1px solid var(--line-soft); padding-bottom: 8px; margin: 14px 0 10px; }
+  .subtabs .t.on { color: var(--text); font-weight: 600; position: relative; }
+  .subtabs .t.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -9px; height: 2px; background: var(--text); }
+  .subtabs .t .c { font-family: var(--mono); font-size: 10px; color: var(--text-3); margin-left: 4px; }
+
+  /* metric */
+  .metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .mcard { border: 1px solid var(--line); border-radius: 9px; background: var(--card); padding: 12px 13px; }
+  .mcard .mv { font-family: var(--mono); font-size: 23px; font-variant-numeric: tabular-nums; color: var(--text); letter-spacing: -.01em; }
+  .mcard .mv .u { font-size: 13px; color: var(--text-3); margin-left: 1px; }
+  .mcard .mk { font-size: 11.5px; color: var(--text-2); margin-top: 3px; }
+  .mcard .md { font-size: 10.5px; color: var(--text-3); margin-top: 7px; padding-top: 7px; border-top: 1px dashed var(--line); line-height: 1.45; }
+  .mcard .dl { color: var(--ok); font-family: var(--mono); font-size: 10.5px; }
+
+  /* distribution */
+  .dist { display: flex; gap: 9px; flex-wrap: wrap; }
+
+  /* footer */
+  .foot {
+    margin-top: 24px; padding-top: 12px; border-top: 1px solid var(--line-soft);
+    display: flex; gap: 16px; font-size: 10.5px; color: var(--text-3); font-family: var(--mono);
+  }
+  .foot .r { margin-left: auto; }
+
+  /* annotation callouts (only on the annotated sheet) */
+  .anno-layer { position: relative; }
+  .callout {
+    position: absolute; z-index: 5; background: var(--ink); color: var(--paper);
+    font-size: 11px; line-height: 1.45; padding: 7px 10px; border-radius: 6px; max-width: 210px;
+    box-shadow: 0 8px 20px -8px rgba(0,0,0,.4);
+  }
+  .app.dark .callout { background: var(--paper); color: var(--ink); }
+  .callout::before {
+    content: ""; position: absolute; width: 9px; height: 9px;
+    background: inherit; transform: rotate(45deg);
+  }
+  .callout.left::before { left: -4px; top: 14px; }
+  .callout.right::before { right: -4px; top: 14px; }
+  .callout b { color: var(--amber); }
+  .app.dark .callout b { color: var(--accent); }
+
+  /* annotation gutter */
+  .gutter { width: 258px; flex: 0 0 258px; }
+  .gc {
+    font-size: 11.5px; line-height: 1.62; color: #4f4739;
+    border-left: 2px solid var(--accent-line); padding: 1px 0 1px 11px;
+    position: relative;
+  }
+  .gc::before {
+    content: ""; position: absolute; left: -5px; top: 6px; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--amber); border: 2px solid #e9e3d8;
+  }
+  .gc b { display: block; color: #221d14; font-size: 12px; margin-bottom: 3px; }
+  .gc code { font-family: var(--mono); font-size: 10.5px; background: rgba(0,0,0,.06); padding: 1px 3px; border-radius: 2px; }
+
+  /* legend */
+  .legend { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 18px; }
+  .lg { border-left: 2px solid var(--accent-line); padding: 2px 0 2px 12px; }
+  .lg h4 { margin: 0 0 4px; font-size: 12px; font-weight: 600; color: #2a2419; }
+  .lg p { margin: 0; font-size: 11.5px; color: #6a6153; line-height: 1.5; }
+</style>
+</head>
+<body>
+
+<!-- ============================ SHEET 1: light full page ============================ -->
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="tag">Sheet 1</span>
+    <h2>v5 主页 · 全貌（浅色）</h2>
+    <span class="note">一屏回答四问：载入了什么 · 谁在生效 · 怎么组装 · 有没有用</span>
+  </div>
+
+  <div class="app">
+    <!-- sidebar -->
+    <aside class="side">
+      <div class="brand"><b>deepseek</b><span class="badge">HARNESS</span></div>
+      <div class="newchat">＋ 新会话</div>
+      <div class="nav-item">插件</div>
+      <div class="nav-item">插件市场</div>
+      <div class="nav-item on">◎ 工作方式</div>
+      <div class="nav-item">自动化任务</div>
+      <div class="nav-item">上下文洞察</div>
+      <div class="nav-sep"></div>
+      <div class="nav-label">工作区</div>
+      <div class="ws-item active">▸ dsh-workstyle</div>
+      <div class="ws-item">▸ zhurongshuo <span class="t">5m</span></div>
+      <div class="ws-item active">▾ huan</div>
+      <div class="sub">新会话</div>
+      <div class="sub">审计 to AI 味书籍</div>
+      <div class="ws-item">▸ mir2mac</div>
+      <div class="ws-item">▸ kongbai</div>
+    </aside>
+
+    <!-- main -->
+    <main class="main">
+      <div class="head">
+        <div>
+          <h1>工作方式</h1>
+          <div class="scribe">当前会话 huan · 项目叠层读取自 huan/.dsh/workstyle.json</div>
+        </div>
+        <div class="right">
+          <div class="select">FDE 工程工作方式 <span style="color:#8d939c">v0.1.0</span> ▾</div>
+          <div class="btn">刷新</div>
+        </div>
+      </div>
+
+      <!-- status rail -->
+      <div class="rail">
+        <div class="seg"><span class="dot ok"></span>注入中 <b>7</b> 规则</div>
+        <div class="seg">全局 <b>6</b></div>
+        <div class="seg">项目 <b>+1</b></div>
+        <div class="seg">会话 <b>−1</b></div>
+        <div class="seg">技能 <b>40/40</b></div>
+        <div class="seg">预设 <b>FDE 交付</b></div>
+        <div class="seg">指纹 <span class="fp">3f9c1a7e04b2</span></div>
+        <div class="seg"><span class="dot warn"></span>蒸馏 8h 前</div>
+      </div>
+
+      <!-- todos -->
+      <div class="todo">
+        <div class="chip"><span class="n">3</span>蒸馏建议待审</div>
+        <div class="chip"><span class="n">2</span>规则缺证据</div>
+        <div class="chip"><span class="n">1</span>作用域冲突</div>
+        <div class="chip quiet"><span class="n">0</span>未验证宣称</div>
+      </div>
+
+      <!-- anchors -->
+      <div class="anchors">
+        <div class="a on">载入预览<span class="c">7</span></div>
+        <div class="a">预设与规则<span class="c">3</span></div>
+        <div class="a">度量<span class="c">4</span></div>
+        <div class="a">分发</div>
+      </div>
+
+      <!-- 1 load -->
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">1</span>
+          <h3>载入预览</h3>
+          <span class="hint">系统提示里真实的那一段，与 /workstyle status 同源</span>
+          <div class="right"><span class="link">复制</span><span class="link">展开全文</span></div>
+        </div>
+
+        <div class="inject">
+          <div class="inject-bar">
+            <span class="k">systemPrompt · dsh-workstyle.rules</span>
+            <span>order 905</span>
+            <span class="fp">sha256 3f9c1a7e04b2</span>
+            <div class="right"><span>689 字符</span><span>7 条规则 · 40 技能</span></div>
+          </div>
+          <div class="inject-body"><span class="h">## 工作方式：FDE 工程工作方式（dsh-workstyle / fde-engineering v0.1.0）</span>
+
+<span class="muted">以下规则来自用户本机的工作方式包，默认生效；用户明确要求时以用户当前指令为准。</span>
+<span class="rl">- **先方案后实现**：多文件、架构、新功能类请求，先给可评审方案…</span>
+<span class="rl">- **证据优先，不猜**：先读真实文件、先跑真实命令，再下结论…</span>
+<span class="rl">- **验证后才宣称完成**：说「完成」之前必须跑验证命令或给出可复现证据…</span>
+<span class="rl">- **产物化，不停在对话里**：每个任务尽量沉淀脚本、skill、模板或文档…</span>
+<span class="rl">- **本机数据只读不外传**：分析本机会话/日志时只读、不联网上传…</span>
+<span class="rl">- **项目：不要动 pack/reference**：本仓库的 reference 包只读…</span>
+<span class="muted">- 已加载 40 个工作方式技能（skills provider）。相关任务优先查这些技能。</span>
+          </div>
+          <div class="inject-foot">
+            <span>来源：pack 6 · 项目 +1 · 会话 −1（中文、短句、先结论）</span>
+            <span>渲染函数 renderRules() · 与本面板内置预览同一次调用</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- effective rules -->
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">2</span>
+          <h3>有效规则 <span style="color:#8d939c;font-weight:400">7</span></h3>
+          <div class="right"><span>按作用域分层</span><span class="link">编辑</span></div>
+        </div>
+        <div class="list">
+          <div class="row"><span class="cb on">✓</span><span class="title">先方案后实现</span><span class="scope-pill g">全局</span><span class="sev"><i></i>高</span><div class="meta"><span>手写</span></div></div>
+          <div class="row"><span class="cb on">✓</span><span class="title">证据优先，不猜</span><span class="scope-pill g">全局</span><span class="sev"><i></i>高</span><div class="meta"><span>手写</span></div></div>
+          <div class="row"><span class="cb on">✓</span><span class="title">验证后才宣称完成</span><span class="scope-pill g">全局</span><span class="sev"><i></i>高</span><div class="meta"><span>手写</span></div></div>
+          <div class="row"><span class="cb on">✓</span><span class="title">产物化，不停在对话里</span><span class="scope-pill g">全局</span><span class="sev"><i></i>中</span><div class="meta"><span>手写</span></div></div>
+          <div class="row"><span class="cb on">✓</span><span class="title">本机数据只读不外传</span><span class="scope-pill g">全局</span><span class="sev"><i></i>高</span><div class="meta"><span>手写</span></div></div>
+          <div class="row hi"><span class="cb on">✓</span><span class="title">项目：不要动 pack/reference</span><span class="scope-pill p">项目 · huan</span><div class="meta"><span>本仓库新增</span><span class="link">编辑</span></div></div>
+          <div class="row off"><span class="cb"></span><span class="title">中文、短句、先结论</span><span class="scope-pill s">会话 · 停用</span><div class="meta"><span class="cover">被会话覆盖</span><span class="link">启用</span></div></div>
+        </div>
+      </section>
+
+      <!-- 3 presets -->
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">3</span>
+          <h3>预设与组装</h3>
+          <span class="hint">规则 &gt; 预设（组合） &gt; 技能 &gt; 模板</span>
+          <div class="right"><span class="link">＋ 新建预设</span></div>
+        </div>
+        <div class="presets">
+          <div class="pcard on">
+            <div class="pt">FDE 交付</div>
+            <div class="pd">工程交付：先方案、证据优先、验证后才宣称完成</div>
+            <div class="pf"><span>规则 6</span><span>技能 12</span><span>模板 2</span></div>
+          </div>
+          <div class="pcard">
+            <div class="pt">写书</div>
+            <div class="pd">书稿审计与润色：保留论证、区分事实与推演</div>
+            <div class="pf"><span>规则 4</span><span>技能 9</span><span>模板 3</span></div>
+          </div>
+          <div class="pcard">
+            <div class="pt">RC 探讨</div>
+            <div class="pd">观察收敛框架下的讨论，先给判读再给建议</div>
+            <div class="pf"><span>规则 3</span><span>技能 5</span><span>模板 1</span></div>
+          </div>
+          <div class="pcard new">＋ 新建</div>
+        </div>
+
+        <div class="subtabs">
+          <div class="t on">规则<span class="c">7</span></div>
+          <div class="t">技能<span class="c">40</span></div>
+          <div class="t">模板<span class="c">2</span></div>
+        </div>
+
+        <div class="list">
+          <div class="row"><span class="cb on">✓</span><span class="title">先方案后实现</span><span class="scope-pill g">全局</span><div class="meta"><span class="link">编辑</span><span class="link">上移</span></div></div>
+          <div class="row"><span class="cb on">✓</span><span class="title">验证后才宣称完成</span><span class="scope-pill g">全局</span><div class="meta"><span class="link">编辑</span><span class="link">上移</span></div></div>
+        </div>
+      </section>
+
+      <!-- 4 metrics -->
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">4</span>
+          <h3>度量</h3>
+          <span class="hint">只用可复算的代理指标 · 不推断遵守</span>
+          <div class="right"><span>窗口 30 天</span><span class="link">重新蒸馏</span></div>
+        </div>
+        <div class="metrics">
+          <div class="mcard">
+            <div class="mv">6<span class="u">/7</span></div>
+            <div class="mk">规则命中</div>
+            <div class="md">出现关键词的规则数 / 启用数</div>
+          </div>
+          <div class="mcard">
+            <div class="mv">4.3<span class="u">%</span></div>
+            <div class="mk">先方案率</div>
+            <div class="md">857 / 20056 条 prompt 含方案词 <span class="dl">↑ 0.2</span></div>
+          </div>
+          <div class="mcard">
+            <div class="mv">3.1<span class="u">%</span></div>
+            <div class="mk">验证率</div>
+            <div class="md">625 条含验证词 / 会话内测试调用</div>
+          </div>
+          <div class="mcard">
+            <div class="mv">4<span class="u">/4</span></div>
+            <div class="mk">蒸馏覆盖</div>
+            <div class="md">数据源可用 · 8 小时前更新</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 distribution -->
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">5</span>
+          <h3>分发</h3>
+          <div class="right"><span class="link">包目录</span></div>
+        </div>
+        <div class="dist">
+          <div class="btn primary">导出包 + 作用域快照</div>
+          <div class="btn">导出包（仅包）</div>
+          <div class="btn">复制安装命令</div>
+        </div>
+      </section>
+
+      <div class="foot">
+        <span>home v5 · 2026-11-08</span>
+        <span>只读本机数据 · 不联网 · 不上传 · 不保存 prompt 原文</span>
+        <span class="r">dsh-workstyle v0.1.0</span>
+      </div>
+    </main>
+  </div>
+
+  <div class="legend">
+    <div class="lg"><h4>状态带</h4><p>一行说清「打进系统提示的是什么」。指纹是加载证明：规则或作用域一变，指纹就变。</p></div>
+    <div class="lg"><h4>待办条</h4><p>把「需要动手的事」前置成可点击计数，替代 v4 的四格静态统计。</p></div>
+    <div class="lg"><h4>作用域徽标</h4><p>全局 / 项目 / 会话三色标签，覆盖关系写「被会话覆盖」，不再靠猜。</p></div>
+    <div class="lg"><h4>度量口径</h4><p>每个数字都写明算法与分母；只列可复算代理指标，不出现「违反 / 遵守率」。</p></div>
+  </div>
+</section>
+
+<!-- ============================ SHEET 2: dark, annotated ============================ -->
+<section class="sheet">
+  <div class="sheet-head">
+    <span class="tag">Sheet 2</span>
+    <h2>v5 主页 · 暗色 + 设计注记</h2>
+    <span class="note">标注每个区块解决的问题</span>
+  </div>
+
+  <div style="display:flex; gap:18px; align-items:flex-start;">
+  <div class="app dark anno-layer" style="flex:1; min-width:0;">
+    <aside class="side">
+      <div class="brand"><b>deepseek</b><span class="badge">HARNESS</span></div>
+      <div class="newchat">＋ 新会话</div>
+      <div class="nav-item">插件</div>
+      <div class="nav-item on">◎ 工作方式</div>
+      <div class="nav-item">自动化任务</div>
+      <div class="nav-sep"></div>
+      <div class="nav-label">工作区</div>
+      <div class="ws-item active">▾ zhurongshuo</div>
+      <div class="sub">新会话</div>
+      <div class="sub">Volume 3 Book Content</div>
+      <div class="ws-item">▸ huan</div>
+      <div class="ws-item">▸ kongbai</div>
+    </aside>
+
+    <main class="main">
+      <div class="head">
+        <div>
+          <h1>工作方式</h1>
+          <div class="scribe">当前会话 zhurongshuo · 项目叠层 4 条规则</div>
+        </div>
+        <div class="right">
+          <div class="select">FDE 工程工作方式 ▾</div>
+          <div class="btn">刷新</div>
+        </div>
+      </div>
+
+      <div class="rail">
+        <div class="seg"><span class="dot ok"></span>注入中 <b>10</b> 规则</div>
+        <div class="seg">全局 <b>6</b></div>
+        <div class="seg">项目 <b>+4</b></div>
+        <div class="seg">技能 <b>40/40</b></div>
+        <div class="seg">预设 <b>写书</b></div>
+        <div class="seg">指纹 <span class="fp">b71e0d9a2c55</span></div>
+        <div class="seg"><span class="dot ok"></span>蒸馏 2h 前</div>
+      </div>
+
+      <div class="todo">
+        <div class="chip"><span class="n">1</span>项目规则与全局冲突</div>
+        <div class="chip quiet"><span class="n">0</span>蒸馏建议待审</div>
+        <div class="chip quiet"><span class="n">0</span>规则缺证据</div>
+      </div>
+
+      <div class="anchors">
+        <div class="a on">载入预览<span class="c">10</span></div>
+        <div class="a">预设与规则<span class="c">3</span></div>
+        <div class="a">度量<span class="c">4</span></div>
+        <div class="a">分发</div>
+      </div>
+
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">1</span>
+          <h3>载入预览</h3>
+          <span class="hint">同一渲染函数 · 同一份输入</span>
+          <div class="right"><span class="link">复制</span><span class="link">展开全文</span></div>
+        </div>
+        <div class="inject">
+          <div class="inject-bar">
+            <span class="k">systemPrompt · dsh-workstyle.rules</span>
+            <span class="fp">sha256 b71e0d9a2c55</span>
+            <div class="right"><span>941 字符</span><span>10 条规则</span></div>
+          </div>
+          <div class="inject-body"><span class="h">## 工作方式：FDE 工程工作方式（dsh-workstyle / fde-engineering v0.1.0）</span>
+
+<span class="muted">以下规则来自用户本机的工作方式包，默认生效；用户明确要求时以用户当前指令为准。</span>
+<span class="rl">- **先方案后实现**：多文件、架构、新功能类请求，先给可评审方案…</span>
+<span class="rl">- **证据优先，不猜**：先读真实文件、先跑真实命令，再下结论…</span>
+<span class="rl">- **中文、短句、先结论**：默认中文回复；先给结论，再给依据和步骤…</span>
+<span class="rl">- **项目：书稿事实优先**：引用必须可溯源，推断要显式标注…</span>
+<span class="rl">- **项目：保留作者风格**：润色不改叙述人称与语气…</span>
+<span class="muted">- 已加载 40 个工作方式技能（skills provider）。相关任务优先查这些技能。</span>
+          </div>
+          <div class="inject-foot">
+            <span>来源：pack 6 · 项目 +4 · 会话 0</span>
+            <span>切换项目即切换注入，无需改包</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">2</span>
+          <h3>有效规则 <span style="color:#6f757f;font-weight:400">10</span></h3>
+          <div class="right"><span class="link">编辑</span></div>
+        </div>
+        <div class="list">
+          <div class="row hi"><span class="cb on">✓</span><span class="title">项目：书稿事实优先</span><span class="scope-pill p">项目 · zhurongshuo</span><div class="meta"><span>本仓库新增</span></div></div>
+          <div class="row hi"><span class="cb on">✓</span><span class="title">项目：保留作者风格</span><span class="scope-pill p">项目 · zhurongshuo</span><div class="meta"><span>本仓库新增</span></div></div>
+          <div class="row"><span class="cb on">✓</span><span class="title">先方案后实现</span><span class="scope-pill g">全局</span><span class="sev"><i></i>高</span><div class="meta"><span>手写</span></div></div>
+          <div class="row"><span class="cb on">✓</span><span class="title">中文、短句、先结论</span><span class="scope-pill g">全局</span><span class="sev"><i></i>中</span><div class="meta"><span>手写</span></div></div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">3</span>
+          <h3>预设与组装</h3>
+          <div class="right"><span class="link">＋ 新建预设</span></div>
+        </div>
+        <div class="presets">
+          <div class="pcard"><div class="pt">FDE 交付</div><div class="pd">工程交付套件</div><div class="pf"><span>规则 6</span><span>技能 12</span></div></div>
+          <div class="pcard on"><div class="pt">写书</div><div class="pd">书稿审计与润色</div><div class="pf"><span>规则 4</span><span>技能 9</span></div></div>
+          <div class="pcard"><div class="pt">RC 探讨</div><div class="pd">观察收敛框架</div><div class="pf"><span>规则 3</span><span>技能 5</span></div></div>
+          <div class="pcard new">＋ 新建</div>
+        </div>
+      </section>
+
+      <section class="sec">
+        <div class="sec-head">
+          <span class="sec-num">4</span>
+          <h3>度量</h3>
+          <div class="right"><span>窗口 30 天</span></div>
+        </div>
+        <div class="metrics">
+          <div class="mcard"><div class="mv">9<span class="u">/10</span></div><div class="mk">规则命中</div><div class="md">关键词出现计数</div></div>
+          <div class="mcard"><div class="mv">4.3<span class="u">%</span></div><div class="mk">先方案率</div><div class="md">857 / 20056 <span class="dl">↑ 0.2</span></div></div>
+          <div class="mcard"><div class="mv">3.1<span class="u">%</span></div><div class="mk">验证率</div><div class="md">625 条含验证词</div></div>
+          <div class="mcard"><div class="mv">4<span class="u">/4</span></div><div class="mk">蒸馏覆盖</div><div class="md">2 小时前更新</div></div>
+        </div>
+      </section>
+
+      <div class="foot">
+        <span>home v5 · 2026-11-08</span>
+        <span>只读本机数据 · 不联网 · 不上传</span>
+        <span class="r">dsh-workstyle v0.1.0</span>
+      </div>
+    </main>
+  </div>
+
+  <!-- annotation gutter -->
+  <aside class="gutter">
+    <div class="gc" style="margin-top:78px;"><b>① 状态带</b>一行说清注入的是什么：全局 / 项目 / 会话各多少条、指纹、蒸馏新鲜度。不用再数规则。</div>
+    <div class="gc" style="margin-top:96px;"><b>② 载入预览</b>系统提示里真实的那一段。与后端 <code>renderRules(effectiveActive())</code> 同一次调用，指纹 = sha256(文本) 前 12 位。改任何规则，指纹就变。</div>
+    <div class="gc" style="margin-top:132px;"><b>③ 有效规则</b>按作用域分层显示：全局 / 项目 / 会话三色徽标。「被会话覆盖」直接写出来，不用猜为什么少了一条。</div>
+    <div class="gc" style="margin-top:150px;"><b>④ 预设</b>预设只是成员表，不复制规则正文；改一条规则在所有预设里同时生效。</div>
+    <div class="gc" style="margin-top:118px;"><b>⑤ 度量</b>只列可复算代理指标，每个数字都写出分母。不出现「违反 / 遵守率」——那超出可观测范围。</div>
+  </aside>
+  </div>
+
+  <div class="legend">
+    <div class="lg"><h4>同一份输入</h4><p>“载入预览”的文本就是从 <code>renderRules(effectiveActive())</code> 出来的字符串，指纹是它的 sha256。</p></div>
+    <div class="lg"><h4>切换项目不动包</h4><p>项目叠层在 <code>&lt;cwd&gt;/.dsh/workstyle.json</code>，pack/reference 永远只读。</p></div>
+    <div class="lg"><h4>预设是成员表</h4><p>预设不复制规则，只勾选成员；改规则本体仍在规则区，一处生效。</p></div>
+    <div class="lg"><h4>不说遵守</h4><p>命中 = 提示里出现过；是否遵守不在代理指标的能力范围内。</p></div>
+  </div>
+</section>
+
+</body>
+</html>

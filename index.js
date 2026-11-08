@@ -14,7 +14,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   dshHome, exportsDir, loadPackAt, loadPacks, listSkills, readState,
-  renderRules, reportsDir, workstyleHome, writeState,
+  renderRules, reportsDir, workstyleHome, writeJsonAtomic, writeState,
 } from './lib/pack.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
@@ -137,15 +137,17 @@ function listExportMetadata() {
     .map((file) => {
       try {
         const stat = fs.statSync(path.join(exportsDir(), file))
-        const timestampAt = file.search(/-\d{4}-\d{2}-\d{2}T/)
-        const stem = timestampAt > 0 ? file.slice(0, timestampAt) : file.replace(/\.tar\.gz$/, '')
-        const versionAt = stem.lastIndexOf('-v')
+        // Archive names are `<packId>-v<version>-<timestamp>.tar.gz`; anchor
+        // on the timestamp so a pack id containing "-v" cannot split wrong.
+        const named = file.match(/^(.*)-v([^-]+)-\d{4}-\d{2}-\d{2}T.*\.tar\.gz$/)
+        const packId = named ? named[1] : null
+        const packVersion = named ? named[2] : null
         return {
           file,
           bytes: stat.size,
           modifiedAt: stat.mtime.toISOString(),
-          packId: versionAt > 0 ? stem.slice(0, versionAt) : null,
-          packVersion: versionAt > 0 ? stem.slice(versionAt + 2) : null,
+          packId,
+          packVersion,
         }
       } catch { return undefined }
     })
@@ -240,8 +242,7 @@ function writeDisabled(packId, kind, ids) {
   if (Object.keys(entry).length) packs[packId] = { ...entry, updatedAt: new Date().toISOString() }
   else delete packs[packId]
   const next = { ...all, schemaVersion: 1, packs }
-  fs.mkdirSync(workstyleHome(), { recursive: true })
-  fs.writeFileSync(overridesPath(), JSON.stringify(next, null, 2) + '\n')
+  writeJsonAtomic(overridesPath(), next)
 }
 
 function jsonResponse(value, status = 200) {
@@ -255,6 +256,8 @@ function jsonResponse(value, status = 200) {
 }
 
 function readJsonBody(request) {
+  // Malformed JSON becomes `undefined`; routes must 400 on it instead of
+  // treating it as an empty `{}` and silently proceeding.
   return request.json().catch(() => undefined)
 }
 
@@ -339,6 +342,7 @@ export function apply(ctx) {
         cwd,
         sessionId,
         disabledGlobal: [...disabledFor(active.id).rules],
+        disabledGlobalSkills: [...disabledFor(active.id).skills],
         presetId: input && typeof input.preset === 'string' ? input.preset : undefined,
       }),
     }
@@ -1090,11 +1094,21 @@ export function apply(ctx) {
           const body = await readJsonBody(request)
           const layer = body && body.layer
           const patch = body && body.patch && typeof body.patch === 'object' ? body.patch : {}
+          // The panel sends cwd as a real working directory; writing
+          // .dsh/workstyle.json into an arbitrary path is not part of the
+          // contract, so require an existing directory up front.
+          const validCwd = (value) => {
+            if (typeof value !== 'string' || !value.trim()) return false
+            try { return fs.statSync(value).isDirectory() } catch { return false }
+          }
           try {
             if (layer === 'project') {
+              if (!body) return jsonResponse({ error: 'request body must be JSON' }, 400)
               if (!body.cwd) return jsonResponse({ error: 'cwd is required' }, 400)
+              if (!validCwd(body.cwd)) return jsonResponse({ error: 'cwd must be an existing directory' }, 400)
               writeProjectScope(body.cwd, patch)
             } else if (layer === 'session') {
+              if (!body) return jsonResponse({ error: 'request body must be JSON' }, 400)
               if (!body.sessionId) return jsonResponse({ error: 'sessionId is required' }, 400)
               writeSessionScope(body.sessionId, patch)
             } else {
@@ -1139,6 +1153,13 @@ export function apply(ctx) {
           const id = typeof rule.id === 'string' ? rule.id.trim() : ''
           if (!id) return jsonResponse({ error: 'rule.id is required' }, 400)
           if (!body.cwd) return jsonResponse({ error: 'cwd is required' }, 400)
+          // Same guard as /scope: only write project rules under a real
+          // working directory, never an arbitrary path.
+          try {
+            if (!fs.statSync(body.cwd).isDirectory()) return jsonResponse({ error: 'cwd must be an existing directory' }, 400)
+          } catch {
+            return jsonResponse({ error: 'cwd must be an existing directory' }, 400)
+          }
           try {
             const title = typeof rule.title === 'string' && rule.title.trim() ? rule.title.trim() : id
             const current = readProjectScope(body.cwd)

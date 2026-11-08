@@ -24,7 +24,7 @@ distill（读本机会话，出聚合报告与建议规则）
    → 同事 apply（同一套规则与技能）
 ```
 
-规模化度量看「规则遵守度」：先方案率、改完验证率、未验证宣称完成率、第 1 周 vs 第 4 周趋势（P2 看板）。
+规模化度量用可复算的代理指标（先方案率、改完验证率、未验证宣称完成率、第 1 周 vs 第 4 周趋势，P2 看板）；指标只描述可观察信号，不推断模型是否遵守规则。
 
 ## 架构
 
@@ -40,7 +40,7 @@ distill（读本机会话，出聚合报告与建议规则）
 - 技能：`ctx.skills.registerProvider`，`source: 'bundled'`。
 - 工具（8）：`workstyle_status / list / apply / distill / evidence / adopt / toggle / export`。
 - 命令：`/workstyle status | apply | distill | adopt | undo | on <id> | off <id> | export`。
-- 路由（8）：`/api/dsh-workstyle/{status,evidence,apply,distill,adopt,unadopt,toggle,export}`。
+- 路由（17 项注册）：`/api/dsh-workstyle/{status,pack,reports,exports,evidence,apply,distill,adopt,unadopt,toggle,export,scope,inject,metrics,rule,preset}`。
 - 持久化：`$DSH_HOME/workstyle/state.json`（当前包 + `adoptions[packId]`）、`overrides.json`（按包存停用规则/技能）、`reports/`、`exports/`。
 - 上架元数据（P3）：`dsh.bundle` + `category: workflow` + PNG 图标 + `screenshots.json`。
 
@@ -50,7 +50,7 @@ distill（读本机会话，出聚合报告与建议规则）
 | --- | --- | --- |
 | P0 | 引擎 + 内置参考包 + `status` / `apply`，插件可装、面板可渲染、工具可用 | ✅ 2026-11-08（commit 9831a62） |
 | P1 | 蒸馏器 + 审阅 UI（勾选采纳） + `export` 导出包 | ✅ 代码完成，待重启后真实环境复验 |
-| P2 | 采纳看板（先方案率 / 验证率趋势）、报告导出、预设注册、项目模板 `init` | ⬜ |
+| P2 | 采纳看板（先方案率 / 验证率趋势）、报告导出、预设注册、项目模板 `init` | ◐ 前三项已实现（metrics 代理指标 + `/metrics`、`/export` tar.gz、`/preset`）；`init` 模板未实现 |
 | P3 | npm 发布、图标 / 截图 / 双语 README、插件市场 PR | ⬜ |
 
 2026-11-08 面板 v3（纯前端）：去掉营销 eyebrow / 副标题 / pack description / 常显证据，首屏改为状态行 + 四格运行态 + 待审建议置顶；规则默认折叠、技能改紧凑 chips、证据与来源默认折叠。后端未动，`test/panel-render.mjs` 17 项渲染检查覆盖。
@@ -81,7 +81,7 @@ distill（读本机会话，出聚合报告与建议规则）
 
 ## 验证方式
 
-- `test/smoke.mjs`：82 项检查（8 工具 / 8 路由 / 命令 / 规则与技能启停 / 采纳与撤销 / 导出 tar 往返 / lossless JSON）。
+- `test/smoke.mjs`：146 项检查（工具 / 路由 / 命令 / 规则与技能启停 / 采纳与撤销 / 导出 tar 往返 / lossless JSON）；另有 panel-render 115 项、multipage-render 97 项。
 - `test/panel-render.mjs`：44 项渲染检查（状态、搜索、筛选、启停、折叠/展开、分发、构建标记、无营销文案、样式作用域）。
 - 隔离实例：`dsh --profile web --patch <patch.yml>` + 临时 `DSH_HOME`，Chrome headless CDP 截图验证面板。
 - 真实环境：重启 DeepSeek Harness 后实测面板与工具（本地 link 安装的插件必须重启才加载）。

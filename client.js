@@ -67,32 +67,23 @@ window.__ModuleLoader__.load({
 
     /* ------------------------------ dictionaries --------------------------- */
 
+    let scopedT = (key) => key
     const zh = {
       nav: '工作方式',
       title: '工作方式',
       packs: '工作方式包',
-      rules: '规则',
       skills: '技能',
       refresh: '刷新',
       distill: '蒸馏证据',
       distilling: '蒸馏中…',
-      export: '导出包',
       exporting: '导出中…',
       exported: '已导出',
       copyCommand: '复制安装命令',
       copyPath: '复制路径',
       copyFailed: '复制失败，请手动复制',
       copied: '已复制',
-      packDir: '包目录',
-      installHint: '队友装好插件后，把导出的包解压到 ~/.dsh/workstyle/packs/ 即可在左上角切换。',
-      distribution: '分发',
-      allEnabled: '全部生效',
-      disabledUnit: '条停用',
       adoptedUnit: '条本地采纳',
-      reportStored: '报告已存本机',
       fromPack: '随包提供',
-      pendingReview: '待审阅',
-      reviewDone: '已全部处理',
       never: '尚未蒸馏',
       generated: '蒸馏于',
       review: '蒸馏建议',
@@ -105,28 +96,97 @@ window.__ModuleLoader__.load({
       adoptedLabel: '蒸馏采纳',
       presentLabel: '已在包内',
       unadopt: '撤销',
-      severityHigh: '高',
-      severityMedium: '中',
-      severityLow: '低',
       evidence: '证据',
       noEvidence: '无证据',
-      noRules: '这个包还没有规则。',
-      noSkills: '这个包没有内置技能。',
-      noMatch: '没有匹配的条目。',
-      clearFilters: '清除筛选',
       all: '全部',
       enabled: '启用',
       disabled: '停用',
       distilledFilter: '蒸馏采纳',
       noEvidenceFilter: '缺证据',
-      searchRules: '搜索规则…',
-      searchSkills: '搜索技能…',
-      expandAll: '展开全部',
-      collapseAll: '收起全部',
-      showAll: '展开全部',
-      showLess: '收起',
-      evidenceToggle: '本地证据与来源',
+      about: '关于',
       aboutHint: '只读本机数据，不联网、不上传；蒸馏只保存聚合统计。',
+      rulesLabel: '规则',
+      skillsLabel: '技能',
+      loadingPack: '正在加载工作方式包…',
+      opLoadPack: '加载工作方式包',
+      packNotFound: '找不到工作方式包：',
+      backToPacks: '返回工作方式包',
+      loadingDefault: '正在加载…',
+      failPrefix: '失败：',
+      failFallback: '暂时无法完成。',
+      retry: '重试',
+      noCwd: '未指定目录',
+      sessionPrefix: '会话 ',
+      noSession: '未指定会话',
+      loadingShort: '加载中…',
+      reportsUnavailable: '报告历史不可用',
+      exportsUnavailable: '导出历史不可用',
+      envLoadingRetry: '环境正在加载，请稍后重试',
+      opStatus: '状态加载',
+      loadingStatus: '正在加载工作方式状态…',
+      packResourcesAria: '工作方式包资源',
+      opExport: '导出工作方式包',
+      recentExports: '最近导出',
+      opLoadExportHistory: '加载导出历史',
+      noExportsYet: '还没有导出记录。复制安装命令后，导出一个包交给队友。',
+      loadingEnv: '正在读取当前环境的数据，请稍候。',
+      envLabel: '当前环境',
+      tabRun: '运行台',
+      tabPacks: '工作方式包',
+      tabDistill: '蒸馏',
+      tabMetrics: '度量台',
+      tabDistribute: '分发',
+      navWorkstyle: '工作方式',
+      opRun: '执行当前操作',
+      opRefreshEnv: '刷新当前环境',
+      opReadPack: '读取当前工作方式包',
+      noActivePackLong: '没有可用的当前工作方式包。',
+      packHint: '选择一个包查看它的规则、技能、预设与模板。',
+      packActiveBadge: '当前',
+      packInactiveBadge: '未启用',
+      packActiveNow: '当前生效',
+      packViewable: '可查看',
+      sourcePrefix: '来源：',
+      sourceBuiltin: '本地内置',
+      rulesUnit: '条规则',
+      skillsUnit: '个技能',
+      readonly: '只读',
+      emptyNone: '暂无',
+      originPackBadge: '包',
+      presetsLabel: '预设',
+      templatesLabel: '模板',
+      currentProject: '当前项目：',
+      installCommandLabel: '安装命令',
+      filesUnit: '个文件',
+      exportScopeHint: '导出只包含可移植的工作方式包；作用域快照只保存项目规则、停用项与预设，不包含任意文件内容。',
+      distillReview: '蒸馏审阅',
+      localData: '本地数据',
+      scanHint: '扫描本机会话生成聚合建议；不联网、不上传，不保存 prompt 原文。',
+      lastGenerated: '最近生成：',
+      neverScanned: '尚未扫描',
+      sourceAvailable: '可用',
+      sourceMissing: '未发现',
+      sourcesAfterScan: '扫描后显示本机来源状态。',
+      suggestionsReview: '建议审阅',
+      reportHistory: '报告历史',
+      opLoadHistory: '加载报告历史',
+      noAvailableSources: '无可用来源',
+      suggestionsCountUnit: '条建议',
+      noReportsYet: '还没有报告。扫描本地数据后，这里只显示生成时间、来源和建议数量。',
+      viewMetrics: '查看代理度量 →',
+      formula: '公式：',
+      denominator: '分母：',
+      window: '窗口：',
+      agentMetrics: '代理度量',
+      recomputable: '可复算',
+      metricsCaveat: '这些数字描述可观察的提示与来源覆盖，不能说明模型是否遵守规则。',
+      tabMetricsPill: '度量',
+      tabSources: '来源',
+      defaultCaveat: '这些是代理指标，只描述可观察信号。',
+      noMetricsYet: '还没有可用度量',
+      distillFirstHint: '先蒸馏一次本机会话，再回来查看代理度量。',
+      goDistill: '先去蒸馏 →',
+
       privacy: '只读本机数据，不联网、不上传，不保存 prompt 原文',
       evidenceHint: '点「蒸馏证据」扫描本机会话，生成可审阅的聚合报告（不保存原文）。',
       promptUnit: '条 prompt',
@@ -136,7 +196,6 @@ window.__ModuleLoader__.load({
       toolCallsUnit: '次工具调用',
       messagesUnit: '条消息',
       sampled: '采样',
-      error: '出错了',
       applied: '已应用',
       distilled: '蒸馏完成，报告已写入本机',
       confidence: '置信度',
@@ -151,17 +210,12 @@ window.__ModuleLoader__.load({
       /* v5 · 环境 */
       session: '当前会话',
       project: '项目',
-      workspace: '全局',
-      scope: '作用域',
       scopeWorkspace: '全局',
       scopeSession: '会话',
       injected: '注入中',
       fingerprint: '指纹',
       pending: '待办',
-      navInject: '载入预览',
       navPresets: '预设与规则',
-      navMetrics: '度量',
-      navDistribution: '分发',
       injectTitle: '载入预览',
       injectHint: '系统提示里真实的那一段，与 /workstyle status 同源',
       injectRender: '渲染函数 renderRules()',
@@ -183,14 +237,7 @@ window.__ModuleLoader__.load({
       presetRules: '规则',
       presetSkills: '技能',
       presetTemplates: '模板',
-      usePreset: '启用',
-      metricsTitle: '度量',
-      metricsHint: '只用可复算的代理指标，不推断是否遵守',
-      metricsWindow: '窗口',
-      metricsRebuild: '重新蒸馏',
       metricsUnavailable: '尚未蒸馏：先运行一次蒸馏，度量才有可复算的底稿。',
-      metricsFormula: '口径',
-      metricsDenominator: '分母',
       baseline: '较上次',
       distributionTitle: '分发',
       exportWithScope: '导出包 + 作用域快照',
@@ -199,7 +246,6 @@ window.__ModuleLoader__.load({
       todoEvidence: '规则缺证据',
       todoConflict: '作用域冲突',
       todoUnverified: '未验证宣称',
-      todoNone: '没有待办',
       projectFile: '项目叠层读取自',
       noProjectFile: '尚未创建项目叠层',
       disabledBy: '被覆盖',
@@ -208,7 +254,6 @@ window.__ModuleLoader__.load({
       severityMedium: '中',
       severityLow: '低',
       originPack: '包',
-      originDistilled: '蒸馏',
       originProject: '项目',
       newRule: '新建规则',
       editRule: '编辑',
@@ -232,28 +277,18 @@ window.__ModuleLoader__.load({
       nav: 'Workstyle',
       title: 'Workstyle',
       packs: 'Packs',
-      rules: 'Rules',
       skills: 'Skills',
       refresh: 'Refresh',
       distill: 'Distill evidence',
       distilling: 'Distilling…',
-      export: 'Export pack',
       exporting: 'Exporting…',
       exported: 'Exported',
       copyCommand: 'Copy install command',
       copyPath: 'Copy path',
       copyFailed: 'Copy failed; please copy manually',
       copied: 'Copied',
-      packDir: 'pack directory',
-      installHint: 'After installing the plugin, extract exported packs into ~/.dsh/workstyle/packs/ and switch from the picker.',
-      distribution: 'Distribution',
-      allEnabled: 'all active',
-      disabledUnit: 'disabled',
       adoptedUnit: 'local adoption(s)',
-      reportStored: 'report saved locally',
       fromPack: 'from pack',
-      pendingReview: 'to review',
-      reviewDone: 'all handled',
       never: 'Not distilled yet',
       generated: 'Latest distillation',
       review: 'Distillation review',
@@ -266,28 +301,97 @@ window.__ModuleLoader__.load({
       adoptedLabel: 'adopted',
       presentLabel: 'already in pack',
       unadopt: 'Revoke',
-      severityHigh: 'high',
-      severityMedium: 'medium',
-      severityLow: 'low',
       evidence: 'Evidence',
       noEvidence: 'No evidence',
-      noRules: 'This pack has no rules yet.',
-      noSkills: 'This pack ships no skills.',
-      noMatch: 'No matching items.',
-      clearFilters: 'Clear filters',
       all: 'All',
       enabled: 'Enabled',
       disabled: 'Disabled',
       distilledFilter: 'Adopted',
       noEvidenceFilter: 'No evidence',
-      searchRules: 'Search rules…',
-      searchSkills: 'Search skills…',
-      expandAll: 'Expand all',
-      collapseAll: 'Collapse all',
-      showAll: 'Show all',
-      showLess: 'Collapse',
-      evidenceToggle: 'Local evidence & sources',
+      about: 'About',
       aboutHint: 'Read-only local data · no network · no upload; distillation stores aggregates only.',
+      rulesLabel: 'Rules',
+      skillsLabel: 'Skills',
+      loadingPack: 'Loading pack…',
+      opLoadPack: 'Load pack',
+      packNotFound: 'Pack not found: ',
+      backToPacks: 'Back to packs',
+      loadingDefault: 'Loading…',
+      failPrefix: 'failed: ',
+      failFallback: 'The operation could not be completed.',
+      retry: 'Retry',
+      noCwd: 'no directory',
+      sessionPrefix: 'session ',
+      noSession: 'no session',
+      loadingShort: 'loading…',
+      reportsUnavailable: 'Report history unavailable',
+      exportsUnavailable: 'Export history unavailable',
+      envLoadingRetry: 'Environment is loading, please retry',
+      opStatus: 'Load status',
+      loadingStatus: 'Loading workstyle status…',
+      packResourcesAria: 'Pack resources',
+      opExport: 'Export pack',
+      recentExports: 'Recent exports',
+      opLoadExportHistory: 'Load export history',
+      noExportsYet: 'No exports yet. Copy the install command, then export a pack for your teammate.',
+      loadingEnv: 'Loading the current environment, please wait.',
+      envLabel: 'Current environment',
+      tabRun: 'Run console',
+      tabPacks: 'Workstyle packs',
+      tabDistill: 'Distill',
+      tabMetrics: 'Metrics',
+      tabDistribute: 'Distribute',
+      navWorkstyle: 'Workstyle',
+      opRun: 'Run operation',
+      opRefreshEnv: 'Refresh environment',
+      opReadPack: 'Read active pack',
+      noActivePackLong: 'No active workstyle pack available.',
+      packHint: 'Pick a pack to inspect its rules, skills, presets and templates.',
+      packActiveBadge: 'active',
+      packInactiveBadge: 'inactive',
+      packActiveNow: 'currently active',
+      packViewable: 'viewable',
+      sourcePrefix: 'Source: ',
+      sourceBuiltin: 'bundled',
+      rulesUnit: 'rules',
+      skillsUnit: 'skills',
+      readonly: 'read-only',
+      emptyNone: 'none',
+      originPackBadge: 'pack',
+      presetsLabel: 'Presets',
+      templatesLabel: 'Templates',
+      currentProject: 'Current project: ',
+      installCommandLabel: 'Install command',
+      filesUnit: 'files',
+      exportScopeHint: 'Exports contain only the portable workstyle pack; the scope snapshot stores project rules, disabled ids and presets, never arbitrary file content.',
+      distillReview: 'Distill review',
+      localData: 'local data',
+      scanHint: 'Scan local sessions into aggregate suggestions; no network, no upload, no prompt text stored.',
+      lastGenerated: 'Last generated: ',
+      neverScanned: 'not scanned yet',
+      sourceAvailable: 'available',
+      sourceMissing: 'not found',
+      sourcesAfterScan: 'Source status appears after a scan.',
+      suggestionsReview: 'Suggestion review',
+      reportHistory: 'Report history',
+      opLoadHistory: 'Load report history',
+      noAvailableSources: 'no available sources',
+      suggestionsCountUnit: ' suggestions',
+      noReportsYet: 'No reports yet. After a scan this lists generation time, sources and suggestion counts only.',
+      viewMetrics: 'View agent metrics →',
+      formula: 'Formula: ',
+      denominator: 'Denominator: ',
+      window: 'Window: ',
+      agentMetrics: 'Agent metrics',
+      recomputable: 'recomputable',
+      metricsCaveat: 'These numbers describe observable prompts and source coverage, not rule compliance.',
+      tabMetricsPill: 'Metrics',
+      tabSources: 'Sources',
+      defaultCaveat: 'These are agent metrics over observable signals only.',
+      noMetricsYet: 'No metrics yet',
+      distillFirstHint: 'Distill local sessions once, then come back to agent metrics.',
+      goDistill: 'Distill first →',
+
       privacy: 'Read-only local data. No network. No upload. Raw prompts never stored.',
       evidenceHint: 'Run "Distill evidence" to scan local sessions into a reviewable aggregate report (raw prompts are never stored).',
       promptUnit: 'prompts',
@@ -297,7 +401,6 @@ window.__ModuleLoader__.load({
       toolCallsUnit: 'tool calls',
       messagesUnit: 'messages',
       sampled: 'sampled',
-      error: 'Error',
       applied: 'Applied',
       distilled: 'Distillation finished; the report is stored locally',
       confidence: 'confidence',
@@ -312,17 +415,12 @@ window.__ModuleLoader__.load({
       /* v5 · environment */
       session: 'Session',
       project: 'Project',
-      workspace: 'Global',
-      scope: 'Scope',
       scopeWorkspace: 'Global',
       scopeSession: 'Session',
       injected: 'Injecting',
       fingerprint: 'Fingerprint',
       pending: 'To do',
-      navInject: 'Loaded text',
       navPresets: 'Presets & rules',
-      navMetrics: 'Metrics',
-      navDistribution: 'Distribute',
       injectTitle: 'Loaded text',
       injectHint: 'The exact section sent in the system prompt — same source as /workstyle status',
       injectRender: 'renderer renderRules()',
@@ -344,14 +442,7 @@ window.__ModuleLoader__.load({
       presetRules: 'Rules',
       presetSkills: 'Skills',
       presetTemplates: 'Templates',
-      usePreset: 'Use',
-      metricsTitle: 'Metrics',
-      metricsHint: 'Recomputable proxies only; never infers compliance',
-      metricsWindow: 'Window',
-      metricsRebuild: 'Re-distill',
       metricsUnavailable: 'Not distilled yet: run a distillation first, then the numbers have a source.',
-      metricsFormula: 'Formula',
-      metricsDenominator: 'Denominator',
       baseline: 'vs previous',
       distributionTitle: 'Distribute',
       exportWithScope: 'Export pack + scope snapshot',
@@ -360,7 +451,6 @@ window.__ModuleLoader__.load({
       todoEvidence: 'rules without evidence',
       todoConflict: 'scope conflicts',
       todoUnverified: 'unverified claims',
-      todoNone: 'Nothing to do',
       projectFile: 'Project layer read from',
       noProjectFile: 'No project layer yet',
       disabledBy: 'overridden',
@@ -369,7 +459,6 @@ window.__ModuleLoader__.load({
       severityMedium: 'medium',
       severityLow: 'low',
       originPack: 'pack',
-      originDistilled: 'distilled',
       originProject: 'project',
       newRule: 'New rule',
       editRule: 'Edit',
@@ -945,10 +1034,10 @@ window.__ModuleLoader__.load({
     }
 
     function Loading(props) {
-      const label = (props && props.label) || '正在加载…'
+      const label = (props && props.label) || scopedT('loadingDefault')
       return h('div', { style: S.empty, role: 'status', 'aria-live': 'polite' },
         h('div', { style: S.ruleTitle }, label),
-        h('div', { style: S.hint }, '正在读取当前环境的数据，请稍候。'),
+        h('div', { style: S.hint }, scopedT('loadingEnv')),
         h('div', { style: { ...S.skeleton, height: 8, width: '38%' }, 'aria-hidden': 'true' }))
     }
 
@@ -967,8 +1056,8 @@ window.__ModuleLoader__.load({
     function ErrorState(props) {
       const { operation, message, onRetry } = props
       return h('div', { style: S.banner('error'), role: 'alert' },
-        h('span', null, operation + '失败：' + (message || '暂时无法完成。')),
-        onRetry ? h('button', { type: 'button', style: S.linkAccent, onClick: onRetry }, '重试') : null)
+        h('span', null, operation + scopedT('failPrefix') + (message || scopedT('failFallback'))),
+        onRetry ? h('button', { type: 'button', style: S.linkAccent, onClick: onRetry }, scopedT('retry')) : null)
     }
 
     function Notice(props) {
@@ -977,13 +1066,13 @@ window.__ModuleLoader__.load({
 
     function EnvironmentContextBar({ environment }) {
       return h('div', {
-        role: 'region', 'aria-label': '当前环境',
+        role: 'region', 'aria-label': scopedT('envLabel'),
         style: { ...S.rail, marginBottom: 16 },
       },
-        h('span', { style: S.railLabel }, '当前环境'),
-        h('span', { style: S.railValue }, environment.cwd || '未指定目录'),
-        h('span', { style: S.railLabel }, environment.sessionId ? '会话 ' + environment.sessionId : '未指定会话'),
-        environment.loading ? h('span', { style: S.railLabel }, '加载中…') : null,
+        h('span', { style: S.railLabel }, scopedT('envLabel')),
+        h('span', { style: S.railValue }, environment.cwd || scopedT('noCwd')),
+        h('span', { style: S.railLabel }, environment.sessionId ? scopedT('sessionPrefix') + environment.sessionId : scopedT('noSession')),
+        environment.loading ? h('span', { style: S.railLabel }, scopedT('loadingShort')) : null,
         environment.error ? h('span', { style: { ...S.railLabel, color: ERROR } }, environment.error) : null)
     }
 
@@ -1188,12 +1277,12 @@ window.__ModuleLoader__.load({
         getJson('reports').then((result) => {
           if (requestId !== statusRequest.current) return
           if (result.ok && result.data && Array.isArray(result.data.reports)) setReports(result.data.reports)
-          else setReportsError(result.error || (result.data && result.data.error) || '报告历史不可用')
+          else setReportsError(result.error || (result.data && result.data.error) || scopedT('reportsUnavailable'))
         })
         getJson('exports').then((result) => {
           if (requestId !== statusRequest.current) return
           if (result.ok && result.data && Array.isArray(result.data.exports)) setExports(result.data.exports)
-          else setExportsError(result.error || (result.data && result.data.error) || '导出历史不可用')
+          else setExportsError(result.error || (result.data && result.data.error) || scopedT('exportsUnavailable'))
         })
         fetch('/api/dsh-workstyle/status', { headers: { accept: 'application/json' } })
           .then((response) => {
@@ -1209,7 +1298,11 @@ window.__ModuleLoader__.load({
             if (data && data.latestDistill) {
               fetch('/api/dsh-workstyle/evidence', { headers: { accept: 'application/json' } })
                 .then((response) => (response.ok ? response.json() : null))
-                .then((evidence) => { if (evidence) setReport(evidence) })
+                .then((evidence) => {
+                  // Same generation guard as reports/exports below: a slow
+                  // stale response must not overwrite a newer distill result.
+                  if (evidence && requestId === statusRequest.current && requestEnvQuery === envQueryRef.current) setReport(evidence)
+                })
                 .catch(() => {})
             }
             loadEnv()
@@ -1344,7 +1437,7 @@ window.__ModuleLoader__.load({
               setExports(result.data.exports)
               setExportsError('')
             } else {
-              setExportsError(result && result.error ? result.error : (result && result.data && result.data.error) || '导出历史不可用')
+              setExportsError(result && result.error ? result.error : (result && result.data && result.data.error) || scopedT('exportsUnavailable'))
             }
           })
           .catch((err) => {
@@ -1379,7 +1472,7 @@ window.__ModuleLoader__.load({
 
       const requireCurrentContext = () => {
         if (envContextRef.current.loadedQuery === envQuery) return true
-        setError('环境正在加载，请稍后重试')
+        setError(scopedT('envLoadingRetry'))
         return false
       }
 
@@ -1517,10 +1610,10 @@ window.__ModuleLoader__.load({
         error: error || envError,
       }
       const pageLinks = [
-        ['run', '运行台'], ['packs', '工作方式包'], ['distill', '蒸馏'],
-        ['metrics', '度量台'], ['distribute', '分发'],
+        ['run', t('tabRun')], ['packs', t('tabPacks')], ['distill', t('tabDistill')],
+        ['metrics', t('tabMetrics')], ['distribute', t('tabDistribute')],
       ]
-      const primaryNav = h('nav', { 'aria-label': '工作方式', style: S.tabs },
+      const primaryNav = h('nav', { 'aria-label': t('navWorkstyle'), style: S.tabs },
         pageLinks.map(([page, label]) => h('a', {
           key: page,
           href: routeHash(page),
@@ -1544,17 +1637,17 @@ window.__ModuleLoader__.load({
           primaryNav,
           environmentBar,
           headerContent || null,
-          showBanners && error ? h(ErrorState, { operation: '执行当前操作', message: error, onRetry: load }) : null,
+          showBanners && error ? h(ErrorState, { operation: t('opRun'), message: error, onRetry: load }) : null,
           showBanners && notice ? h(Notice, null, notice) : null,
-          showBanners && envError ? h(ErrorState, { operation: '刷新当前环境', message: envError, onRetry: load }) : null,
+          showBanners && envError ? h(ErrorState, { operation: t('opRefreshEnv'), message: envError, onRetry: load }) : null,
           h('main', { id: 'dsw-main', 'aria-live': 'polite' }, mainChildren),
           footerContent || null))
 
       if (!status) {
         if (error) {
-          return shell(h(ErrorState, { operation: '状态加载', message: error, onRetry: load }), null, null, false)
+          return shell(h(ErrorState, { operation: scopedT('opStatus'), message: error, onRetry: load }), null, null, false)
         }
-        return shell(h(Loading, { label: '正在加载工作方式状态…' }), null, null, false)
+        return shell(h(Loading, { label: scopedT('loadingStatus') }), null, null, false)
       }
 
       const active = status.activePack
@@ -1568,7 +1661,7 @@ window.__ModuleLoader__.load({
       const summary = status.summary || {}
 
       if (!active) {
-        return shell(h(ErrorState, { operation: '读取当前工作方式包', message: '没有可用的当前工作方式包。', onRetry: load }), null, null, false)
+        return shell(h(ErrorState, { operation: t('opReadPack'), message: t('noActivePackLong'), onRetry: load }), null, null, false)
       }
 
       const enabledRules = rules.filter((rule) => rule.enabled !== false)
@@ -1917,7 +2010,7 @@ window.__ModuleLoader__.load({
                 h('span', null, inj.chars + ' ' + t('injectChars')),
                 h('span', null, inj.ruleCount + ' ' + t('injectRulesUnit') + ' · ' + inj.skillCount + ' ' + t('injectSkillsUnit')))),
             h('pre', { style: injectOpen ? { ...S.injectText, ...S.injectTextOpen } : S.injectText },
-              injectOpen ? inj.text : (inj.text.split('\n').slice(0, 12).join('\n') + (inj.chars > 400 ? '\n…' : ''))),
+              injectOpen ? inj.text : ((inj.text || '').split('\n').slice(0, 12).join('\n') + (inj.chars > 400 ? '\n…' : ''))),
             h('div', { style: S.injectFoot },
               h('span', null, t('injectSources') + '：' + t('originPack') + ' ' + (counts.injected - counts.project) +
                 ' · ' + t('project') + ' +' + counts.project +
@@ -2103,8 +2196,8 @@ window.__ModuleLoader__.load({
             },
               h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
                 h('span', { style: S.ruleTitle }, tpl.title || tpl.id),
-                h('span', { style: S.skillDesc, title: tpl.text }, tpl.text.slice(0, 90))),
-              h('button', { style: S.linkButton, onClick: () => onCopy(tpl.text, tpl.title || tpl.id) }, t('injectCopy')))))
+                h('span', { style: S.skillDesc, title: tpl.text }, (tpl.text || '').slice(0, 90))),
+              h('button', { style: S.linkButton, onClick: () => onCopy(tpl.text || '', tpl.title || tpl.id) }, t('injectCopy')))))
             : h('div', { style: S.empty }, h('div', { style: S.hint }, t('envUnavailable') + t('presetTemplates'))))
 
       const presetsBlock = h(Section, {
@@ -2217,7 +2310,7 @@ window.__ModuleLoader__.load({
         }, reviewSectionBody) : null)
 
       const packListBody = h('div', null,
-        h('div', { style: S.hint }, '选择一个包查看它的规则、技能、预设与模板。'),
+        h('div', { style: S.hint }, t('packHint')),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10, paddingTop: 14 } },
           packs.map((pack) => h('a', {
             key: pack.id, href: routeHash('packs', pack.id), style: { ...S.tile, textDecoration: 'none' },
@@ -2225,47 +2318,47 @@ window.__ModuleLoader__.load({
           },
             h('div', { style: S.ruleTitleRow },
               h('span', { style: S.ruleTitle }, pack.displayName || pack.name || pack.id),
-              pack.id === active.id ? h('span', { style: S.badge }, '当前') : null),
+              pack.id === active.id ? h('span', { style: S.badge }, t('packActiveBadge')) : null),
             h('span', { style: S.mono }, pack.id + ' · v' + pack.version),
-            h('span', { style: S.tileSub }, '来源：' + (pack.source || '本地内置') + ' · ' + (pack.ruleCount || 0) + ' 条规则 · ' + (pack.skillCount || 0) + ' 个技能'),
-            pack.id === active.id ? h('span', { style: S.hint }, '当前生效') : h('span', { style: S.hint }, '可查看')))))
+            h('span', { style: S.tileSub }, t('sourcePrefix') + (pack.source || t('sourceBuiltin')) + ' · ' + (pack.ruleCount || 0) + ' ' + t('rulesUnit') + ' · ' + (pack.skillCount || 0) + ' ' + t('skillsUnit')),
+            pack.id === active.id ? h('span', { style: S.hint }, t('packActiveNow')) : h('span', { style: S.hint }, t('packViewable'))))))
 
       const routePackDetail = packDetail && packDetail.id === route.packId ? packDetail : null
       const selectedPack = routePackDetail || packs.find((pack) => pack.id === route.packId) || null
       const selectedIsActive = !!selectedPack && selectedPack.id === active.id
       const detailTabs = [
-        ['rules', '规则', selectedPack ? (selectedIsActive ? scopedRules.length : (selectedPack.rules || []).length) : 0],
-        ['skills', '技能', selectedPack ? (selectedIsActive ? scopedSkills.length : (selectedPack.skills || []).length) : 0],
-        ['presets', '预设', selectedPack ? (selectedIsActive ? presets.length : (selectedPack.presets || []).length) : 0],
-        ['templates', '模板', selectedPack ? (selectedIsActive ? templates.length : (selectedPack.templates || []).length) : 0],
+        ['rules', t('rulesLabel'), selectedPack ? (selectedIsActive ? scopedRules.length : (selectedPack.rules || []).length) : 0],
+        ['skills', t('skillsLabel'), selectedPack ? (selectedIsActive ? scopedSkills.length : (selectedPack.skills || []).length) : 0],
+        ['presets', t('presetsLabel'), selectedPack ? (selectedIsActive ? presets.length : (selectedPack.presets || []).length) : 0],
+        ['templates', t('templatesLabel'), selectedPack ? (selectedIsActive ? templates.length : (selectedPack.templates || []).length) : 0],
       ]
       const readOnlyResource = (label, items, render) => h('section', { style: S.section },
         h('div', { style: S.sectionHead }, h('span', { style: S.sectionLabel }, label), h('span', { style: S.sectionCount }, String(items.length)),
-          h('span', { style: S.sectionRight }, '只读')),
+          h('span', { style: S.sectionRight }, t('readonly'))),
         items.length ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, items.map(render))
-          : h('div', { style: S.empty }, h('div', { style: S.hint }, '暂无' + label)))
+          : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + label)))
       const nonActiveDetail = selectedPack
         ? packTab === 'rules'
-          ? readOnlyResource('规则', selectedPack.rules || [], (rule) => h('div', { key: rule.id, style: S.ruleRowV5 },
-            h('span', { style: S.scopeBadge('workspace') }, '包'), h('div', { style: { minWidth: 0 } }, h('div', { style: S.ruleTitle }, rule.title), h('div', { style: S.ruleText }, rule.text)), h('span', { style: S.mutedBadge }, '只读')))
+          ? readOnlyResource(t('rulesLabel'), selectedPack.rules || [], (rule) => h('div', { key: rule.id, style: S.ruleRowV5 },
+            h('span', { style: S.scopeBadge('workspace') }, t('originPackBadge')), h('div', { style: { minWidth: 0 } }, h('div', { style: S.ruleTitle }, rule.title), h('div', { style: S.ruleText }, rule.text)), h('span', { style: S.mutedBadge }, t('readonly'))))
           : packTab === 'skills'
-            ? readOnlyResource('技能', selectedPack.skills || [], (skill) => h('div', { key: skill.name, style: S.skillRow },
-              h('div', { style: S.skillHead }, h('span', { style: S.skillName }, skill.name), h('span', { style: S.skillDesc }, skill.description || ''), h('span', { style: S.mutedBadge }, '只读'))))
+            ? readOnlyResource(t('skillsLabel'), selectedPack.skills || [], (skill) => h('div', { key: skill.name, style: S.skillRow },
+              h('div', { style: S.skillHead }, h('span', { style: S.skillName }, skill.name), h('span', { style: S.skillDesc }, skill.description || ''), h('span', { style: S.mutedBadge }, t('readonly')))))
             : packTab === 'presets'
-              ? readOnlyResource('预设', selectedPack.presets || [], (preset) => h('div', { key: preset.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, preset.title || preset.id), h('span', { style: S.ruleSideText }, preset.description || ''), h('span', { style: S.mutedBadge }, '只读')))
-              : readOnlyResource('模板', selectedPack.templates || [], (template) => h('div', { key: template.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, template.title || template.id), h('span', { style: S.ruleSideText }, template.text || ''), h('span', { style: S.mutedBadge }, '只读')))
+              ? readOnlyResource(t('presetsLabel'), selectedPack.presets || [], (preset) => h('div', { key: preset.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, preset.title || preset.id), h('span', { style: S.ruleSideText }, preset.description || ''), h('span', { style: S.mutedBadge }, t('readonly'))))
+              : readOnlyResource(t('templatesLabel'), selectedPack.templates || [], (template) => h('div', { key: template.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, template.title || template.id), h('span', { style: S.ruleSideText }, template.text || ''), h('span', { style: S.mutedBadge }, t('readonly'))))
         : null
       const packDetailPageBody = !route.packId
         ? packListBody
         : packLoading && !selectedPack
-          ? h(Loading, { label: '正在加载工作方式包…' })
+          ? h(Loading, { label: t('loadingPack') })
           : (packError && !routePackDetail) || !selectedPack
             ? h('div', { style: S.empty },
-              h(ErrorState, { operation: '加载工作方式包', message: '找不到工作方式包：' + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => setPackReload((n) => n + 1) }),
-              h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, '返回工作方式包'))
+              h(ErrorState, { operation: t('opLoadPack'), message: t('packNotFound') + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => setPackReload((n) => n + 1) }),
+              h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, t('backToPacks')))
             : h('div', null,
-              h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, '当前') : h('span', { style: S.mutedBadge }, '未启用')), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, '来源：' + (selectedPack.source || '本地内置') + ' · ' + selectedPack.ruleCount + ' 条规则 · ' + selectedPack.skillCount + ' 个技能')),
-              h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
+              h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, t('packActiveBadge')) : h('span', { style: S.mutedBadge }, t('packInactiveBadge'))), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, t('sourcePrefix') + (selectedPack.source || t('sourceBuiltin')) + ' · ' + selectedPack.ruleCount + ' ' + t('rulesUnit') + ' · ' + selectedPack.skillCount + ' ' + t('skillsUnit'))),
+              h('div', { role: 'tablist', 'aria-label': scopedT('packResourcesAria'), style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
               h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
       const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory }) => {
@@ -2277,7 +2370,7 @@ window.__ModuleLoader__.load({
             h('div', { style: S.ruleTitleRow },
               h('span', { style: S.ruleTitle }, t('distributionTitle')),
               h('span', { style: S.badge }, active.displayName + ' v' + active.version)),
-            h('div', { style: S.hint }, '导出只包含可移植的工作方式包；作用域快照只保存项目规则、停用项与预设，不包含任意文件内容。'),
+            h('div', { style: S.hint }, t('exportScopeHint')),
             h('div', { style: { ...S.distPrimaryRow, paddingTop: 14 } },
               h('button', {
                 style: exportDisabled ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
@@ -2288,26 +2381,26 @@ window.__ModuleLoader__.load({
                 onClick: () => exportAction(false), disabled: exportDisabled,
               }, exportBusy === 'pack' ? t('exporting') : t('exportPackOnly'))),
             h('div', { style: S.installRow },
-              h('span', { style: S.hint }, '安装命令'),
+              h('span', { style: S.hint }, t('installCommandLabel')),
               h('code', { style: S.code }, installCommand),
               h('button', { style: S.linkAccent, onClick: copyInstall }, t('copyCommand'))),
-            cwd ? h('div', { style: { ...S.hint, paddingTop: 8 } }, '当前项目：', h('span', { style: S.mono }, cwd)) : null,
+            cwd ? h('div', { style: { ...S.hint, paddingTop: 8 } }, t('currentProject'), h('span', { style: S.mono }, cwd)) : null,
             result
               ? h('div', { style: { ...S.banner('info'), marginTop: 12 } },
                 h('div', null, t('exported') + '：', h('span', { style: S.mono }, result.file)),
-                h('div', { style: S.hint }, nf(result.files) + ' 个文件 · ' + nf(result.bytes) + ' bytes'),
+                h('div', { style: S.hint }, nf(result.files) + ' ' + t('filesUnit') + ' · ' + nf(result.bytes) + ' bytes'),
                 copyArchive ? h('button', { style: { ...S.linkAccent, marginTop: 6 }, onClick: copyArchive }, t('copyPath')) : null)
               : null,
             exportError ? h('div', { style: { marginTop: 12 } },
               h(ErrorState, {
-                operation: '导出工作方式包',
+                operation: scopedT('opExport'),
                 message: exportError,
                 onRetry: (lastMode === null || lastMode === undefined) ? undefined : () => exportAction(lastMode),
               })) : null),
-          h(Section, { id: 'dsw-distribution-history', label: '最近导出', count: history.length },
+          h(Section, { id: 'dsw-distribution-history', label: scopedT('recentExports'), count: history.length },
             historyError
               ? h('div', { style: { paddingBottom: history.length ? 12 : 0 } },
-                h(ErrorState, { operation: '加载导出历史', message: historyError, onRetry: onRetryHistory }))
+                h(ErrorState, { operation: scopedT('opLoadExportHistory'), message: historyError, onRetry: onRetryHistory }))
               : null,
             history.length
               ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, history.map((item) =>
@@ -2319,7 +2412,7 @@ window.__ModuleLoader__.load({
                   h('span', { style: S.mutedBadge }, nf(item.bytes) + ' bytes'))))
               : !historyError
                 ? h('div', { style: S.empty },
-                  h('div', { style: S.hint }, '还没有导出记录。复制安装命令后，导出一个包交给队友。'),
+                  h('div', { style: S.hint }, scopedT('noExportsYet')),
                   h('button', { style: S.buttonPrimary, disabled: exportDisabled, onClick: () => exportAction(false) }, t('exportPackOnly')))
                 : null))
       }
@@ -2330,25 +2423,25 @@ window.__ModuleLoader__.load({
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
           h('div', { style: S.tile },
             h('div', { style: S.ruleTitleRow },
-              h('span', { style: S.ruleTitle }, '蒸馏审阅'),
-              h('span', { style: S.badge }, '本地数据')),
-            h('div', { style: S.hint }, '扫描本机会话生成聚合建议；不联网、不上传，不保存 prompt 原文。'),
+              h('span', { style: S.ruleTitle }, t('distillReview')),
+              h('span', { style: S.badge }, t('localData'))),
+            h('div', { style: S.hint }, t('scanHint')),
             h('div', { style: { ...S.actionsBar, paddingTop: 12 } },
               h('button', { style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary, disabled: !!busy, onClick: onScan },
                 busy === 'distill' ? t('distilling') : t('distill')),
-              h('span', { style: S.actionsNote }, latest ? '最近生成：' + when(latest.generatedAt) : '尚未扫描')),
+              h('span', { style: S.actionsNote }, latest ? t('lastGenerated') + when(latest.generatedAt) : t('neverScanned'))),
             sourceEntries.length
               ? h('div', { style: { ...S.sourceList, paddingBottom: 0 } }, sourceEntries.map(([key, source]) =>
                 h('div', { key, style: S.sourceRow },
                   h('span', { style: S.sourceName }, sourceLabels[key] || key),
-                  h('span', { style: S.sourcePath }, source && source.available ? '可用' : '未发现'))))
-              : h('div', { style: S.hint }, '扫描后显示本机来源状态。')),
-          h(Section, { id: 'dsw-distill-review', label: '建议审阅', count: suggestions.length, right: reviewSectionRight },
+                  h('span', { style: S.sourcePath }, source && source.available ? t('sourceAvailable') : t('sourceMissing')))))
+              : h('div', { style: S.hint }, t('sourcesAfterScan'))),
+          h(Section, { id: 'dsw-distill-review', label: t('suggestionsReview'), count: suggestions.length, right: reviewSectionRight },
             reviewSectionBody),
-          h(Section, { id: 'dsw-distill-history', label: '报告历史', count: reports.length },
+          h(Section, { id: 'dsw-distill-history', label: t('reportHistory'), count: reports.length },
             historyError
               ? h('div', { style: { paddingBottom: reports.length ? 12 : 0 } },
-                h(ErrorState, { operation: '加载报告历史', message: historyError, onRetry: onRetryHistory }))
+                h(ErrorState, { operation: t('opLoadHistory'), message: historyError, onRetry: onRetryHistory }))
               : null,
             reports.length
               ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, reports.map((item) =>
@@ -2356,12 +2449,12 @@ window.__ModuleLoader__.load({
                   h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
                     h('span', { style: S.ruleTitle }, when(item.generatedAt) || item.file),
                     h('span', { style: S.hint }, item.file)),
-                  h('span', { style: S.ruleSideText }, Object.entries(item.sources || {}).filter(([, available]) => available).map(([key]) => sourceLabels[key] || key).join(' · ') || '无可用来源'),
-                  h('span', { style: S.mutedBadge }, String(item.suggestionCount || 0) + ' 条建议'))))
+                  h('span', { style: S.ruleSideText }, Object.entries(item.sources || {}).filter(([, available]) => available).map(([key]) => sourceLabels[key] || key).join(' · ') || t('noAvailableSources')),
+                  h('span', { style: S.mutedBadge }, String(item.suggestionCount || 0) + ' ' + t('suggestionsCountUnit')))))
               : !historyError
-                ? h('div', { style: S.empty }, h('div', { style: S.hint }, '还没有报告。扫描本地数据后，这里只显示生成时间、来源和建议数量。'))
+                ? h('div', { style: S.empty }, h('div', { style: S.hint }, t('noReportsYet')))
                 : null),
-          h('a', { href: '#/metrics', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'metrics' }) } }, '查看代理度量 →'))
+          h('a', { href: '#/metrics', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'metrics' }) } }, t('viewMetrics')))
       }
 
       const MetricsPage = ({ metrics, onNavigate, onScan }) => {
@@ -2378,15 +2471,15 @@ window.__ModuleLoader__.load({
               }, t('baseline') + ' ' + (delta > 0 ? '+' : '') + delta + '%')
               : null),
           h('div', { style: S.metricValueRow }, h('span', { style: S.metricValue }, metric.value), h('span', { style: S.metricUnit }, metric.unit)),
-          h('div', { style: S.metricFormula }, h('strong', null, '公式：'), metric.formula || '—'),
-          h('div', { style: S.metricFormula }, h('strong', null, '分母：'), metric.denominator || '—'),
-          metric.window ? h('div', { style: S.hint }, '窗口：' + metric.window) : null)
+          h('div', { style: S.metricFormula }, h('strong', null, t('formula')), metric.formula || '—'),
+          h('div', { style: S.metricFormula }, h('strong', null, t('denominator')), metric.denominator || '—'),
+          metric.window ? h('div', { style: S.hint }, t('window') + metric.window) : null)
         })
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
           h('div', { style: S.tile },
-            h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, '代理度量'), h('span', { style: S.badge }, '可复算')),
-            h('div', { style: S.hint }, '这些数字描述可观察的提示与来源覆盖，不能说明模型是否遵守规则。'),
-            metricWindow ? h('div', { style: { ...S.hint, paddingTop: 8 } }, '窗口：' + metricWindow) : null),
+            h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, t('agentMetrics')), h('span', { style: S.badge }, t('recomputable'))),
+            h('div', { style: S.hint }, t('metricsCaveat')),
+            metricWindow ? h('div', { style: { ...S.hint, paddingTop: 8 } }, t('window') + metricWindow) : null),
           available
             ? h('div', null,
               h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
@@ -2394,37 +2487,37 @@ window.__ModuleLoader__.load({
                   style: metricTab === 'metrics' ? { ...S.pill, ...S.pillActive } : S.pill,
                   'aria-pressed': metricTab === 'metrics' ? 'true' : 'false',
                   onClick: () => setMetricTab('metrics'),
-                }, '度量'),
+                }, t('tabMetricsPill')),
                 h('button', {
                   style: metricTab === 'sources' ? { ...S.pill, ...S.pillActive } : S.pill,
                   'aria-pressed': metricTab === 'sources' ? 'true' : 'false',
                   onClick: () => setMetricTab('sources'),
-                }, '来源')),
+                }, t('tabSources'))),
               metricTab === 'metrics'
-                ? h('div', null, h('div', { style: S.metricGrid }, metricCardsPage), h('div', { style: S.caveat }, metrics.caveat || '这些是代理指标，只描述可观察信号。'))
+                ? h('div', null, h('div', { style: S.metricGrid }, metricCardsPage), h('div', { style: S.caveat }, metrics.caveat || t('defaultCaveat')))
                 : h('div', { style: S.evidenceGrid }, (metrics.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
                   h('span', { style: S.statLabel }, item.label), h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
-                  h('span', { style: S.statSub }, item.available ? '可用' : '未发现')))))
+                  h('span', { style: S.statSub }, item.available ? t('sourceAvailable') : t('sourceMissing'))))))
             : h(EmptyState, {
-              title: '还没有可用度量',
-              description: t('metricsUnavailable') + '先蒸馏一次本机会话，再回来查看代理度量。',
-              action: '先去蒸馏 →', href: '#/distill',
+              title: t('noMetricsYet'),
+              description: t('metricsUnavailable') + t('distillFirstHint'),
+              action: t('goDistill'), href: '#/distill',
               onAction: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'distill' }) },
             }))
       }
 
       const pageBody = route.page === 'run'
         ? h('section', { 'aria-labelledby': 'dsw-run-title' },
-          h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, '运行台'), runBody)
+          h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, t('pageRun')), runBody)
         : route.page === 'packs' || route.page === 'pack'
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
-            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? '工作方式包详情' : '工作方式包'), packDetailPageBody)
+            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? t('pagePackDetail') : t('tabPacks')), packDetailPageBody)
           : route.page === 'distill'
-            ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏审阅'), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
+            ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('distillReview')), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
             : route.page === 'metrics'
-              ? h('section', { 'aria-labelledby': 'dsw-metrics-title' }, h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, '度量台'), h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }))
+              ? h('section', { 'aria-labelledby': 'dsw-metrics-title' }, h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('pageMetrics')), h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }))
               : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
-                h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, '分发'),
+                h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, t('pageDistribute')),
                 h(DistributionPage, {
                   exports,
                   cwd: environment.cwd,
@@ -2476,6 +2569,7 @@ window.__ModuleLoader__.load({
     function apply(ctx) {
       ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-workstyle: dictionaries')
       const t = ctx.locale.bind(NS)
+      scopedT = t
 
       ctx.slots.inject('main', () => ctx.slots.register({
         name: 'main',
