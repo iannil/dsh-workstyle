@@ -88,7 +88,15 @@ function loadAllPacks() {
 
 function packDetail(pack) {
   return {
-    ...packSummary(pack),
+    id: pack.id,
+    name: pack.name,
+    displayName: pack.displayName,
+    version: pack.version,
+    license: pack.license,
+    description: pack.description,
+    format: pack.format,
+    ruleCount: pack.rules.length,
+    skillCount: pack.skillCount,
     rules: pack.rules,
     presets: listPresets(pack.presets),
     templates: listTemplates(pack.templates),

@@ -224,6 +224,13 @@ const adoptRoute = await callRoute('/api/dsh-workstyle/adopt', { method: 'POST',
 ok(adoptRoute.status === 200 && adoptRoute.data.ruleCount === 9, 'POST /adopt')
 const packDetail = await callRoute('/api/dsh-workstyle/pack?id=fde-engineering')
 ok(packDetail.status === 200 && packDetail.data.pack.id === 'fde-engineering', 'GET /pack returns a pack detail')
+ok(JSON.stringify(Object.keys(packDetail.data.pack).sort()) === JSON.stringify([
+  'description', 'displayName', 'format', 'id', 'license', 'name', 'presets', 'ruleCount', 'rules', 'skillCount', 'skills', 'templates', 'version',
+]), 'pack detail exposes only portable top-level fields')
+ok(!/(?:^|[" :])\/(?:Users|var|tmp|private|home)\//.test(JSON.stringify(packDetail.data.pack)),
+  'pack detail contains no absolute filesystem paths')
+ok(!/(?:"(?:dir|file|frontmatter)"\s*:)/.test(JSON.stringify(packDetail.data.pack)),
+  'pack detail contains no host-only path or frontmatter fields')
 ok(Array.isArray(packDetail.data.pack.rules), 'pack detail includes rules')
 const detailSkill = packDetail.data.pack.skills[0]
 ok(detailSkill && typeof detailSkill.name === 'string' && typeof detailSkill.description === 'string' && typeof detailSkill.whenToUse === 'string',

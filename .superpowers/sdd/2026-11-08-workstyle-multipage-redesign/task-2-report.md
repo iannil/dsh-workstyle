@@ -63,3 +63,9 @@ Implemented the Task 2 host contract and committed it in the focused Task 2 comm
 - Updated `packDetail()` so `/api/dsh-workstyle/pack` projects each skill to `name`, `description`, and `whenToUse`, matching the portable summary shape and excluding local `dir`/`file` paths and frontmatter.
 - Added smoke assertions covering the portable fields and absence of local path/frontmatter fields.
 - Follow-up verification: `bun test/smoke.mjs` passed all 141 checks; `git diff --check` passed.
+
+## Fix round 2
+
+- Replaced the `/api/dsh-workstyle/pack` top-level spread with an explicit portable projection containing only id, name, displayName, version, license, description, format, counts, rules, presets, templates, and portable skills.
+- Added whole-response smoke assertions for the exact top-level field set, forbidden host-only fields, and absolute filesystem paths.
+- Follow-up verification: `bun test/smoke.mjs` passed all 144 checks; `git diff --check` passed.
