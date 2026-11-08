@@ -983,6 +983,29 @@ console.log('  ✓ sidebar IA (NAV_GROUPS / Sidebar / legacy route aliases)')
   }
 }
 
+/* --- pack detail reskin + locale coverage (Task 8) --- */
+assert.ok(!/S\.tile\b|S\.tileSub\b|dsw-tile-click|noMetricsYet/.test(src), 'dead tile styles/refs must be removed from client.js')
+const packCase = src.match(/const packDetailPageBody[\s\S]*?\n\n      const DistributionPage/)
+assert.ok(packCase, 'packDetailPageBody block missing')
+assert.ok(!/S\.tile/.test(packCase[0]), 'pack detail page must not use the tile style')
+assert.ok(/S\.sectionHead/.test(packCase[0]) && /S\.sectionLabel/.test(packCase[0]), 'pack detail header must use the sectionHead block style')
+
+// --- locale coverage ---
+// The zh/en dictionaries are registered inline via ctx.locale.register and
+// captured above; the scan matches the brief's t() key extraction verbatim.
+const zh = dictionaries.zh
+const en = dictionaries.en
+assert.ok(zh && en, 'zh/en dictionaries must be registered')
+const used = [...src.matchAll(/t\('([a-zA-Z0-9]+)'\)/g)].map(m => m[1])
+const missing = [...new Set(used)].filter(k => !(k in zh))
+assert.deepEqual(missing, [], 'missing locale keys: ' + missing.join(','))
+const missingEn = [...new Set(used)].filter(k => !(k in en))
+assert.deepEqual(missingEn, [], 'missing en locale keys: ' + missingEn.join(','))
+const zhOnly = Object.keys(zh).filter(k => !(k in en))
+const enOnly = Object.keys(en).filter(k => !(k in zh))
+assert.deepEqual(zhOnly.concat(enOnly), [], 'zh/en dictionaries must have identical key sets: ' + zhOnly.concat(enOnly).join(','))
+console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).size + ' t() keys covered in zh/en)')
+
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 
 export { route, hashChange, settle, act, remount, textOf, findHost, button, input, checkbox, currentStatus, detailPacks, detailControl, envControl, statusControl, exportControl, exportCalls, hostContext, fetchLog, failEnv }

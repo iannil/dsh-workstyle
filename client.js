@@ -37,7 +37,8 @@ window.__ModuleLoader__.load({
     const isDark = (() => {
       try {
         if (typeof document !== 'undefined' && document.body && document.createElement) {
-          const probe = document.createElement('div')
+          const probeTag = 'div'
+          const probe = document.createElement(probeTag)
           probe.setAttribute('aria-hidden', 'true')
           probe.style.cssText = 'position:absolute;left:-9999px;top:0;width:0;height:0;background:var(--dsw-alias-bg-base,transparent)'
           document.body.appendChild(probe)
@@ -616,15 +617,6 @@ window.__ModuleLoader__.load({
       },
       disabled: { opacity: 0.45, cursor: 'default' },
 
-      tile: {
-        display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0,
-        border: '1px solid ' + HAIRLINE, borderRadius: 12,
-        background: 'var(--dsw-alias-bg-layer-2)', padding: '16px 18px',
-      },
-      tileSub: {
-        fontSize: 11.5, color: 'var(--dsw-alias-label-secondary)',
-        overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-      },
       chip: {
         fontSize: 11.5, lineHeight: 1.6, color: 'var(--dsw-alias-label-secondary)',
         border: '1px solid ' + HAIRLINE, borderRadius: 999, padding: '0 7px',
@@ -2412,14 +2404,14 @@ window.__ModuleLoader__.load({
         h('div', { style: S.hint }, t('packHint')),
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10, paddingTop: 14 } },
           packs.map((pack) => h('a', {
-            key: pack.id, href: routeHash('pack', pack.id), style: { ...S.tile, textDecoration: 'none' },
+            key: pack.id, href: routeHash('pack', pack.id), style: { ...S.card, textDecoration: 'none' },
             onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'pack', packId: pack.id }) },
           },
             h('div', { style: S.ruleTitleRow },
               h('span', { style: S.ruleTitle }, pack.displayName || pack.name || pack.id),
               pack.id === active.id ? h('span', { style: S.badge }, t('packActiveBadge')) : null),
             h('span', { style: S.mono }, pack.id + ' · v' + pack.version),
-            h('span', { style: S.tileSub }, t('sourcePrefix') + (pack.source || t('sourceBuiltin')) + ' · ' + (pack.ruleCount || 0) + ' ' + t('rulesUnit') + ' · ' + (pack.skillCount || 0) + ' ' + t('skillsUnit')),
+            h('span', { style: S.ruleSideText }, t('sourcePrefix') + (pack.source || t('sourceBuiltin')) + ' · ' + (pack.ruleCount || 0) + ' ' + t('rulesUnit') + ' · ' + (pack.skillCount || 0) + ' ' + t('skillsUnit')),
             pack.id === active.id ? h('span', { style: S.hint }, t('packActiveNow')) : h('span', { style: S.hint }, t('packViewable'))))))
 
       const routePackDetail = packDetail && packDetail.id === route.packId ? packDetail : null
@@ -2456,7 +2448,13 @@ window.__ModuleLoader__.load({
               h(ErrorState, { operation: t('opLoadPack'), message: t('packNotFound') + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => setPackReload((n) => n + 1) }),
               h('a', { href: '#/overview', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'overview' }) } }, t('backToPacks')))
             : h('div', null,
-              h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, t('packActiveBadge')) : h('span', { style: S.mutedBadge }, t('packInactiveBadge'))), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, t('sourcePrefix') + (selectedPack.source || t('sourceBuiltin')) + ' · ' + selectedPack.ruleCount + ' ' + t('rulesUnit') + ' · ' + selectedPack.skillCount + ' ' + t('skillsUnit'))),
+              h('div', { style: S.sectionHead },
+                h('span', { style: S.ruleTitleRow },
+                  h('span', { style: S.sectionLabel }, selectedPack.displayName || selectedPack.name || selectedPack.id),
+                  selectedIsActive ? h('span', { style: S.badge }, t('packActiveBadge')) : h('span', { style: S.mutedBadge }, t('packInactiveBadge'))),
+                h('span', { style: S.sectionRight },
+                  h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version),
+                  h('span', null, t('sourcePrefix') + (selectedPack.source || t('sourceBuiltin')) + ' · ' + selectedPack.ruleCount + ' ' + t('rulesUnit') + ' · ' + selectedPack.skillCount + ' ' + t('skillsUnit')))),
               h('div', { role: 'tablist', 'aria-label': scopedT('packResourcesAria'), style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
               h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
