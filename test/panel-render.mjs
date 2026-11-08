@@ -483,6 +483,7 @@ for (const href of todoLinks) {
 const evidenceTodo = findHost(view, (node) => node.type === 'a' && node.props
   && node.props.href === '#/packs/fde-engineering' && textOf(node).includes('规则缺证据'))
 ok(!!evidenceTodo, 'evidence to-do is a semantic route link')
+ok(!evidenceTodo.props.role, 'todo links keep native anchor semantics (no listitem role)')
 
 const quickPreset = findHost(view, (node) => node.type === 'button' && node.props && textOf(node).includes('写书'))
 ok(!!quickPreset, 'run page exposes a quick preset switch')
@@ -507,10 +508,104 @@ ok(!!rootHost, 'panel root carries the dsw-root style scope')
 const styleHost = findHost(view, (node) => node.type === 'style' && textOf(node).includes('#dsw-root'))
 ok(!!styleHost, 'scoped stylesheet mounts with the panel')
 ok(textOf(styleHost).includes('prefers-reduced-motion: reduce'), 'reduced-motion CSS remains scoped')
+ok(textOf(styleHost).includes('a:focus-visible'), 'scoped stylesheet styles link focus')
 const runRefresh = findHost(view, (node) => node.type === 'button' && textOf(node) === '刷新')
 ok(!!runRefresh, 'refresh remains a keyboard reachable button')
 
-/* dismiss the first-run tip and confirm it stays gone */
+/* dedicated routes keep the deep inventories the run page omits */
+const packsTodoLink = findHost(view, (node) => node.type === 'a' && node.props
+  && node.props.href === '#/packs/fde-engineering' && textOf(node).includes('规则缺证据'))
+view = await act(() => packsTodoLink.props.onClick({ preventDefault() {} }))
+text = textOf(view)
+ok(text.includes('规则 > 预设（组合）> 技能 > 模板'), 'pack route keeps the four-layer order')
+ok(text.includes('FDE 交付') && text.includes('写书') && text.includes('RC 探讨'), 'pack route renders preset cards')
+ok(text.includes('新建预设'), 'pack route offers preset creation')
+ok(text.includes('项目：只改 docs/'), 'pack route lists the project-layer rule')
+ok(text.includes('被覆盖 · 会话'), 'pack route names the session override')
+ok(text.includes('紧凑交付'), 'a disabled rule stays visible on the pack route')
+ok(text.includes('中文短句') && text.includes('采纳选中'), 'review queue and adopt action live on the pack route')
+ok(!!checkbox(view, '先方案后实现'), 'rule toggles live on the pack route')
+
+view = await act(() => button(view, '查看已处理').props.onClick())
+text = textOf(view)
+ok(text.includes('先列风险') && text.includes('蒸馏采纳'), 'expanding handled suggestions marks adopted rules')
+
+view = await act(() => button(view, '新建规则').props.onClick())
+text = textOf(view)
+ok(text.includes('规则 id') && text.includes('正文'), 'rule editor opens on the pack route')
+view = await act(() => button(view, '取消').props.onClick())
+ok(!textOf(view).includes('规则 id'), 'rule editor closes on cancel')
+
+/* the metrics route owns the metric cards and their source sub-tab */
+const metricsNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
+view = await act(() => metricsNav.props.onClick({ preventDefault() {} }))
+text = textOf(view)
+ok(text.includes('规则命中') && text.includes('先方案率') && text.includes('验证率') && text.includes('蒸馏覆盖'),
+  'metrics route renders four metrics')
+ok(text.includes('815 / 20056'), 'metric card prints the working, not just the number')
+ok(text.includes('不能说明模型是否遵守规则'), 'metrics state the proxy caveat')
+ok(!text.includes('遵守率') && !text.includes('违反率'), 'no compliance or violation metric is invented')
+const sourcesTab = findHost(view, (node) => node.type === 'button' && node.props && textOf(node) === '来源')
+ok(!!sourcesTab, 'metrics route exposes the sources sub-tab')
+view = await act(() => sourcesTab.props.onClick())
+text = textOf(view)
+ok(text.includes('✗'), 'sources sub-tab marks unavailable sources')
+ok(!text.includes('规则命中'), 'metric cards give way to the source list')
+const metricsSubTab = findHost(view, (node) => node.type === 'button' && node.props && textOf(node) === '度量')
+ok(!!metricsSubTab, 'metrics sub-tab is reachable again')
+view = await act(() => metricsSubTab.props.onClick())
+text = textOf(view)
+ok(text.includes('规则命中'), 'metric cards return after switching back')
+
+/* the distill route owns the distill action */
+const distillNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/distill')
+view = await act(() => distillNav.props.onClick({ preventDefault() {} }))
+view = await act(() => button(view, '蒸馏证据').props.onClick())
+ok(textOf(view).includes('蒸馏完成'), 'distill route reports completion')
+
+/* the distribute route owns exports and the install command */
+const distributeNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/distribute')
+view = await act(() => distributeNav.props.onClick({ preventDefault() {} }))
+text = textOf(view)
+ok(text.includes('导出包 + 作用域快照') && text.includes('导出包（仅包）'), 'distribute route offers both exports')
+view = await act(() => button(view, '复制安装命令').props.onClick())
+text = textOf(view)
+ok(text.includes('已复制：dsh plugin add dsh-workstyle'), 'copy install command reports success')
+ok(text.includes('home v5'), 'footer exposes the v5 build marker')
+ok(!text.includes('面向工程交付'), 'pack marketing description removed')
+
+/* returning to run keeps the compact surface */
+const runNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/run')
+view = await act(() => runNav.props.onClick({ preventDefault() {} }))
+text = textOf(view)
+ok(!text.includes('规则 > 预设（组合）> 技能 > 模板'), 'rule inventory stays off the run page')
+view = await act(() => button(view, '展开全文').props.onClick())
+text = textOf(view)
+ok(text.includes('收起全文'), 'inject block can expand to the full text')
+
+/* refresh keeps the environment */
+view = await act(() => button(view, '刷新').props.onClick())
+ok(textOf(view).includes('注入中'), 'refresh keeps the status rail')
+
+/* all handled folds into the review header on the pack route */
+currentStatus.suggestions[0].adopted = true
+currentStatus.suggestions[1].adopted = true
+recomputeSummary()
+view = await act(() => button(view, '刷新').props.onClick())
+const packsNav = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs')
+view = await act(() => packsNav.props.onClick({ preventDefault() {} }))
+const packListLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/pack/fde-engineering')
+ok(!!packListLink, 'packs route lists installed packs')
+view = await act(() => packListLink.props.onClick({ preventDefault() {} }))
+const collapseAgain = button(view, '收起已处理')
+if (collapseAgain) view = await act(() => collapseAgain.props.onClick())
+text = textOf(view)
+ok(text.includes('已全部处理') && text.includes('查看已处理'), 'all-handled review folds into the header')
+ok(!text.includes('建议正文-短句'), 'all-handled review does not repeat the body rows')
+
+/* dismiss the first-run tip and confirm it stays gone (tip lives on run) */
+const runNavAgain = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/run')
+view = await act(() => runNavAgain.props.onClick({ preventDefault() {} }))
 const tipDismiss = button(view, '知道了')
 ok(!!tipDismiss, 'tip dismiss button still available before close')
 view = await act(() => tipDismiss.props.onClick())

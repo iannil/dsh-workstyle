@@ -882,6 +882,7 @@ window.__ModuleLoader__.load({
       #dsw-root button:focus-visible, #dsw-root input:focus-visible, #dsw-root select:focus-visible {
         outline: 2px solid ${ACCENT}; outline-offset: 2px;
       }
+      #dsw-root a:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 2px; border-radius: 6px; }
       #dsw-root input[type="checkbox"] {
         -webkit-appearance: none; appearance: none;
         width: 14px; height: 14px; margin: 0; flex: none;
@@ -977,8 +978,6 @@ window.__ModuleLoader__.load({
       const [presetTab, setPresetTab] = React.useState('rules')
       const [metricTab, setMetricTab] = React.useState('metrics')
       const [editing, setEditing] = React.useState(null)
-      const [tab, setTab] = React.useState('inject')
-      const [reviewOpen, setReviewOpen] = React.useState(false)
       const ONBOARDING_KEY = 'dsw-workstyle:onboarding-v1'
       const [onboardingOpen, setOnboardingOpen] = React.useState(() => {
         try { return window.localStorage.getItem(ONBOARDING_KEY) !== 'done' } catch (err) { return true }
@@ -1558,11 +1557,6 @@ window.__ModuleLoader__.load({
         { key: 'unverified', label: t('todoUnverified'), count: 0, target: 'metrics' },
       ]
 
-      const onTab = (next) => {
-        setTab(next)
-        try { window.localStorage.setItem('dsw-workstyle:tab', next) } catch (err) { /* no storage in tests */ }
-      }
-
       const scopeBadge = (rule) => {
         if (rule.enabled === false && rule.disabledBy) {
           return h('span', { style: S.scopeBadge(rule.disabledBy === 'session' ? 'session' : 'workspace'), title: t('disabledBy') + ' · ' + rule.disabledBy },
@@ -1602,12 +1596,11 @@ window.__ModuleLoader__.load({
           h('span', { style: S.railLabel }, t('generated')),
           h('span', { style: S.railValue }, latest ? when(latest.generatedAt) : t('never'))))
 
-      const todoBar = h('div', { style: S.tidy, role: 'list', 'aria-label': t('pending') },
+      const todoBar = h('div', { style: S.tidy, role: 'group', 'aria-label': t('pending') },
         todoItems.map((item) => h('a', {
           key: item.key,
           href: routeHash(item.target, item.packId),
           style: S.tidyItem,
-          role: 'listitem',
           onClick: (event) => {
             if (event && event.preventDefault) event.preventDefault()
             navigate({ page: item.target, packId: item.packId })
@@ -1642,34 +1635,6 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
           h('button', { type: 'button', style: S.button, onClick: dismissOnboarding }, t('onboardingDismiss'))),
       ) : null
-
-      // Tabs switch the page; they do not scroll it. Each tab owns one job.
-      // `key` is React's list identity; using it as the tab id would be
-      // shadowed by the reserved prop name, so name the field explicitly.
-      const tabs = [
-        ['inject', t('navInject'), counts.injected],
-        ['presets', t('navPresets'), scopedRules.length],
-        ['metrics', t('navMetrics'), met && met.available ? met.metrics.length : 0],
-        ['distribution', t('navDistribution'), null],
-      ]
-      const tabBar = h('div', { style: S.tabs, role: 'tablist', 'aria-label': t('title') },
-        tabs.map(([id, label, count]) => h('button', {
-          key: id,
-          role: 'tab',
-          id: 'dsw-tab-' + id,
-          'aria-selected': tab === id ? 'true' : 'false',
-          'aria-controls': 'dsw-panel-' + id,
-          style: tab === id ? { ...S.tab, ...S.tabOn } : S.tab,
-          onClick: () => onTab(id),
-        },
-          h('span', null, label),
-          count ? h('span', { style: tab === id ? S.tabCountOn : S.tabCount }, String(count)) : null)))
-
-      const tabPanel = (id, body) => h('div', {
-        role: 'tabpanel',
-        id: 'dsw-panel-' + id,
-        'aria-labelledby': 'dsw-tab-' + id,
-      }, body)
 
       /* ① loaded text — the real bytes, with their fingerprint */
       const injectBlock = h(Section, {
@@ -2068,6 +2033,25 @@ window.__ModuleLoader__.load({
         onRefresh: load,
         onUsePreset,
       })
+
+      /* The pack routes own the deep inventories: every effective rule with
+         its layer, presets, and the distillation review queue. The run page
+         proves what is active; the pack page is where that is edited. */
+      const packDetailBody = h('div', null,
+        rulesBlock,
+        presetsBlock,
+        (pendingCount > 0 || allHandled) ? h(Section, {
+          id: 'dsw-review',
+          label: t('review'),
+          count: suggestions.length,
+          right: allHandled
+            ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 10 } },
+              h('span', null, t('allHandled') + ' · ' + handledSuggestions.length + ' ' + t('inPackUnit')),
+              h('button', { style: S.linkAccent, onClick: () => setShowHandled((prev) => !prev) },
+                showHandled ? t('hideHandled') : t('viewHandled')))
+            : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null),
+        }, reviewSectionBody) : null)
+
       const pageBody = route.page === 'run'
         ? h('section', { 'aria-labelledby': 'dsw-run-title' },
           h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, '运行台'),
@@ -2075,16 +2059,19 @@ window.__ModuleLoader__.load({
         : route.page === 'packs'
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
             h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, '工作方式包'),
-            h('div', { style: S.hint }, '选择一个包查看它的规则与技能。'),
-            h('div', { style: S.sourceList }, packs.map((pack) => h('a', {
-              key: pack.id, href: routeHash('pack', pack.id), style: { ...S.sourceRow, textDecoration: 'none' },
-              onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'pack', packId: pack.id }) },
-            }, (pack.displayName || pack.name || pack.id) + ' · v' + pack.version))))
+            route.packId
+              ? packDetailBody
+              : h('div', null,
+                h('div', { style: S.hint }, '选择一个包查看它的规则与技能。'),
+                h('div', { style: S.sourceList }, packs.map((pack) => h('a', {
+                  key: pack.id, href: routeHash('pack', pack.id), style: { ...S.sourceRow, textDecoration: 'none' },
+                  onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'pack', packId: pack.id }) },
+                }, (pack.displayName || pack.name || pack.id) + ' · v' + pack.version)))))
           : route.page === 'pack'
             ? h('section', { 'aria-labelledby': 'dsw-pack-title' },
               h('h2', { id: 'dsw-pack-title', style: { ...S.sectionLabel, fontSize: 18 } }, '工作方式包详情'),
               h('div', { style: S.hint }, route.packId || active.id),
-              h('div', { style: S.sourceList }, h('div', { style: S.sourceRow }, '规则 ' + totalRules), h('div', { style: S.sourceRow }, '技能 ' + totalSkills)))
+              packDetailBody)
             : route.page === 'distill'
               ? h('section', { 'aria-labelledby': 'dsw-distill-title' },
                 h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏'),
@@ -2096,7 +2083,7 @@ window.__ModuleLoader__.load({
                   metricsBlock)
                 : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
                   h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, '分发'),
-                  distributionBlock)
+                  h('div', null, distributionBlock, evidenceSection))
 
       return h('div', { id: 'dsw-root', style: S.page },
         h('style', null, CSS),
