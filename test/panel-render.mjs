@@ -190,6 +190,7 @@ const currentScope = {
     { id: 'evidence-first', title: '证据优先', text: '规则正文-证据', severity: 'high', origin: 'pack', textScope: 'workspace', enabled: true },
     { id: 'verify-first', title: '验证后才宣称完成', text: '规则正文-验证', severity: 'medium', evidence: '证据-3', origin: 'distilled', textScope: 'workspace', enabled: true },
     { id: 'project-docs-only', title: '项目：只改 docs/', text: '本项目只改 docs/。', severity: 'medium', origin: 'project', textScope: 'project', enabled: true },
+    { id: 'plan-first', title: '项目覆盖：先方案后实现', text: '项目覆盖正文', severity: 'medium', origin: 'project', textScope: 'project', enabled: true },
     { id: 'compact-delivery', title: '紧凑交付', text: '规则正文-紧凑', severity: 'medium', origin: 'pack', textScope: 'workspace', enabled: false, disabledBy: 'session' },
   ],
   skills: [
@@ -230,6 +231,7 @@ const json = (data) => ({ ok: true, json: async () => data })
    one environment route fail while the others succeed. */
 const fetchLog = []
 const exportCalls = []
+const mutationCalls = []
 const exportControl = { fail: false, delayed: false, pending: [], failHistory: false, failReports: false }
 const failEnv = { scope: false, inject: false, metrics: false, emptyMetrics: false, adopt: false }
 
@@ -316,6 +318,7 @@ globalThis.fetch = async (url, options = {}) => {
     if (failEnv.scope) return { ok: false, json: async () => ({}) }
     if (options.method === 'POST') {
       const body = JSON.parse(options.body || '{}')
+      mutationCalls.push({ path: 'scope', body })
       if (body.layer === 'session' && body.patch && Array.isArray(body.patch.disabledRules)) {
         currentScope.session.disabledRules = body.patch.disabledRules.slice()
         for (const rule of currentScope.rules) {
@@ -379,6 +382,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   if (target.endsWith('/api/dsh-workstyle/rule')) {
     const body = JSON.parse(options.body || '{}')
+    mutationCalls.push({ path: 'rule', body })
     const rule = body.rule || {}
     currentScope.project.rules = (currentScope.project.rules || []).filter((item) => item.id !== rule.id)
     currentScope.rules = currentScope.rules.filter((item) => item.id !== rule.id)
@@ -402,6 +406,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   if (target.endsWith('/api/dsh-workstyle/toggle')) {
     const body = JSON.parse(options.body || '{}')
+    mutationCalls.push({ path: 'toggle', body })
     if (body.kind === 'rule') {
       const rule = currentStatus.rules.find((item) => item.id === body.id)
       if (rule) rule.enabled = body.enabled
@@ -667,6 +672,19 @@ ok(text.includes('紧凑交付'), 'a disabled rule stays visible on the pack rou
 ok(text.includes('中文短句') && text.includes('采纳选中'), 'review queue and adopt action live on the pack route')
 ok(!!checkbox(view, '先方案后实现'), 'rule toggles live on the pack route')
 
+const projectOnlyToggle = checkbox(view, '项目：只改 docs/')
+view = await act(() => projectOnlyToggle.props.onChange({ target: { checked: false } }))
+const projectToggleCall = mutationCalls.at(-1)
+ok(projectToggleCall && projectToggleCall.path === 'scope' && projectToggleCall.body.layer === 'project', 'project-only rule toggle writes the project scope')
+ok(projectToggleCall && projectToggleCall.body.cwd === '/tmp/live-cwd', 'project-only toggle uses the current project cwd')
+ok(!mutationCalls.some((entry) => entry.path === 'toggle' && entry.body.id === 'project-docs-only'), 'project-only toggle never calls the pack toggle route')
+
+const shadowedProjectToggle = checkbox(view, '项目覆盖：先方案后实现')
+view = await act(() => shadowedProjectToggle.props.onChange({ target: { checked: false } }))
+const shadowedToggleCall = mutationCalls.at(-1)
+ok(shadowedToggleCall && shadowedToggleCall.path === 'scope' && shadowedToggleCall.body.layer === 'project', 'shadowed project rule toggle writes the project scope')
+ok(!mutationCalls.some((entry) => entry.path === 'toggle' && entry.body.id === 'plan-first'), 'shadowed project toggle never mutates the pack layer')
+
 view = await act(() => button(view, '查看已处理').props.onClick())
 text = textOf(view)
 ok(text.includes('先列风险') && text.includes('蒸馏采纳'), 'expanding handled suggestions marks adopted rules')
@@ -768,6 +786,56 @@ view = await act(() => {
 })
 ok(exportCalls.length === syncDoubleBefore + 1, 'a synchronous second export cannot start before rerender')
 ok(!button(view, '导出中…') && /4,?567 bytes/.test(textOf(view)), 'the double invocation resolves to a single export result')
+
+/* Context transition regression: stale A scope remains visible while B loads,
+   but project mutations and scoped exports must wait for B's identity. */
+const ruleCallsBeforeTransition = mutationCalls.length
+const exportsBeforeTransition = exportCalls.length
+hostContext.cwd = '/tmp/project-b'
+hostContext.sessionId = 'sess-b'
+envControl.delayed = true
+view = renderPass()
+await settle(1)
+const packsDuringTransition = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs')
+view = await act(() => packsDuringTransition.props.onClick({ preventDefault() {} }))
+const packDetailDuringTransition = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs/fde-engineering')
+view = await act(() => packDetailDuringTransition.props.onClick({ preventDefault() {} }))
+const newRuleButton = button(view, '新建规则')
+ok(!!newRuleButton, 'project editor remains mounted during a context transition')
+view = await act(() => newRuleButton.props.onClick())
+const idField = input(view, 'my-project-rule')
+const titleField = input(view, '标题')
+const textField = findHost(view, (node) => node.type === 'textarea' && node.props && node.props.placeholder === '正文')
+idField.props.onChange({ target: { value: 'b-rule' } })
+titleField.props.onChange({ target: { value: 'B rule' } })
+textField.props.onChange({ target: { value: 'B text' } })
+view = await act(() => button(view, '保存').props.onClick())
+ok(mutationCalls.length === ruleCallsBeforeTransition, 'project save is blocked while the new context is loading')
+ok(textOf(view).includes('环境正在加载'), 'blocked project save reports a retryable context-loading error')
+const distributeDuringTransition = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/distribute')
+view = await act(() => distributeDuringTransition.props.onClick({ preventDefault() {} }))
+const scopedDuringTransition = button(view, '导出包 + 作用域快照')
+view = await act(() => scopedDuringTransition.props.onClick())
+ok(exportCalls.length === exportsBeforeTransition, 'scoped export is blocked while the new context is loading')
+ok(textOf(view).includes('环境正在加载'), 'blocked scoped export reports a retryable context-loading error')
+envControl.delayed = false
+while (envControl.pending.length) await act(() => envControl.pending.shift()())
+view = await settle()
+view = await act(() => button(view, '刷新').props.onClick())
+const bPacksLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs')
+view = await act(() => bPacksLink.props.onClick({ preventDefault() {} }))
+const bRuleButton = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/packs/fde-engineering')
+view = await act(() => bRuleButton.props.onClick({ preventDefault() {} }))
+view = await act(() => button(view, '新建规则').props.onClick())
+const bIdField = input(view, 'my-project-rule')
+const bTitleField = input(view, '标题')
+const bTextField = findHost(view, (node) => node.type === 'textarea' && node.props && node.props.placeholder === '正文')
+view = await act(() => bIdField.props.onChange({ target: { value: 'b-rule' } }))
+view = await act(() => input(view, '标题').props.onChange({ target: { value: 'B rule' } }))
+view = await act(() => findHost(view, (node) => node.type === 'textarea' && node.props && node.props.placeholder === '正文').props.onChange({ target: { value: 'B text' } }))
+view = await act(() => button(view, '保存').props.onClick())
+const bRuleCall = mutationCalls.at(-1)
+ok(bRuleCall && bRuleCall.path === 'rule' && bRuleCall.body.cwd === '/tmp/project-b', 'project save uses the loaded B context after transition')
 
 ok(text.includes('home v5'), 'footer exposes the v5 build marker')
 ok(!text.includes('面向工程交付'), 'pack marketing description removed')

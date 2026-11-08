@@ -1064,6 +1064,10 @@ window.__ModuleLoader__.load({
       })()
       const envQueryRef = React.useRef(envQuery)
       envQueryRef.current = envQuery
+      const envContextRef = React.useRef({ query: envQuery, loadedQuery: null })
+      if (envContextRef.current.query !== envQuery) {
+        envContextRef.current = { query: envQuery, loadedQuery: null }
+      }
 
       const ROUTES = new Set(['run', 'packs', 'pack', 'distill', 'metrics', 'distribute'])
       const readRoute = () => {
@@ -1134,6 +1138,8 @@ window.__ModuleLoader__.load({
 
       const loadEnv = React.useCallback(() => {
         const requestId = ++envRequest.current
+        const requestQuery = envQuery
+        envContextRef.current = { query: requestQuery, loadedQuery: null }
         setEnvLoading(true)
         return Promise.all([
           getJson('scope' + envQuery),
@@ -1153,6 +1159,9 @@ window.__ModuleLoader__.load({
           const scopeData = scope.ok ? scope.data : null
           const injectData = inject.ok ? inject.data : null
           const metricsData = metrics.ok ? metrics.data : null
+          if (scopeData && envContextRef.current.query === requestQuery) {
+            envContextRef.current.loadedQuery = requestQuery
+          }
           setEnv((prev) => ({
             scope: scopeData || (prev && prev.scope) || null,
             inject: injectData || (prev && prev.inject) || null,
@@ -1312,6 +1321,7 @@ window.__ModuleLoader__.load({
        */
       const onExport = (withProject) => {
         if (exportBusyRef.current) return
+        if (withProject && !requireCurrentContext()) return
         const kind = withProject ? 'scoped' : 'pack'
         const requestId = ++exportRequest.current
         exportBusyRef.current = kind
@@ -1367,10 +1377,32 @@ window.__ModuleLoader__.load({
         body: JSON.stringify(body || {}),
       }).then((response) => response.json().then((data) => ({ ok: response.ok, data })))
 
+      const requireCurrentContext = () => {
+        if (envContextRef.current.loadedQuery === envQuery) return true
+        setError('环境正在加载，请稍后重试')
+        return false
+      }
+
       /** Enable or disable a rule in the layer that owns the decision. */
       const onRuleToggle = (rule, enabled) => {
-        const layer = rule && rule.textScope === 'project' && rule.origin === 'project' ? 'project' : 'workspace'
-        if (layer === 'project' || !session || !session.id) {
+        if (!rule || !requireCurrentContext()) return
+        const layer = rule.textScope === 'project' && rule.origin === 'project' ? 'project' : 'workspace'
+        if (layer === 'project') {
+          const cwd = env && env.scope && env.scope.cwd
+          if (!cwd) { setError(t('envUnavailable') + 'no cwd'); return }
+          setBusy('rule'); setError(''); setNotice('')
+          const disabled = (env.scope.project && env.scope.project.disabledRules) || []
+          const next = enabled ? disabled.filter((id) => id !== rule.id) : [...disabled, rule.id]
+          return postJson('scope', { layer: 'project', cwd, patch: { disabledRules: next } })
+            .then(({ ok, data }) => {
+              if (!ok) throw new Error(data && data.error ? data.error : 'scope save failed')
+              setNotice((enabled ? t('toggleOn') : t('toggleOff')) + '：' + rule.id)
+              return loadEnv()
+            })
+            .catch((err) => setError(String(err && err.message ? err.message : err)))
+            .finally(() => setBusy(''))
+        }
+        if (!session || !session.id) {
           // No session to scope the change to: use the pack-level switch.
           return onToggle('rule', rule.id, enabled)
         }
@@ -1381,7 +1413,7 @@ window.__ModuleLoader__.load({
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'scope save failed')
             setNotice((enabled ? t('toggleOn') : t('toggleOff')) + '：' + rule.id)
-            loadEnv()
+            return loadEnv()
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1395,6 +1427,7 @@ window.__ModuleLoader__.load({
       })
 
       const onSaveRule = (draft) => {
+        if (!requireCurrentContext()) return Promise.resolve()
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
         const normalized = {
           id: typeof draft.id === 'string' ? draft.id.trim() : '',
@@ -1418,6 +1451,7 @@ window.__ModuleLoader__.load({
       }
 
       const onRemoveRule = (id) => {
+        if (!requireCurrentContext()) return
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
         const normalizedId = typeof id === 'string' ? id.trim() : ''
         if (!cwd || !normalizedId) return
@@ -1432,6 +1466,7 @@ window.__ModuleLoader__.load({
       }
 
       const onUsePreset = (id) => {
+        if (!requireCurrentContext()) return
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
         setBusy('preset'); setError(''); setNotice('')
         postJson('preset', { action: 'use', preset: id, cwd })

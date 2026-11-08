@@ -39,3 +39,21 @@ Additional checks:
 
 - Real Harness GUI route refresh and live cookie-authenticated screenshot capture remain unverified because `dsh` is unavailable and the external Harness app cannot be launched by this sandbox. The direct Bun suites cover route transitions, refresh recovery, stale-response protection, active navigation semantics, project persistence, export/distribution behavior, and the required multipage states.
 - The requested screenshot artifacts use the repository's existing real API response render evidence, normalized to 1440×1000, and are documented as such in `docs/verification/README.md`. The dark run image is included separately as `multipage-run-dark.png`.
+
+## Focused P1 fix wave
+
+Status: PASS.
+
+- Project-origin rule toggles now write the project layer with the current cwd through `POST /scope`, including project-only and project-shadowed rules. Successful writes refresh the environment; failed writes retain the existing selection and surface the error.
+- Project rule saves, project removals, project/session scope toggles, preset changes, and scoped exports require the current environment query identity to be loaded. During an A→B transition, stale A scope remains visible for read-only display while mutations and scoped export report `环境正在加载，请稍后重试` without posting A's cwd. Normal B actions work after B resolves.
+- Added mounted regressions to `test/panel-render.mjs`; the panel suite now has 115 checks.
+
+Focused checks:
+
+- `bun test/panel-render.mjs` — 115 checks passed.
+- `bun test/multipage-render.mjs` — 97 checks passed.
+- `bun test/smoke.mjs` — 146 checks passed.
+- `bun build client.js --outfile /tmp/dsh-workstyle-client-check.js --no-bundle` — passed.
+- `git diff --check` — passed.
+
+Concern: the real Harness GUI limitation from the original Task 8 verification remains; `dsh` is unavailable in this environment and the external Harness app cannot be launched from this isolated worktree.
