@@ -17,21 +17,42 @@
       "title": "先方案后实现",
       "text": "多文件、架构、新功能类请求，先给可评审方案：目标、改动点、验收标准、风险；等用户确认后再动代码。用户说「直接做」时除外。",
       "evidence": "本机 Claude Code 20,056 条用户 prompt 中 815 条（4.1%）含「先方案 / 计划 / 规划 / 先不要写代码」类指令；本次插件任务也以「先出方案，我确认后再真正实现」开场。",
-      "severity": "high"
+      "severity": "high",
+      "measures": [
+        "方案",
+        "计划",
+        "怎么做",
+        "思路"
+      ]
     },
     {
       "id": "evidence-first",
       "title": "证据优先，不猜",
       "text": "先读真实文件、先跑真实命令，再下结论。引用路径、行号、命令输出作为依据；不确定就查，不要用记忆替代事实。",
       "evidence": "zcode 2026-09-30→11-05 的工具调用：Bash 16,178 次、Read 7,007 次、Edit 3,892 次；执行类工具远多于纯对话。",
-      "severity": "high"
+      "severity": "high",
+      "measures": [
+        "文件",
+        "路径",
+        "行号",
+        "命令输出",
+        "跑一下",
+        "实测"
+      ]
     },
     {
       "id": "verify-before-done",
       "title": "验证后才宣称完成",
       "text": "说「完成 / 修好了 / 已生效」之前，必须跑验证命令或给出可复现证据；未验证就明确标注「未验证」并说明验证边界。",
       "evidence": "FDE 方法论红线「无验证不固化」；插件采纳度量把「未验证宣称完成率」列为核心指标。",
-      "severity": "high"
+      "severity": "high",
+      "measures": [
+        "验证",
+        "测试",
+        "跑一遍",
+        "复跑",
+        "确认"
+      ]
     },
     {
       "id": "chinese-terse",
@@ -45,14 +66,27 @@
       "title": "产物化，不停在对话里",
       "text": "每个任务尽量沉淀可复用产物：脚本、skill、模板、pack、文档；一次性的结论也要落成文件或规则。",
       "evidence": "本机累计 40+ 个自定义 skill、多个自研 DSH 插件（whale widget、better-sidebar、context、billion-context）与项目模板。",
-      "severity": "medium"
+      "severity": "medium",
+      "measures": [
+        "文档",
+        "脚本",
+        "模板",
+        "skill",
+        "落到文件"
+      ]
     },
     {
       "id": "scope-guard",
       "title": "先确认落点与边界",
       "text": "动手前确认改动落在哪个目录、哪些文件；不顺手改无关文件；破坏性操作（删除、覆盖、外发数据）先确认。",
       "evidence": "本机常用「先出方案，我确认后再实现」的确认式流程；本次插件开发明确指定了独立目录。",
-      "severity": "medium"
+      "severity": "medium",
+      "measures": [
+        "哪个目录",
+        "改哪些文件",
+        "范围",
+        "边界"
+      ]
     },
     {
       "id": "privacy-local",
@@ -71,9 +105,100 @@
     "count": 40
   },
   "measures": [
-    { "id": "plan-first-rate", "label": "先方案率", "how": "含方案且实现前的会话占比" },
-    { "id": "verify-rate", "label": "改完验证率", "how": "编辑后出现验证命令/测试的会话占比" },
-    { "id": "false-done-rate", "label": "未验证宣称完成率", "how": "宣称完成但无验证证据的会话占比" },
-    { "id": "rule-adherence", "label": "规则遵守度", "how": "第 1 周 vs 第 4 周按规则逐条抽查" }
+    {
+      "id": "plan-first-rate",
+      "label": "先方案率",
+      "how": "含方案且实现前的会话占比"
+    },
+    {
+      "id": "verify-rate",
+      "label": "改完验证率",
+      "how": "编辑后出现验证命令/测试的会话占比"
+    },
+    {
+      "id": "false-done-rate",
+      "label": "未验证宣称完成率",
+      "how": "宣称完成但无验证证据的会话占比"
+    },
+    {
+      "id": "rule-adherence",
+      "label": "规则遵守度",
+      "how": "第 1 周 vs 第 4 周按规则逐条抽查"
+    }
+  ],
+  "presets": [
+    {
+      "id": "fde-delivery",
+      "title": "FDE 交付",
+      "description": "工程交付主线：先方案、证据优先、验证后才宣称完成。",
+      "rules": [
+        "plan-first",
+        "evidence-first",
+        "verify-before-done",
+        "artifactize",
+        "scope-guard"
+      ],
+      "skills": [
+        "fde-requirements",
+        "fde-architect",
+        "fde-workflow",
+        "fde-qa",
+        "fde-release"
+      ],
+      "templates": [
+        "plan-review",
+        "verification-report"
+      ]
+    },
+    {
+      "id": "writing",
+      "title": "写书",
+      "description": "长文档工程：审计引证与事实，保留论证与叙述。",
+      "rules": [
+        "evidence-first",
+        "artifactize",
+        "chinese-terse"
+      ],
+      "skills": [
+        "book-content-audit",
+        "book-polish",
+        "write-book"
+      ],
+      "templates": [
+        "chapter-outline"
+      ]
+    },
+    {
+      "id": "rc-discussion",
+      "title": "RC 探讨",
+      "description": "观察收敛框架下的讨论：先给结论再展开，不给未经证实的断言。",
+      "rules": [
+        "plan-first",
+        "chinese-terse",
+        "privacy-local"
+      ],
+      "skills": [
+        "rc-tutor",
+        "rc-causal-chain"
+      ],
+      "templates": []
+    }
+  ],
+  "templates": [
+    {
+      "id": "plan-review",
+      "title": "方案评审",
+      "text": "目标：\n改动点：\n验收标准：\n风险：\n\n（先评审，确认后再动代码）"
+    },
+    {
+      "id": "verification-report",
+      "title": "验证报告",
+      "text": "命令：\n输出摘要：\n结论：\n未覆盖的边界："
+    },
+    {
+      "id": "chapter-outline",
+      "title": "章节大纲",
+      "text": "本章要回答的问题：\n已有证据：\n尚缺证据：\n与前后章的衔接："
+    }
   ]
 }

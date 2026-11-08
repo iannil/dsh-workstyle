@@ -43,6 +43,8 @@
     }
   },
   "scripts": {
-    "test": "node test/smoke.mjs"
+    "test": "node test/smoke.mjs",
+    "test:panel": "node test/panel-render.mjs",
+    "test:all": "node test/smoke.mjs && node test/panel-render.mjs"
   }
 }

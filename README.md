@@ -4,8 +4,6 @@
 
 > Work style as code: package a person's working habits — rules, skills, presets, templates — into an installable, versionable, measurable DSH plugin.
 
-![工作方式面板](docs/verification/panel-v2-top.png)
-
 ## 它解决什么
 
 技能包解决「会不会」，本插件解决「像不像你」。
@@ -28,7 +26,7 @@ dsh plugin --profile <你的 profile> add github:iannil/dsh-workstyle
 2. 在 DeepSeek Harness 中安装该目录为插件（插件管理器 → 从本地目录安装）。
 3. 重启后，侧边栏出现「工作方式」入口。
 
-> 本地 link 安装的插件需要重启 Harness 才会加载新的 JS；装完在面板里能看到「当前生效」区即成功。
+> 本地 link 安装的插件需要重启 Harness 才会加载新的 JS；装完看首屏状态带与页脚 `home v5` 即成功。
 
 ## 3 分钟上手
 
@@ -42,16 +40,20 @@ dsh plugin --profile <你的 profile> add github:iannil/dsh-workstyle
 
 ## 使用
 
-- 侧边栏面板：
-  - 顶部「当前生效」区：包名、版本、规则/技能数、包目录与最近蒸馏时间，右上角可直接切换包；
-  - 「规则」区按编号列出规则全文与本地证据，蒸馏采纳的规则带「蒸馏采纳」标记，可随时「撤销」；
-  - 「蒸馏建议」区列出 `distill` 产出的建议规则（含置信度与证据），勾选后「采纳选中 / 全部采纳」写入当前包（进入系统提示、随包导出）；
-  - 「技能」区展示内置技能（默认展示 12 个，可展开全部）；
-  - 「本地证据源」区展示 Claude Code / Codex / DSH / Pi 的真实会话计数与采样情况；
-  - 工具栏「导出包」一键生成可分发的 `.tar.gz`。
-- 命令：`/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | export`
-- Agent 工具：`workstyle_status`、`workstyle_list`、`workstyle_apply`、`workstyle_distill`、`workstyle_evidence`、`workstyle_adopt`、`workstyle_export`
-- HTTP 路由：`/api/dsh-workstyle/{status,evidence,apply,distill,adopt,unadopt,export}`
+- 侧边栏面板是**工作方式环境**（不是控制台）：
+  - **状态带**：一行说清这轮载入了什么——注入中几条规则、全局/项目/会话各贡献多少、技能启用数、当前预设、注入文本指纹、最近蒸馏时间；
+  - **待办条**：蒸馏建议待审、规则缺证据、作用域冲突、未验证宣称，带数字，点击跳转；
+  - **① 载入预览**：系统提示里真实的那一段（同样的 `renderRules()` 输出）+ `sha256` 前 12 位指纹 + 字符数，可展开全文、可复制；
+  - **② 有效规则**：每行带作用域徽标（全局 / 项目 / 会话），停用项显示「被覆盖 · 会话」而不是消失；项目层规则可新建、编辑、移除；
+  - **③ 预设与组装**：规则 > 预设（组合） > 技能 > 模板；预设卡一键切换，下方页签看规则/技能/模板；
+  - **④ 度量**：规则命中、先方案率、验证率、蒸馏覆盖，每个都写出分母与算法；**不出现遵守率或违反率**；
+  - **⑤ 分发**：导出包 + 作用域快照、导出包（仅包）、复制安装命令。
+  - 页脚构建标记 `home v5`，可用来确认新面板已加载。
+- 三层作用域：全局（`$DSH_HOME/workstyle/`）→ 项目（`<cwd>/.dsh/workstyle.json`）→ 会话（`$DSH_HOME/workstyle/sessions/<id>.json`）。
+- 停用项只影响系统提示与技能候选，不写入导出包。
+- 命令：`/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export`
+- Agent 工具（8）：`workstyle_status`、`workstyle_list`、`workstyle_apply`、`workstyle_distill`、`workstyle_evidence`、`workstyle_adopt`、`workstyle_toggle`、`workstyle_export`
+- HTTP 路由（13）：`/api/dsh-workstyle/{status,evidence,apply,distill,adopt,unadopt,toggle,export,scope,inject,metrics,rule,preset}`
 
 ## 蒸馏 → 采纳 → 导出
 
@@ -97,16 +99,18 @@ Pack 放在插件 `pack/<id>/` 或 `$DSH_HOME/workstyle/packs/<id>/`；技能放
 无运行时依赖，纯 ESM。Host 侧 `index.js` + `lib/`（`pack.js` 包模型、`distill.js` 蒸馏、`export.js` tar.gz 导出），Web 面板 `client.js`，清单 `cordis.patch.yml`。
 
 ```bash
-node test/smoke.mjs   # 58 项冒烟检查：7 工具 / 7 路由 / 命令 / 采纳与撤销 / 导出 tar 往返
+node test/smoke.mjs        # 82 项冒烟检查：8 工具 / 8 路由 / 命令 / 启停 / 采纳与撤销 / 导出 tar 往返
+node test/panel-render.mjs # 44 项面板渲染检查：状态/搜索/筛选/启停/折叠/分发/构建标记、无营销文案
 ```
 
 系统未装 Node 时可用 Harness 自带运行时：
 
 ```bash
 ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" test/smoke.mjs
+ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" test/panel-render.mjs
 ```
 
-数据目录：`$DSH_HOME/workstyle/`（`state.json` 状态与采纳记录、`reports/` 蒸馏报告、`exports/` 导出包）。
+数据目录：`$DSH_HOME/workstyle/`（`state.json` 状态与采纳记录、`overrides.json` 本地启停、`reports/` 蒸馏报告、`exports/` 导出包）。
 
 ## 许可
 
