@@ -229,11 +229,41 @@ const json = (data) => ({ ok: true, json: async () => data })
 /* Test levers: fetchLog records every URL the panel requested; failEnv makes
    one environment route fail while the others succeed. */
 const fetchLog = []
-const failEnv = { scope: false, inject: false, metrics: false }
+const failEnv = { scope: false, inject: false, metrics: false, adopt: false }
 
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
   fetchLog.push(target)
+  if (target.endsWith('/api/dsh-workstyle/reports')) {
+    // Metadata only, same shape as the host route: no report bodies, no prompt text.
+    return json({ reports: [
+      { file: 'report-2026-11-07.json', generatedAt: '2026-11-07T17:00:00.000Z', sources: { claude: true, codex: true, dsh: true, pi: false }, suggestionCount: 2 },
+      { file: 'report-2026-11-06.json', generatedAt: '2026-11-06T09:30:00.000Z', sources: { claude: true, codex: false, dsh: false, pi: false }, suggestionCount: 0 },
+    ] })
+  }
+  if (target.endsWith('/api/dsh-workstyle/adopt')) {
+    if (failEnv.adopt) return { ok: false, json: async () => ({ error: 'adopt rejected' }) }
+    const body = JSON.parse(options.body || '{}')
+    const ids = body.all
+      ? currentStatus.suggestions.filter((rule) => !(rule.adopted || rule.present)).map((rule) => rule.id)
+      : (Array.isArray(body.ruleIds) ? body.ruleIds : [])
+    for (const id of ids) {
+      const rule = currentStatus.suggestions.find((item) => item.id === id)
+      if (rule && !rule.present) rule.adopted = true
+    }
+    recomputeSummary()
+    return json({ added: ids.filter((id) => {
+      const rule = currentStatus.suggestions.find((item) => item.id === id)
+      return rule && rule.adopted
+    }), skipped: [], status: currentStatus })
+  }
+  if (target.endsWith('/api/dsh-workstyle/unadopt')) {
+    const body = JSON.parse(options.body || '{}')
+    const rule = currentStatus.suggestions.find((item) => item.id === body.ruleId)
+    if (rule) rule.adopted = false
+    recomputeSummary()
+    return json({ ruleCount: currentStatus.summary.ruleCount, status: currentStatus })
+  }
   if (target.endsWith('/api/dsh-workstyle/status')) {
     const response = json(currentStatus)
     if (statusControl.delayed) return new Promise((resolve) => statusControl.pending.push(() => resolve(response)))
@@ -315,7 +345,12 @@ globalThis.fetch = async (url, options = {}) => {
         { id: 'coverage', label: '蒸馏覆盖', value: '3', unit: '/4', ratio: 75, formula: '蒸馏覆盖 = 可用源数 / 4', denominator: 'claude ✓ · codex ✓ · dsh ✓ · pi ✗' },
       ],
       caveat: '这些是代理指标：能说明提示里出现过什么，不能说明模型是否遵守规则。',
-      baseline: { available: false },
+      baseline: {
+        available: true,
+        planRate: { previous: 3.5, delta: 0.6 },
+        verifyRate: { previous: 3.2, delta: -0.2 },
+        note: '对比上一次报告窗口，不说明因果。',
+      },
     })
   }
   if (target.endsWith('/api/dsh-workstyle/rule')) {
@@ -704,4 +739,4 @@ ok(!text.includes('3 分钟上手'), 'tip stays hidden after remount when storag
 
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 
-export { route, hashChange, settle, act, textOf, findHost, button, input, currentStatus, detailPacks, detailControl, envControl, statusControl, hostContext }
+export { route, hashChange, settle, act, textOf, findHost, button, input, checkbox, currentStatus, detailPacks, detailControl, envControl, statusControl, hostContext, fetchLog, failEnv }

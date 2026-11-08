@@ -1473,10 +1473,20 @@ window.__ModuleLoader__.load({
             rule.evidence ? h('div', { style: S.ruleEvidence }, t('evidence') + ' · ' + rule.evidence) : null),
           h('span', { style: S.chip }, t('confidence') + ' ' + (rule.confidence || 'medium')),
           locked
-            ? h('span', { style: S.lockMark, 'aria-hidden': true }, '✓')
+            ? (rule.adopted && !rule.present
+              ? h('button', {
+                style: busy ? { ...S.linkButton, opacity: 0.45, cursor: 'default' } : S.linkButton,
+                disabled: !!busy,
+                onClick: (event) => {
+                  if (event && event.stopPropagation) event.stopPropagation()
+                  onUnadopt(rule.id)
+                },
+              }, t('unadopt'))
+              : h('span', { style: S.lockMark, 'aria-hidden': true }, '✓'))
             : h('input', {
               type: 'checkbox', style: S.checkbox, disabled: !!busy,
               checked: selected.includes(rule.id),
+              'aria-label': rule.title,
               onChange: () => toggleSelected(rule.id),
             }))
       })
@@ -1941,67 +1951,15 @@ window.__ModuleLoader__.load({
           }, label + ' · ' + count))),
         presetDetail)
 
-      /* ④ metrics — every number with the working shown */
-      const metricTabs = [
-        ['metrics', t('metricsTitle')],
-        ['sources', t('injectSources')],
-      ]
-
-      /* The only honest comparison is against the previous report window. */
+      /* The only honest comparison is against the previous report window:
+         metrics.baseline.planRate.delta / metrics.baseline.verifyRate.delta. */
       const baselineKey = { 'plan-rate': 'planRate', 'verify-rate': 'verifyRate' }
-      const metricDelta = (metrics, metric) => {
+      const metricDelta = (payload, metric) => {
         const key = baselineKey[metric.id]
-        if (!metrics || !metrics.baseline || !metrics.baseline.available || !key) return null
-        const pair = metrics.baseline[key]
+        if (!payload || !payload.baseline || !payload.baseline.available || !key) return null
+        const pair = payload.baseline[key]
         return pair && typeof pair.delta === 'number' ? pair.delta : null
       }
-
-      const metricCards = met && met.available
-        ? met.metrics.map((metric) => h('div', { key: metric.id, style: S.metricCard },
-          h('div', { style: S.metricTop },
-            h('span', { style: S.metricLabel }, metric.label),
-            metricDelta(met, metric)
-              ? h('span', {
-                style: metricDelta(met, metric) > 0 ? S.deltaUp : S.deltaDown,
-                title: met.baseline.note,
-              }, t('baseline') + ' ' + (metricDelta(met, metric) > 0 ? '+' : '') + metricDelta(met, metric) + '%')
-              : null),
-          h('div', { style: S.metricValueRow },
-            h('span', { style: S.metricValue }, metric.value),
-            h('span', { style: S.metricUnit }, metric.unit)),
-          h('div', { style: S.metricFormula, title: metric.formula },
-            h('strong', null, t('metricsFormula') + '：'), metric.formula),
-          h('div', { style: S.metricFormula }, metric.denominator)))
-        : null
-
-      const metricsBody = met && met.available
-        ? (metricTab === 'metrics'
-          ? h('div', null,
-            h('div', { style: S.metricGrid }, metricCards),
-            met.caveat ? h('div', { style: S.caveat }, met.caveat) : null)
-          : h('div', { style: S.evidenceGrid },
-            (met.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
-              h('span', { style: S.statLabel }, item.label),
-              h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
-              h('span', { style: S.statSub }, item.available ? t('enabled') : t('disabled'))))))
-        : h('div', { style: S.empty }, h('div', { style: S.hint }, t('metricsUnavailable')))
-
-      const metricsBlock = h(Section, {
-        id: 'dsw-metrics',
-        label: '④ ' + t('metricsTitle'),
-        right: h('span', { style: { display: 'inline-flex', gap: 12, alignItems: 'center', fontSize: 12 } },
-          met && met.scanned ? h('span', { style: S.faint, title: met.scanned }, t('metricsWindow')) : null,
-          h('button', { style: S.linkAccent, onClick: onDistill, disabled: !!busy }, t('metricsRebuild'))),
-      },
-        h('div', { style: { ...S.hint, paddingTop: 8 } }, t('metricsHint')),
-        met && met.available
-          ? h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
-            metricTabs.map(([key, label]) => h('button', {
-              key,
-              style: metricTab === key ? { ...S.pill, ...S.pillActive } : S.pill,
-              onClick: () => setMetricTab(key),
-            }, label))) : null,
-        metricsBody)
 
       const projectFileText = (() => {
         if (!sc || !sc.project || !sc.project.file) return ''
@@ -2108,6 +2066,13 @@ window.__ModuleLoader__.load({
       /* The pack routes own the deep inventories: every effective rule with
          its layer, presets, and the distillation review queue. The run page
          proves what is active; the pack page is where that is edited. */
+      const reviewSectionRight = allHandled
+        ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 10 } },
+          h('span', null, t('allHandled') + ' · ' + handledSuggestions.length + ' ' + t('inPackUnit')),
+          h('button', { style: S.linkAccent, onClick: () => setShowHandled((prev) => !prev) },
+            showHandled ? t('hideHandled') : t('viewHandled')))
+        : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null)
+
       const packDetailBody = h('div', null,
         rulesBlock,
         presetsBlock,
@@ -2115,12 +2080,7 @@ window.__ModuleLoader__.load({
           id: 'dsw-review',
           label: t('review'),
           count: suggestions.length,
-          right: allHandled
-            ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 10 } },
-              h('span', null, t('allHandled') + ' · ' + handledSuggestions.length + ' ' + t('inPackUnit')),
-              h('button', { style: S.linkAccent, onClick: () => setShowHandled((prev) => !prev) },
-                showHandled ? t('hideHandled') : t('viewHandled')))
-            : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null),
+          right: reviewSectionRight,
         }, reviewSectionBody) : null)
 
       const packListBody = h('div', null,
@@ -2192,7 +2152,7 @@ window.__ModuleLoader__.load({
                   h('span', { style: S.sourceName }, sourceLabels[key] || key),
                   h('span', { style: S.sourcePath }, source && source.available ? '可用' : '未发现'))))
               : h('div', { style: S.hint }, '扫描后显示本机来源状态。')),
-          h(Section, { id: 'dsw-distill-review', label: '建议审阅', count: suggestions.length },
+          h(Section, { id: 'dsw-distill-review', label: '建议审阅', count: suggestions.length, right: reviewSectionRight },
             reviewSectionBody),
           h(Section, { id: 'dsw-distill-history', label: '报告历史', count: reports.length },
             reports.length
@@ -2210,15 +2170,21 @@ window.__ModuleLoader__.load({
       const MetricsPage = ({ metrics, onNavigate, onScan }) => {
         const available = metrics && metrics.available
         const metricWindow = metrics && (metrics.window || metrics.scanned || (metrics.generatedAt ? '生成于 ' + when(metrics.generatedAt) : ''))
-        const metricCardsPage = (metrics && metrics.metrics || []).slice(0, 4).map((metric) => h('div', { key: metric.id, style: S.metricCard },
+        const metricCardsPage = (metrics && metrics.metrics || []).slice(0, 4).map((metric) => {
+          const delta = metricDelta(metrics, metric)
+          return h('div', { key: metric.id, style: S.metricCard },
           h('div', { style: S.metricTop }, h('span', { style: S.metricLabel }, metric.label),
-            metric.baselineDelta !== undefined && metric.baselineDelta !== null
-              ? h('span', { style: metric.baselineDelta > 0 ? S.deltaUp : S.deltaDown }, '较上次 ' + (metric.baselineDelta > 0 ? '+' : '') + metric.baselineDelta + '%') : null),
+            delta !== null
+              ? h('span', {
+                style: delta > 0 ? S.deltaUp : S.deltaDown,
+                title: metrics.baseline && metrics.baseline.note ? metrics.baseline.note : '',
+              }, t('baseline') + ' ' + (delta > 0 ? '+' : '') + delta + '%')
+              : null),
           h('div', { style: S.metricValueRow }, h('span', { style: S.metricValue }, metric.value), h('span', { style: S.metricUnit }, metric.unit)),
           h('div', { style: S.metricFormula }, h('strong', null, '公式：'), metric.formula || '—'),
           h('div', { style: S.metricFormula }, h('strong', null, '分母：'), metric.denominator || '—'),
-          metric.window ? h('div', { style: S.hint }, '窗口：' + metric.window) : null,
-          metric.baseline ? h('div', { style: S.hint }, '较上次：' + metric.baseline) : null))
+          metric.window ? h('div', { style: S.hint }, '窗口：' + metric.window) : null)
+        })
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
           h('div', { style: S.tile },
             h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, '代理度量'), h('span', { style: S.badge }, '可复算')),
@@ -2227,8 +2193,16 @@ window.__ModuleLoader__.load({
           available
             ? h('div', null,
               h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
-                h('button', { style: metricTab === 'metrics' ? { ...S.pill, ...S.pillActive } : S.pill, onClick: () => setMetricTab('metrics') }, '度量'),
-                h('button', { style: metricTab === 'sources' ? { ...S.pill, ...S.pillActive } : S.pill, onClick: () => setMetricTab('sources') }, '来源')),
+                h('button', {
+                  style: metricTab === 'metrics' ? { ...S.pill, ...S.pillActive } : S.pill,
+                  'aria-pressed': metricTab === 'metrics' ? 'true' : 'false',
+                  onClick: () => setMetricTab('metrics'),
+                }, '度量'),
+                h('button', {
+                  style: metricTab === 'sources' ? { ...S.pill, ...S.pillActive } : S.pill,
+                  'aria-pressed': metricTab === 'sources' ? 'true' : 'false',
+                  onClick: () => setMetricTab('sources'),
+                }, '来源')),
               metricTab === 'metrics'
                 ? h('div', null, h('div', { style: S.metricGrid }, metricCardsPage), h('div', { style: S.caveat }, metrics.caveat || '这些是代理指标，只描述可观察信号。'))
                 : h('div', { style: S.evidenceGrid }, (metrics.sources || []).map((item) => h('div', { key: item.key, style: S.stat },

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 const panel = await import('./panel-render.mjs')
-const { route, hashChange, settle, textOf, findHost, button, input, detailControl, envControl, statusControl } = panel
+const { route, hashChange, settle, textOf, findHost, button, input, checkbox, detailControl, envControl, statusControl, fetchLog, failEnv } = panel
 let checks = 0
 function ok(condition, label) {
   checks += 1
@@ -139,5 +139,50 @@ text = textOf(view)
 ok(text.includes('规则命中') && text.includes('先方案率'), 'metrics page renders proxy metrics')
 ok(text.includes('公式') && text.includes('分母'), 'metrics page shows metric definitions')
 ok(!text.includes('遵守率') && !text.includes('违反率'), 'metrics page avoids unsupported compliance claims')
+ok(text.includes('较上次 +0.6%'), 'plan-rate card renders its baseline delta from metrics.baseline.planRate')
+ok(text.includes('较上次 -0.2%'), 'verify-rate card renders its negative baseline delta from metrics.baseline.verifyRate')
+const metricPill = findHost(view, (node) => node.type === 'button' && textOf(node) === '度量')
+ok(metricPill && metricPill.props['aria-pressed'] === 'true', 'metric pill exposes aria-pressed=true')
+const sourcePill = findHost(view, (node) => node.type === 'button' && textOf(node) === '来源')
+ok(sourcePill && sourcePill.props['aria-pressed'] === 'false', 'source pill exposes aria-pressed=false')
+view = await panel.act(() => sourcePill.props.onClick())
+const pressedSource = findHost(view, (node) => node.type === 'button' && textOf(node) === '来源' && node.props['aria-pressed'] === 'true')
+ok(!!pressedSource, 'sources pill becomes pressed after switching')
+
+/* Fix round 1: distill history, revoke, and the adopt selection contract. */
+view = await navigateHash('#/distill')
+text = textOf(view)
+const historySection = findHost(view, (node) => node.props && node.props.id === 'dsw-distill-history')
+ok(!!historySection && textOf(historySection).includes('report-2026-11-07.json'), 'report history lists metadata rows')
+ok(!!historySection && textOf(historySection).includes('2 条建议'), 'report history shows suggestion counts')
+ok(!!historySection && !textOf(historySection).includes('正文') && !textOf(historySection).includes('先给方案'), 'report history carries no report body or prompt text')
+ok(fetchLog.some((url) => url.includes('/api/dsh-workstyle/reports')), 'distill page refresh loads report metadata')
+
+const showHandled = button(view, '查看已处理')
+ok(!!showHandled, 'distill page exposes handled suggestions')
+view = await panel.act(() => showHandled.props.onClick())
+const revoke = findHost(view, (node) => node.type === 'button' && textOf(node) === '撤销')
+ok(!!revoke, 'handled suggestion exposes a revoke action on the distill page')
+const unadoptBefore = fetchLog.filter((url) => url.includes('/api/dsh-workstyle/unadopt')).length
+view = await panel.act(() => revoke.props.onClick())
+const unadoptAfter = fetchLog.filter((url) => url.includes('/api/dsh-workstyle/unadopt')).length
+ok(unadoptAfter === unadoptBefore + 1, 'revoke posts the existing unadopt route')
+
+const select = checkbox(view, '中文短句')
+ok(!!select, 'pending suggestion exposes a labeled selection checkbox')
+view = await panel.act(() => select.props.onChange({ target: {} }))
+failEnv.adopt = true
+const rejectedAdopt = findHost(view, (node) => node.type === 'button' && textOf(node).includes('采纳选中'))
+view = await panel.act(() => rejectedAdopt.props.onClick())
+text = textOf(view)
+ok(text.includes('adopt rejected'), 'rejected adopt reports the failure')
+const keptBox = checkbox(view, '中文短句')
+ok(keptBox && keptBox.props.checked === true, 'selection survives a rejected adopt')
+failEnv.adopt = false
+const retryAdopt = findHost(view, (node) => node.type === 'button' && textOf(node).includes('采纳选中'))
+view = await panel.act(() => retryAdopt.props.onClick())
+text = textOf(view)
+ok(text.includes('已采纳建议规则'), 'successful adopt reports its notice')
+ok(!checkbox(view, '中文短句'), 'successful adopt clears the selection from the pending queue')
 
 console.log('\nMULTIPAGE RENDER: ' + checks + ' CHECKS PASSED')
