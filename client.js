@@ -15,9 +15,13 @@ window.__ModuleLoader__.load({
 
     /* ----------------------------- brand tokens ---------------------------- */
 
-    const INK = '#14171c'
-    const PAPER = '#f4f0e8'
-    const AMBER = '#d7913a'
+    const INK = '#14171C'
+    const PAPER = '#F4F0E8'
+    const SURFACE = '#FBF9F5'
+    const AMBER = '#E3A660'
+    const AMBER_DARK = '#95550F'
+    const BLUE_GRAY = '#47739A'
+    const ERROR = '#A44A3F'
 
     const luminance = (color) => {
       const match = color && color.match(/rgba?\(([^)]+)\)/)
@@ -52,11 +56,11 @@ window.__ModuleLoader__.load({
       }
     })()
 
-    const ACCENT = isDark ? '#e3a660' : '#95550f'
+    const ACCENT = isDark ? AMBER : AMBER_DARK
     const ACCENT_LINE = isDark ? 'rgba(227,166,96,0.55)' : 'rgba(149,85,15,0.45)'
     const ACCENT_SOFT = isDark ? 'rgba(227,166,96,0.16)' : 'rgba(149,85,15,0.09)'
     const HAIRLINE = 'var(--dsw-alias-border-l1)'
-    const STATE_INFO = 'var(--dsw-alias-state-info-primary)'
+    const STATE_INFO = 'var(--dsw-alias-state-info-primary, ' + BLUE_GRAY + ')'
     const PRIMARY_BG = isDark ? PAPER : INK
     const PRIMARY_FG = isDark ? INK : PAPER
     const BUILD = 'home v5 · 2026-11-08'
@@ -607,8 +611,8 @@ window.__ModuleLoader__.load({
       },
       banner: (kind) => ({
         fontSize: 12, lineHeight: 1.55, borderRadius: 8, padding: '9px 12px',
-        border: '1px solid ' + (kind === 'error' ? 'var(--dsw-alias-state-error-primary)' : HAIRLINE),
-        color: kind === 'error' ? 'var(--dsw-alias-state-error-primary)' : 'var(--dsw-alias-label-secondary)',
+        border: '1px solid ' + (kind === 'error' ? ERROR : HAIRLINE),
+        color: kind === 'error' ? ERROR : 'var(--dsw-alias-label-secondary)',
         background: kind === 'error' ? 'transparent' : 'var(--dsw-alias-bg-layer-2)',
       }),
       tileClickable: { cursor: 'pointer' },
@@ -879,8 +883,13 @@ window.__ModuleLoader__.load({
       #dsw-root input::placeholder { color: var(--dsw-alias-label-secondary); opacity: .78; }
       #dsw-root button:hover:not(:disabled) { filter: brightness(0.97); }
       #dsw-root button:active:not(:disabled) { transform: translateY(0.5px); }
-      #dsw-root button:focus-visible, #dsw-root input:focus-visible, #dsw-root select:focus-visible {
+      #dsw-root button:focus-visible, #dsw-root input:focus-visible, #dsw-root select:focus-visible, #dsw-root textarea:focus-visible, #dsw-root [tabindex]:focus-visible {
         outline: 2px solid ${ACCENT}; outline-offset: 2px;
+      }
+      #dsw-root a:focus-visible { outline: 2px solid ${ACCENT}; outline-offset: 2px; border-radius: 6px; }
+      #dsw-root [role="tab"]:focus-visible { outline-offset: -2px; }
+      @media (prefers-reduced-motion: reduce) {
+        #dsw-root *, #dsw-root *::before, #dsw-root *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
       }
       #dsw-root input[type="checkbox"] {
         -webkit-appearance: none; appearance: none;
@@ -935,18 +944,47 @@ window.__ModuleLoader__.load({
         sub ? h('span', { style: S.tileSub, title: String(sub) }, sub) : null)
     }
 
-    function Loading() {
-      return h('div', { style: S.page },
-        h('div', { style: S.inner },
-          h('div', { style: { display: 'flex', alignItems: 'center', gap: 14 } },
-            h('div', { style: { ...S.skeleton, width: 44, height: 44, borderRadius: 14 } }),
-            h('div', { style: { display: 'flex', flexDirection: 'column', gap: 8 } },
-              h('div', { style: { ...S.skeleton, width: 128, height: 9 } }),
-              h('div', { style: { ...S.skeleton, width: 220, height: 21 } }),
-              h('div', { style: { ...S.skeleton, width: 320, height: 11 } }))),
-          h('div', { style: { ...S.skeleton, height: 74, borderRadius: 10 } }),
-          h('div', { style: { ...S.skeleton, height: 26, width: '40%' } }),
-          h('div', { style: { ...S.skeleton, height: 180, borderRadius: 10 } })))
+    function Loading(props) {
+      const label = (props && props.label) || '正在加载…'
+      return h('div', { style: S.empty, role: 'status', 'aria-live': 'polite' },
+        h('div', { style: S.ruleTitle }, label),
+        h('div', { style: S.hint }, '正在读取当前环境的数据，请稍候。'),
+        h('div', { style: { ...S.skeleton, height: 8, width: '38%' }, 'aria-hidden': 'true' }))
+    }
+
+    function EmptyState(props) {
+      const { title, description, action, onAction, href } = props
+      return h('div', { style: S.empty },
+        h('div', { style: S.ruleTitle }, title),
+        description ? h('div', { style: S.hint }, description) : null,
+        action
+          ? href
+            ? h('a', { href, style: S.linkAccent, onClick: onAction }, action)
+            : h('button', { type: 'button', style: S.buttonPrimary, onClick: onAction }, action)
+          : null)
+    }
+
+    function ErrorState(props) {
+      const { operation, message, onRetry } = props
+      return h('div', { style: S.banner('error'), role: 'alert' },
+        h('span', null, operation + '失败：' + (message || '暂时无法完成。')),
+        onRetry ? h('button', { type: 'button', style: S.linkAccent, onClick: onRetry }, '重试') : null)
+    }
+
+    function Notice(props) {
+      return props && props.children ? h('div', { style: S.banner('info'), role: 'status', 'aria-live': 'polite' }, props.children) : null
+    }
+
+    function EnvironmentContextBar({ environment }) {
+      return h('div', {
+        role: 'region', 'aria-label': '当前环境',
+        style: { ...S.rail, marginBottom: 16 },
+      },
+        h('span', { style: S.railLabel }, '当前环境'),
+        h('span', { style: S.railValue }, environment.cwd || '未指定目录'),
+        h('span', { style: S.railLabel }, environment.sessionId ? '会话 ' + environment.sessionId : '未指定会话'),
+        environment.loading ? h('span', { style: S.railLabel }, '加载中…') : null,
+        environment.error ? h('span', { style: { ...S.railLabel, color: ERROR } }, environment.error) : null)
     }
 
     /* --------------------------------- panel ------------------------------- */
@@ -954,7 +992,19 @@ window.__ModuleLoader__.load({
     function Panel(props) {
       const t = props && props.t ? props.t : (key) => key
       const [status, setStatus] = React.useState(null)
+      const [statusLoading, setStatusLoading] = React.useState(true)
       const [report, setReport] = React.useState(null)
+      const [reports, setReports] = React.useState([])
+      const [exports, setExports] = React.useState([])
+      const [exportResult, setExportResult] = React.useState(null)
+      const [exportBusy, setExportBusy] = React.useState('')
+      // The export mode the user picked, kept so a failed export can be
+      // retried with the same mode (and the same fresh scope inputs).
+      const [exportMode, setExportMode] = React.useState(null)
+      // Per-history failures: the panel stays usable and the rows it already
+      // has stay visible next to an explanation and a retry action.
+      const [reportsError, setReportsError] = React.useState('')
+      const [exportsError, setExportsError] = React.useState('')
       const [busy, setBusy] = React.useState('')
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
@@ -974,10 +1024,9 @@ window.__ModuleLoader__.load({
       const [envError, setEnvError] = React.useState('')
       const [injectOpen, setInjectOpen] = React.useState(false)
       const [presetTab, setPresetTab] = React.useState('rules')
+      const [packTab, setPackTab] = React.useState('rules')
       const [metricTab, setMetricTab] = React.useState('metrics')
       const [editing, setEditing] = React.useState(null)
-      const [tab, setTab] = React.useState('inject')
-      const [reviewOpen, setReviewOpen] = React.useState(false)
       const ONBOARDING_KEY = 'dsw-workstyle:onboarding-v1'
       const [onboardingOpen, setOnboardingOpen] = React.useState(() => {
         try { return window.localStorage.getItem(ONBOARDING_KEY) !== 'done' } catch (err) { return true }
@@ -993,8 +1042,15 @@ window.__ModuleLoader__.load({
         try {
           if (typeof props.sessionId !== 'string' || !props.sessionId) return null
           const ids = props.sessionIds || null
-          const known = Array.isArray(ids) ? ids.find((id) => id === props.sessionId) : null
-          return { id: props.sessionId, cwd: known && known.cwd ? known.cwd : (props.cwd || '') }
+          // The host may pass plain ids or { id, cwd } records; accept both.
+          const known = Array.isArray(ids)
+            ? ids.find((id) => id === props.sessionId
+              || (id && typeof id === 'object' && id.id === props.sessionId))
+            : null
+          return {
+            id: props.sessionId,
+            cwd: (known && typeof known === 'object' && known.cwd) ? known.cwd : (props.cwd || ''),
+          }
         } catch (err) {
           return null
         }
@@ -1006,38 +1062,146 @@ window.__ModuleLoader__.load({
         if (session && session.id) parts.push('session=' + encodeURIComponent(session.id))
         return parts.length ? '?' + parts.join('&') : ''
       })()
+      const envQueryRef = React.useRef(envQuery)
+      envQueryRef.current = envQuery
+      const envContextRef = React.useRef({ query: envQuery, loadedQuery: null })
+      if (envContextRef.current.query !== envQuery) {
+        envContextRef.current = { query: envQuery, loadedQuery: null }
+      }
+
+      const ROUTES = new Set(['run', 'packs', 'pack', 'distill', 'metrics', 'distribute'])
+      const readRoute = () => {
+        const raw = typeof location !== 'undefined' ? String(location.hash || '') : '#/run'
+        const [, page = 'run', packId] = raw.match(/^#\/?([^/]+)?(?:\/(.*))?$/) || []
+        return ROUTES.has(page) ? { page, packId: packId || undefined } : { page: 'run' }
+      }
+      const routeHash = (page, packId) => '#/' + page + (packId ? '/' + encodeURIComponent(packId) : '')
 
       const getJson = (path) => fetch('/api/dsh-workstyle/' + path, { headers: { accept: 'application/json' } })
-        .then((response) => (response.ok ? response.json() : null))
-        .catch(() => null)
+        .then((response) => {
+          if (!response.ok) throw new Error('HTTP ' + response.status)
+          return response.json()
+        })
+        .then((data) => ({ ok: true, data }))
+        .catch((err) => ({ ok: false, error: String(err && err.message ? err.message : err) }))
+
+      const [route, setRoute] = React.useState(readRoute)
+      const statusRequest = React.useRef(0)
+      const exportRequest = React.useRef(0)
+      const exportBusyRef = React.useRef('')
+      const [packDetail, setPackDetail] = React.useState(null)
+      const envRequest = React.useRef(0)
+      const [packLoading, setPackLoading] = React.useState(false)
+      const [packError, setPackError] = React.useState('')
+      // A generation counter, not a route change: retrying a failed detail
+      // fetch must refetch even when the route hash stays exactly the same.
+      const [packReload, setPackReload] = React.useState(0)
+      const [envLoading, setEnvLoading] = React.useState(false)
+      const navigate = React.useCallback((next) => {
+        const target = typeof next === 'string' ? { page: next } : next
+        const hash = routeHash(target.page, target.packId)
+        try {
+          if (typeof location !== 'undefined') location.hash = hash
+        } catch (err) { /* memory shims may expose a read-only location */ }
+        setRoute(readRoute())
+      })
+
+      React.useEffect(() => {
+        if (typeof window === 'undefined' || !window.addEventListener) return undefined
+        const onHashChange = () => setRoute(readRoute())
+        window.addEventListener('hashchange', onHashChange)
+        return () => window.removeEventListener && window.removeEventListener('hashchange', onHashChange)
+      }, [])
+
+      React.useEffect(() => {
+        const id = route.page === 'packs' || route.page === 'pack' ? route.packId : undefined
+        if (!id) {
+          setPackDetail(null)
+          setPackError('')
+          return undefined
+        }
+        let cancelled = false
+        setPackDetail(null)
+        setPackLoading(true)
+        setPackError('')
+        getJson('pack?id=' + encodeURIComponent(id)).then((result) => {
+          if (cancelled) return
+          if (!result.ok || !result.data || !result.data.pack) {
+            setPackDetail(null)
+            setPackError(result.error || (result.data && result.data.error) || 'pack unavailable')
+            return
+          }
+          setPackDetail(result.data.pack)
+        }).finally(() => { if (!cancelled) setPackLoading(false) })
+        return () => { cancelled = true }
+      }, [route.page, route.packId, packReload])
 
       const loadEnv = React.useCallback(() => {
-        setEnvError('')
-        Promise.all([
+        const requestId = ++envRequest.current
+        const requestQuery = envQuery
+        envContextRef.current = { query: requestQuery, loadedQuery: null }
+        setEnvLoading(true)
+        return Promise.all([
           getJson('scope' + envQuery),
           getJson('inject' + envQuery),
           getJson('metrics' + envQuery),
         ]).then(([scope, inject, metrics]) => {
-          if (!scope && !inject) {
+          if (requestId !== envRequest.current) return null
+          const routeNames = ['scope', 'inject', 'metrics']
+          const failed = routeNames.filter((name, index) => !([scope, inject, metrics][index]).ok)
+          if (failed.length === routeNames.length) {
+            // Every route failed: keep the last successful values and say so.
             setEnvError('routes unavailable')
             return
           }
+          if (failed.length) setEnvError(failed.join(', ') + ' failed to load')
+          else setEnvError('')
+          const scopeData = scope.ok ? scope.data : null
+          const injectData = inject.ok ? inject.data : null
+          const metricsData = metrics.ok ? metrics.data : null
+          if (scopeData && envContextRef.current.query === requestQuery) {
+            envContextRef.current.loadedQuery = requestQuery
+          }
           setEnv((prev) => ({
-            scope: scope || (prev && prev.scope) || null,
-            inject: inject || (prev && prev.inject) || null,
-            metrics: metrics || (prev && prev.metrics) || null,
-            fingerprint: prev && prev.inject && inject && prev.inject.fingerprint !== inject.fingerprint
-              ? { from: prev.inject.fingerprint, to: inject.fingerprint }
+            scope: scopeData || (prev && prev.scope) || null,
+            inject: injectData || (prev && prev.inject) || null,
+            metrics: metricsData || (prev && prev.metrics) || null,
+            fingerprint: prev && prev.inject && injectData && prev.inject.fingerprint !== injectData.fingerprint
+              ? { from: prev.inject.fingerprint, to: injectData.fingerprint }
               : (prev && prev.fingerprint) || null,
           }))
+          return { scope: scopeData, inject: injectData, metrics: metricsData }
         })
+        .finally(() => { if (requestId === envRequest.current) setEnvLoading(false) })
       }, [envQuery])
 
       const load = React.useCallback(() => {
+        const requestId = ++statusRequest.current
+        const requestEnvQuery = envQuery
         setError('')
+        setReportsError('')
+        setExportsError('')
+        setStatusLoading(true)
+        // History refreshes never block the panel and never clear the rows
+        // they failed to replace: stale metadata stays visible next to the
+        // per-history error and its retry action.
+        getJson('reports').then((result) => {
+          if (requestId !== statusRequest.current) return
+          if (result.ok && result.data && Array.isArray(result.data.reports)) setReports(result.data.reports)
+          else setReportsError(result.error || (result.data && result.data.error) || '报告历史不可用')
+        })
+        getJson('exports').then((result) => {
+          if (requestId !== statusRequest.current) return
+          if (result.ok && result.data && Array.isArray(result.data.exports)) setExports(result.data.exports)
+          else setExportsError(result.error || (result.data && result.data.error) || '导出历史不可用')
+        })
         fetch('/api/dsh-workstyle/status', { headers: { accept: 'application/json' } })
-          .then((response) => response.json())
+          .then((response) => {
+            if (!response.ok) throw new Error('status unavailable')
+            return response.json()
+          })
           .then((data) => {
+            if (requestId !== statusRequest.current || requestEnvQuery !== envQueryRef.current) return null
             setStatus(data)
             // A refresh reloads the environment; keep the handled list folded
             // until the user asks to open it again.
@@ -1050,7 +1214,14 @@ window.__ModuleLoader__.load({
             }
             loadEnv()
           })
-          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .catch((err) => {
+            if (requestId === statusRequest.current && requestEnvQuery === envQueryRef.current) {
+              setError(String(err && err.message ? err.message : err))
+            }
+          })
+          .finally(() => {
+            if (requestId === statusRequest.current && requestEnvQuery === envQueryRef.current) setStatusLoading(false)
+          })
       }, [loadEnv])
 
       React.useEffect(() => { load() }, [load])
@@ -1075,7 +1246,10 @@ window.__ModuleLoader__.load({
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'apply failed')
             setStatus(data.status)
-            setNotice(t('applied') + '：' + data.applied.id)
+            return loadEnv().then((loaded) => {
+              const fingerprint = loaded && loaded.inject && loaded.inject.fingerprint
+              setNotice(t('applied') + '：' + data.applied.id + (fingerprint ? ' · ' + t('fingerprint') + ' ' + fingerprint : ''))
+            })
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1117,6 +1291,7 @@ window.__ModuleLoader__.load({
             setSelected([])
             setNotice(t('adoptedNotice') + '：' + data.added.length +
               (data.skipped && data.skipped.length ? '，' + data.skipped.length + ' skipped' : ''))
+            load()
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1128,20 +1303,59 @@ window.__ModuleLoader__.load({
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'unadopt failed')
             setStatus(data.status)
+            load()
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
       }
 
-      const onExport = () => {
-        setBusy('export'); setError(''); setNotice('')
-        call('export', {})
+      /**
+       * Exports keep their own in-flight state, separate from the global
+       * `busy`: switching the header pack or finishing another action must
+       * neither clear it nor let a second export overlap. The guard is a ref,
+       * not the state — state updates are asynchronous, so two synchronous
+       * invocations before a rerender must not both start a request. A
+       * request id keeps a stale run from writing history or errors over a
+       * newer one, and a failed history refresh leaves the export result
+       * untouched.
+       */
+      const onExport = (withProject) => {
+        if (exportBusyRef.current) return
+        if (withProject && !requireCurrentContext()) return
+        const kind = withProject ? 'scoped' : 'pack'
+        const requestId = ++exportRequest.current
+        exportBusyRef.current = kind
+        setExportMode(withProject)
+        setExportBusy(kind); setError(''); setNotice(''); setExportResult(null)
+        call('export', withProject ? { withProject: true, cwd: (env && env.scope && env.scope.cwd) || props.cwd || '' } : { withProject: false })
           .then(({ ok, data }) => {
+            if (requestId !== exportRequest.current) return null
             if (!ok) throw new Error(data && data.error ? data.error : 'export failed')
+            setExportResult(data)
             setNotice(t('exported') + '：' + data.file)
+            return getJson('exports')
           })
-          .catch((err) => setError(String(err && err.message ? err.message : err)))
-          .finally(() => setBusy(''))
+          .then((result) => {
+            if (requestId !== exportRequest.current) return
+            // History refresh failure is not an export failure: keep the
+            // result and the previous rows exactly as they are, but surface
+            // the same per-history error and retry as load() would.
+            if (result && result.ok && result.data && Array.isArray(result.data.exports)) {
+              setExports(result.data.exports)
+              setExportsError('')
+            } else {
+              setExportsError(result && result.error ? result.error : (result && result.data && result.data.error) || '导出历史不可用')
+            }
+          })
+          .catch((err) => {
+            if (requestId === exportRequest.current) setError(String(err && err.message ? err.message : err))
+          })
+          .finally(() => {
+            if (requestId === exportRequest.current) {
+              exportBusyRef.current = ''
+              setExportBusy('')
+            }
+          })
       }
 
       const onCopy = (text, label) => {
@@ -1163,10 +1377,32 @@ window.__ModuleLoader__.load({
         body: JSON.stringify(body || {}),
       }).then((response) => response.json().then((data) => ({ ok: response.ok, data })))
 
+      const requireCurrentContext = () => {
+        if (envContextRef.current.loadedQuery === envQuery) return true
+        setError('环境正在加载，请稍后重试')
+        return false
+      }
+
       /** Enable or disable a rule in the layer that owns the decision. */
       const onRuleToggle = (rule, enabled) => {
-        const layer = rule && rule.textScope === 'project' && rule.origin === 'project' ? 'project' : 'workspace'
-        if (layer === 'project' || !session || !session.id) {
+        if (!rule || !requireCurrentContext()) return
+        const layer = rule.textScope === 'project' && rule.origin === 'project' ? 'project' : 'workspace'
+        if (layer === 'project') {
+          const cwd = env && env.scope && env.scope.cwd
+          if (!cwd) { setError(t('envUnavailable') + 'no cwd'); return }
+          setBusy('rule'); setError(''); setNotice('')
+          const disabled = (env.scope.project && env.scope.project.disabledRules) || []
+          const next = enabled ? disabled.filter((id) => id !== rule.id) : [...disabled, rule.id]
+          return postJson('scope', { layer: 'project', cwd, patch: { disabledRules: next } })
+            .then(({ ok, data }) => {
+              if (!ok) throw new Error(data && data.error ? data.error : 'scope save failed')
+              setNotice((enabled ? t('toggleOn') : t('toggleOff')) + '：' + rule.id)
+              return loadEnv()
+            })
+            .catch((err) => setError(String(err && err.message ? err.message : err)))
+            .finally(() => setBusy(''))
+        }
+        if (!session || !session.id) {
           // No session to scope the change to: use the pack-level switch.
           return onToggle('rule', rule.id, enabled)
         }
@@ -1177,49 +1413,69 @@ window.__ModuleLoader__.load({
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'scope save failed')
             setNotice((enabled ? t('toggleOn') : t('toggleOff')) + '：' + rule.id)
-            loadEnv()
+            return loadEnv()
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
       }
 
+      const refreshEnvironment = (changedId, message) => loadEnv().then((loaded) => {
+        const fingerprint = loaded && loaded.inject && loaded.inject.fingerprint
+        setNotice(message + '：' + changedId + (fingerprint ? ' · ' + t('fingerprint') + ' ' + fingerprint : ''))
+        navigate({ page: 'run' })
+        return loaded
+      })
+
       const onSaveRule = (draft) => {
+        if (!requireCurrentContext()) return Promise.resolve()
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
+        const normalized = {
+          id: typeof draft.id === 'string' ? draft.id.trim() : '',
+          title: typeof draft.title === 'string' ? draft.title.trim() : '',
+          text: typeof draft.text === 'string' ? draft.text.trim() : '',
+        }
+        if (!normalized.id || !normalized.title || !normalized.text) {
+          setError(t('ruleIdLabel') + '、' + t('ruleTitleLabel') + '、' + t('ruleTextLabel') + '不能为空')
+          return Promise.resolve()
+        }
         if (!cwd) { setError(t('envUnavailable') + 'no cwd'); return Promise.resolve() }
         setBusy('rule'); setError(''); setNotice('')
-        return postJson('rule', { cwd, rule: draft })
+        return postJson('rule', { cwd, rule: normalized })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'rule save failed')
             setEditing(null)
-            setNotice(t('ruleSaved'))
-            loadEnv()
+            return refreshEnvironment(normalized.id, t('ruleSaved'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
       }
 
       const onRemoveRule = (id) => {
+        if (!requireCurrentContext()) return
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
-        if (!cwd) return
+        const normalizedId = typeof id === 'string' ? id.trim() : ''
+        if (!cwd || !normalizedId) return
         setBusy('rule'); setError(''); setNotice('')
-        postJson('rule', { cwd, rule: { id }, remove: true })
+        postJson('rule', { cwd, rule: { id: normalizedId }, remove: true })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'rule remove failed')
-            setNotice(t('ruleRemoved'))
-            loadEnv()
+            return refreshEnvironment(normalizedId, t('ruleRemoved'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
       }
 
       const onUsePreset = (id) => {
+        if (!requireCurrentContext()) return
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
         setBusy('preset'); setError(''); setNotice('')
         postJson('preset', { action: 'use', preset: id, cwd })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'preset use failed')
-            setNotice(t('presetCurrent') + '：' + id)
-            loadEnv()
+            return loadEnv().then((loaded) => {
+              const fingerprint = loaded && loaded.inject && loaded.inject.fingerprint
+              setNotice(t('presetCurrent') + '：' + id + (fingerprint ? ' · ' + t('fingerprint') + ' ' + fingerprint : ''))
+            })
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -1239,12 +1495,66 @@ window.__ModuleLoader__.load({
 
       const severityLabel = (severity) => t(severity === 'high' ? 'severityHigh' : severity === 'low' ? 'severityLow' : 'severityMedium')
 
+      /* ---------------------- shared shell around every state ---------------- */
+
+      /* Everything the shell needs exists before the status gate: route,
+         navigation, environment state and the local session context. The
+         shell renders around initial loading, hard failures and the
+         no-active-pack path too, so navigation, the 当前环境 context bar,
+         the main landmark and the focus stylesheet never disappear. */
+      const sc = env && env.scope ? env.scope : null
+      const inj = env && env.inject ? env.inject : null
+      const met = env && env.metrics ? env.metrics : null
+      const environment = {
+        status,
+        scope: sc,
+        inject: inj,
+        metrics: met,
+        report,
+        cwd: (sc && sc.cwd) || (session && session.cwd) || props.cwd || '',
+        sessionId: (sc && sc.sessionId) || (session && session.id) || props.sessionId || '',
+        loading: statusLoading || envLoading,
+        error: error || envError,
+      }
+      const pageLinks = [
+        ['run', '运行台'], ['packs', '工作方式包'], ['distill', '蒸馏'],
+        ['metrics', '度量台'], ['distribute', '分发'],
+      ]
+      const primaryNav = h('nav', { 'aria-label': '工作方式', style: S.tabs },
+        pageLinks.map(([page, label]) => h('a', {
+          key: page,
+          href: routeHash(page),
+          'aria-current': route.page === page ? 'page' : undefined,
+          style: route.page === page ? { ...S.tab, ...S.tabOn, textDecoration: 'none' } : { ...S.tab, textDecoration: 'none' },
+          onClick: (event) => {
+            if (event && event.preventDefault) event.preventDefault()
+            navigate({ page })
+          },
+        }, label)))
+      const environmentBar = h(EnvironmentContextBar, { environment })
+      const rootStyle = {
+        ...S.page,
+        '--dsw-color-ink': INK, '--dsw-color-paper': PAPER, '--dsw-color-surface': SURFACE,
+        '--dsw-color-amber': AMBER, '--dsw-color-amber-dark': AMBER_DARK,
+        '--dsw-color-blue-gray': BLUE_GRAY, '--dsw-color-error': ERROR,
+      }
+      const shell = (mainChildren, headerContent, footerContent, showBanners) => h('div', { id: 'dsw-root', style: rootStyle },
+        h('style', null, CSS),
+        h('div', { style: S.inner },
+          primaryNav,
+          environmentBar,
+          headerContent || null,
+          showBanners && error ? h(ErrorState, { operation: '执行当前操作', message: error, onRetry: load }) : null,
+          showBanners && notice ? h(Notice, null, notice) : null,
+          showBanners && envError ? h(ErrorState, { operation: '刷新当前环境', message: envError, onRetry: load }) : null,
+          h('main', { id: 'dsw-main', 'aria-live': 'polite' }, mainChildren),
+          footerContent || null))
+
       if (!status) {
         if (error) {
-          return h('div', { style: S.page },
-            h('div', { style: S.inner }, h('div', { style: S.banner('error') }, t('error') + '：' + error)))
+          return shell(h(ErrorState, { operation: '状态加载', message: error, onRetry: load }), null, null, false)
         }
-        return h(Loading, null)
+        return shell(h(Loading, { label: '正在加载工作方式状态…' }), null, null, false)
       }
 
       const active = status.activePack
@@ -1258,8 +1568,7 @@ window.__ModuleLoader__.load({
       const summary = status.summary || {}
 
       if (!active) {
-        return h('div', { style: S.page },
-          h('div', { style: S.inner }, h('div', { style: S.banner('error') }, t('error') + '：no active pack')))
+        return shell(h(ErrorState, { operation: '读取当前工作方式包', message: '没有可用的当前工作方式包。', onRetry: load }), null, null, false)
       }
 
       const enabledRules = rules.filter((rule) => rule.enabled !== false)
@@ -1351,10 +1660,20 @@ window.__ModuleLoader__.load({
             rule.evidence ? h('div', { style: S.ruleEvidence }, t('evidence') + ' · ' + rule.evidence) : null),
           h('span', { style: S.chip }, t('confidence') + ' ' + (rule.confidence || 'medium')),
           locked
-            ? h('span', { style: S.lockMark, 'aria-hidden': true }, '✓')
+            ? (rule.adopted && !rule.present
+              ? h('button', {
+                style: busy ? { ...S.linkButton, opacity: 0.45, cursor: 'default' } : S.linkButton,
+                disabled: !!busy,
+                onClick: (event) => {
+                  if (event && event.stopPropagation) event.stopPropagation()
+                  onUnadopt(rule.id)
+                },
+              }, t('unadopt'))
+              : h('span', { style: S.lockMark, 'aria-hidden': true }, '✓'))
             : h('input', {
               type: 'checkbox', style: S.checkbox, disabled: !!busy,
               checked: selected.includes(rule.id),
+              'aria-label': rule.title,
               onChange: () => toggleSelected(rule.id),
             }))
       })
@@ -1473,9 +1792,8 @@ window.__ModuleLoader__.load({
 
       /* ---------------------------- v5 · environment ---------------------------- */
 
-      const sc = env && env.scope ? env.scope : null
-      const inj = env && env.inject ? env.inject : null
-      const met = env && env.metrics ? env.metrics : null
+      /* sc/inj/met and `environment` are computed above the status gate so the
+         shared shell can render before any data arrives. */
       const scopedRules = sc && Array.isArray(sc.rules) ? sc.rules : rules
       const scopedSkills = sc && Array.isArray(sc.skills) ? sc.skills : skills
       const presets = sc && Array.isArray(sc.presets) ? sc.presets : []
@@ -1489,16 +1807,11 @@ window.__ModuleLoader__.load({
       const projectRules = scopedRules.filter((rule) => rule.origin === 'project')
 
       const todoItems = [
-        { key: 'distill', label: t('todoDistill'), count: pendingCount, target: 'presets', review: true },
-        { key: 'evidence', label: t('todoEvidence'), count: enabledRules.filter((rule) => !rule.evidence).length, target: 'presets' },
-        { key: 'conflict', label: t('todoConflict'), count: scopedDisabled.filter((rule) => rule.disabledBy).length, target: 'presets' },
+        { key: 'distill', label: t('todoDistill'), count: pendingCount, target: 'distill' },
+        { key: 'evidence', label: t('todoEvidence'), count: enabledRules.filter((rule) => !rule.evidence).length, target: 'packs', packId: active.id },
+        { key: 'conflict', label: t('todoConflict'), count: scopedDisabled.filter((rule) => rule.disabledBy).length, target: 'packs', packId: active.id },
         { key: 'unverified', label: t('todoUnverified'), count: 0, target: 'metrics' },
       ]
-
-      const onTab = (next) => {
-        setTab(next)
-        try { window.localStorage.setItem('dsw-workstyle:tab', next) } catch (err) { /* no storage in tests */ }
-      }
 
       const scopeBadge = (rule) => {
         if (rule.enabled === false && rule.disabledBy) {
@@ -1539,13 +1852,14 @@ window.__ModuleLoader__.load({
           h('span', { style: S.railLabel }, t('generated')),
           h('span', { style: S.railValue }, latest ? when(latest.generatedAt) : t('never'))))
 
-      const todoBar = h('div', { style: S.tidy },
-        todoItems.map((item) => h('button', {
+      const todoBar = h('div', { style: S.tidy, role: 'group', 'aria-label': t('pending') },
+        todoItems.map((item) => h('a', {
           key: item.key,
+          href: routeHash(item.target, item.packId),
           style: S.tidyItem,
-          onClick: () => {
-            onTab(item.target)
-            if (item.review) setReviewOpen(true)
+          onClick: (event) => {
+            if (event && event.preventDefault) event.preventDefault()
+            navigate({ page: item.target, packId: item.packId })
           },
           title: item.label,
         },
@@ -1577,34 +1891,6 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', justifyContent: 'flex-end' } },
           h('button', { type: 'button', style: S.button, onClick: dismissOnboarding }, t('onboardingDismiss'))),
       ) : null
-
-      // Tabs switch the page; they do not scroll it. Each tab owns one job.
-      // `key` is React's list identity; using it as the tab id would be
-      // shadowed by the reserved prop name, so name the field explicitly.
-      const tabs = [
-        ['inject', t('navInject'), counts.injected],
-        ['presets', t('navPresets'), scopedRules.length],
-        ['metrics', t('navMetrics'), met && met.available ? met.metrics.length : 0],
-        ['distribution', t('navDistribution'), null],
-      ]
-      const tabBar = h('div', { style: S.tabs, role: 'tablist', 'aria-label': t('title') },
-        tabs.map(([id, label, count]) => h('button', {
-          key: id,
-          role: 'tab',
-          id: 'dsw-tab-' + id,
-          'aria-selected': tab === id ? 'true' : 'false',
-          'aria-controls': 'dsw-panel-' + id,
-          style: tab === id ? { ...S.tab, ...S.tabOn } : S.tab,
-          onClick: () => onTab(id),
-        },
-          h('span', null, label),
-          count ? h('span', { style: tab === id ? S.tabCountOn : S.tabCount }, String(count)) : null)))
-
-      const tabPanel = (id, body) => h('div', {
-        role: 'tabpanel',
-        id: 'dsw-panel-' + id,
-        'aria-labelledby': 'dsw-tab-' + id,
-      }, body)
 
       /* ① loaded text — the real bytes, with their fingerprint */
       const injectBlock = h(Section, {
@@ -1740,6 +2026,44 @@ window.__ModuleLoader__.load({
           h('span', null, t('presetSkills') + ' ', h('span', { style: S.presetCountEm }, String(preset.skills.length))),
           h('span', null, t('presetTemplates') + ' ', h('span', { style: S.presetCountEm }, String(preset.templates.length))))))
 
+      /* The run page is intentionally a compact operational surface. Full rule
+         and skill inventories live on their own routes; this page proves what
+         is active and offers only the next useful actions. */
+      const RunPage = ({ environment: runEnvironment, onNavigate, onRefresh, onUsePreset: usePreset }) => h(
+        'div',
+        null,
+        statusRail,
+        todoBar,
+        onboardingTip,
+        runEnvironment && runEnvironment.error
+          ? h('div', { style: S.banner('error'), role: 'alert' },
+            t('envUnavailable') + runEnvironment.error,
+            h('button', { style: S.linkAccent, type: 'button', onClick: onRefresh }, t('refresh')))
+          : null,
+        h('section', { 'aria-labelledby': 'dsw-quick-presets-title', style: { paddingTop: 14 } },
+          h('div', { style: S.sectionHead },
+            h('span', { id: 'dsw-quick-presets-title', style: S.sectionLabel }, t('presetsTitle')),
+            h('a', {
+              href: routeHash('pack', active.id), style: S.linkAccent,
+              onClick: (event) => {
+                if (event && event.preventDefault) event.preventDefault()
+                onNavigate({ page: 'pack', packId: active.id })
+              },
+            }, t('navPresets')),
+          ),
+          h('div', { style: { ...S.presetGrid, paddingTop: 10 } },
+            presets.slice(0, 3).map((preset) => h('button', {
+              key: preset.id,
+              type: 'button',
+              style: S.presetCard(preset.id === activePresetId),
+              onClick: () => usePreset(preset.id),
+              title: preset.description || preset.id,
+            },
+              h('span', { style: S.presetTitle }, preset.title),
+              preset.id === activePresetId ? h('span', { style: S.badge }, t('presetCurrent')) : null)))),
+        injectBlock,
+      )
+
       const presetTabs = [
         ['rules', t('presetRules'), scopedRules.length],
         ['skills', t('presetSkills'), scopedSkills.length],
@@ -1802,67 +2126,15 @@ window.__ModuleLoader__.load({
           }, label + ' · ' + count))),
         presetDetail)
 
-      /* ④ metrics — every number with the working shown */
-      const metricTabs = [
-        ['metrics', t('metricsTitle')],
-        ['sources', t('injectSources')],
-      ]
-
-      /* The only honest comparison is against the previous report window. */
+      /* The only honest comparison is against the previous report window:
+         metrics.baseline.planRate.delta / metrics.baseline.verifyRate.delta. */
       const baselineKey = { 'plan-rate': 'planRate', 'verify-rate': 'verifyRate' }
-      const metricDelta = (metrics, metric) => {
+      const metricDelta = (payload, metric) => {
         const key = baselineKey[metric.id]
-        if (!metrics || !metrics.baseline || !metrics.baseline.available || !key) return null
-        const pair = metrics.baseline[key]
+        if (!payload || !payload.baseline || !payload.baseline.available || !key) return null
+        const pair = payload.baseline[key]
         return pair && typeof pair.delta === 'number' ? pair.delta : null
       }
-
-      const metricCards = met && met.available
-        ? met.metrics.map((metric) => h('div', { key: metric.id, style: S.metricCard },
-          h('div', { style: S.metricTop },
-            h('span', { style: S.metricLabel }, metric.label),
-            metricDelta(met, metric)
-              ? h('span', {
-                style: metricDelta(met, metric) > 0 ? S.deltaUp : S.deltaDown,
-                title: met.baseline.note,
-              }, t('baseline') + ' ' + (metricDelta(met, metric) > 0 ? '+' : '') + metricDelta(met, metric) + '%')
-              : null),
-          h('div', { style: S.metricValueRow },
-            h('span', { style: S.metricValue }, metric.value),
-            h('span', { style: S.metricUnit }, metric.unit)),
-          h('div', { style: S.metricFormula, title: metric.formula },
-            h('strong', null, t('metricsFormula') + '：'), metric.formula),
-          h('div', { style: S.metricFormula }, metric.denominator)))
-        : null
-
-      const metricsBody = met && met.available
-        ? (metricTab === 'metrics'
-          ? h('div', null,
-            h('div', { style: S.metricGrid }, metricCards),
-            met.caveat ? h('div', { style: S.caveat }, met.caveat) : null)
-          : h('div', { style: S.evidenceGrid },
-            (met.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
-              h('span', { style: S.statLabel }, item.label),
-              h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
-              h('span', { style: S.statSub }, item.available ? t('enabled') : t('disabled'))))))
-        : h('div', { style: S.empty }, h('div', { style: S.hint }, t('metricsUnavailable')))
-
-      const metricsBlock = h(Section, {
-        id: 'dsw-metrics',
-        label: '④ ' + t('metricsTitle'),
-        right: h('span', { style: { display: 'inline-flex', gap: 12, alignItems: 'center', fontSize: 12 } },
-          met && met.scanned ? h('span', { style: S.faint, title: met.scanned }, t('metricsWindow')) : null,
-          h('button', { style: S.linkAccent, onClick: onDistill, disabled: !!busy }, t('metricsRebuild'))),
-      },
-        h('div', { style: { ...S.hint, paddingTop: 8 } }, t('metricsHint')),
-        met && met.available
-          ? h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
-            metricTabs.map(([key, label]) => h('button', {
-              key,
-              style: metricTab === key ? { ...S.pill, ...S.pillActive } : S.pill,
-              onClick: () => setMetricTab(key),
-            }, label))) : null,
-        metricsBody)
 
       const projectFileText = (() => {
         if (!sc || !sc.project || !sc.project.file) return ''
@@ -1870,23 +2142,6 @@ window.__ModuleLoader__.load({
           ? t('projectFile') + ' ' + sc.project.file
           : t('noProjectFile') + '（' + t('projectFile') + ' ' + sc.project.file + '）'
       })()
-
-      /* ⑤ distribution */
-      const distributionBlock = h(Section, {
-        id: 'dsw-distribution',
-        label: '⑤ ' + t('distributionTitle'),
-        right: h('span', null, t('packs')),
-      },
-        h('div', { style: S.distHeadRow },
-          h('div', { style: S.distPrimaryRow },
-            h('button', {
-              style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
-              onClick: onExport, disabled: !!busy,
-            }, busy === 'export' ? t('exporting') : t('exportWithScope')),
-            h('button', { style: S.button, onClick: onExport, disabled: !!busy }, t('exportPackOnly')),
-            h('button', { style: S.button, onClick: () => onCopy(installCommand, installCommand) }, t('copyCommand'))),
-          h('span', { style: S.hint }, projectFileText)))
-
 
       const reviewSectionBody = suggestions.length === 0
               ? h('div', { style: S.empty }, h('div', { style: S.hint }, t('reviewEmpty')))
@@ -1934,68 +2189,285 @@ window.__ModuleLoader__.load({
               h('span', { style: S.sourcePath, title: (status.sources || {})[key] || '' }, (status.sources || {})[key] || '-')))),
           h('div', { style: { ...S.hint, paddingTop: 8 } }, t('aboutHint'))))
 
-      return h('div', { id: 'dsw-root', style: S.page },
-        h('style', null, CSS),
-        h('div', { style: S.inner },
+      const runBody = h(RunPage, {
+        environment,
+        onNavigate: navigate,
+        onRefresh: load,
+        onUsePreset,
+      })
 
-          h('div', { style: S.header },
-            h('div', { style: S.brandRow },
-              h('div', { style: { minWidth: 0 } },
-                h('h1', { style: S.title }, t('title')),
-                h('div', { style: S.statusLine },
-                  h('span', null,
-                    t('session') + ' ',
-                    h('span', { style: S.statusStrong }, session && session.id ? session.id.slice(0, 12) : '-')),
-                  h('span', { style: S.statusDivider }),
-                  h('span', null, projectFileText || t('noProjectFile')),
-                  h('span', { style: S.statusDivider }),
-                  h('span', null, active.displayName + ' v' + active.version)))),
-            h('div', { style: S.toolbar },
-              h('select', {
-                style: S.select, value: active.id, disabled: busy === 'apply',
-                onChange: (event) => onApply(event.target.value), title: t('packs'),
-              }, packs.map((pack) => h('option', { key: pack.id, value: pack.id },
-                (pack.displayName || pack.name || pack.id) + '  v' + pack.version))),
+      /* The pack routes own the deep inventories: every effective rule with
+         its layer, presets, and the distillation review queue. The run page
+         proves what is active; the pack page is where that is edited. */
+      const reviewSectionRight = allHandled
+        ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 10 } },
+          h('span', null, t('allHandled') + ' · ' + handledSuggestions.length + ' ' + t('inPackUnit')),
+          h('button', { style: S.linkAccent, onClick: () => setShowHandled((prev) => !prev) },
+            showHandled ? t('hideHandled') : t('viewHandled')))
+        : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null)
+
+      const packDetailBody = h('div', null,
+        rulesBlock,
+        presetsBlock,
+        (pendingCount > 0 || allHandled) ? h(Section, {
+          id: 'dsw-review',
+          label: t('review'),
+          count: suggestions.length,
+          right: reviewSectionRight,
+        }, reviewSectionBody) : null)
+
+      const packListBody = h('div', null,
+        h('div', { style: S.hint }, '选择一个包查看它的规则、技能、预设与模板。'),
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10, paddingTop: 14 } },
+          packs.map((pack) => h('a', {
+            key: pack.id, href: routeHash('packs', pack.id), style: { ...S.tile, textDecoration: 'none' },
+            onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs', packId: pack.id }) },
+          },
+            h('div', { style: S.ruleTitleRow },
+              h('span', { style: S.ruleTitle }, pack.displayName || pack.name || pack.id),
+              pack.id === active.id ? h('span', { style: S.badge }, '当前') : null),
+            h('span', { style: S.mono }, pack.id + ' · v' + pack.version),
+            h('span', { style: S.tileSub }, '来源：' + (pack.source || '本地内置') + ' · ' + (pack.ruleCount || 0) + ' 条规则 · ' + (pack.skillCount || 0) + ' 个技能'),
+            pack.id === active.id ? h('span', { style: S.hint }, '当前生效') : h('span', { style: S.hint }, '可查看')))))
+
+      const routePackDetail = packDetail && packDetail.id === route.packId ? packDetail : null
+      const selectedPack = routePackDetail || packs.find((pack) => pack.id === route.packId) || null
+      const selectedIsActive = !!selectedPack && selectedPack.id === active.id
+      const detailTabs = [
+        ['rules', '规则', selectedPack ? (selectedIsActive ? scopedRules.length : (selectedPack.rules || []).length) : 0],
+        ['skills', '技能', selectedPack ? (selectedIsActive ? scopedSkills.length : (selectedPack.skills || []).length) : 0],
+        ['presets', '预设', selectedPack ? (selectedIsActive ? presets.length : (selectedPack.presets || []).length) : 0],
+        ['templates', '模板', selectedPack ? (selectedIsActive ? templates.length : (selectedPack.templates || []).length) : 0],
+      ]
+      const readOnlyResource = (label, items, render) => h('section', { style: S.section },
+        h('div', { style: S.sectionHead }, h('span', { style: S.sectionLabel }, label), h('span', { style: S.sectionCount }, String(items.length)),
+          h('span', { style: S.sectionRight }, '只读')),
+        items.length ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, items.map(render))
+          : h('div', { style: S.empty }, h('div', { style: S.hint }, '暂无' + label)))
+      const nonActiveDetail = selectedPack
+        ? packTab === 'rules'
+          ? readOnlyResource('规则', selectedPack.rules || [], (rule) => h('div', { key: rule.id, style: S.ruleRowV5 },
+            h('span', { style: S.scopeBadge('workspace') }, '包'), h('div', { style: { minWidth: 0 } }, h('div', { style: S.ruleTitle }, rule.title), h('div', { style: S.ruleText }, rule.text)), h('span', { style: S.mutedBadge }, '只读')))
+          : packTab === 'skills'
+            ? readOnlyResource('技能', selectedPack.skills || [], (skill) => h('div', { key: skill.name, style: S.skillRow },
+              h('div', { style: S.skillHead }, h('span', { style: S.skillName }, skill.name), h('span', { style: S.skillDesc }, skill.description || ''), h('span', { style: S.mutedBadge }, '只读'))))
+            : packTab === 'presets'
+              ? readOnlyResource('预设', selectedPack.presets || [], (preset) => h('div', { key: preset.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, preset.title || preset.id), h('span', { style: S.ruleSideText }, preset.description || ''), h('span', { style: S.mutedBadge }, '只读')))
+              : readOnlyResource('模板', selectedPack.templates || [], (template) => h('div', { key: template.id, style: S.ruleRowV5 }, h('div', { style: S.ruleTitle }, template.title || template.id), h('span', { style: S.ruleSideText }, template.text || ''), h('span', { style: S.mutedBadge }, '只读')))
+        : null
+      const packDetailPageBody = !route.packId
+        ? packListBody
+        : packLoading && !selectedPack
+          ? h(Loading, { label: '正在加载工作方式包…' })
+          : (packError && !routePackDetail) || !selectedPack
+            ? h('div', { style: S.empty },
+              h(ErrorState, { operation: '加载工作方式包', message: '找不到工作方式包：' + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => setPackReload((n) => n + 1) }),
+              h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, '返回工作方式包'))
+            : h('div', null,
+              h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, '当前') : h('span', { style: S.mutedBadge }, '未启用')), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, '来源：' + (selectedPack.source || '本地内置') + ' · ' + selectedPack.ruleCount + ' 条规则 · ' + selectedPack.skillCount + ' 个技能')),
+              h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
+              h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
+
+      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory }) => {
+        const history = Array.isArray(exportHistory) ? exportHistory : []
+        const copyInstall = () => copyAction(installCommand, installCommand)
+        const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
+        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+          h('div', { style: S.tile },
+            h('div', { style: S.ruleTitleRow },
+              h('span', { style: S.ruleTitle }, t('distributionTitle')),
+              h('span', { style: S.badge }, active.displayName + ' v' + active.version)),
+            h('div', { style: S.hint }, '导出只包含可移植的工作方式包；作用域快照只保存项目规则、停用项与预设，不包含任意文件内容。'),
+            h('div', { style: { ...S.distPrimaryRow, paddingTop: 14 } },
               h('button', {
-                style: busy ? { ...S.button, ...S.disabled } : S.button,
-                onClick: load, disabled: !!busy,
-              }, t('refresh')))),
+                style: exportDisabled ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+                onClick: () => exportAction(true), disabled: exportDisabled,
+              }, exportBusy === 'scoped' ? t('exporting') : t('exportWithScope')),
+              h('button', {
+                style: exportDisabled ? { ...S.button, ...S.disabled } : S.button,
+                onClick: () => exportAction(false), disabled: exportDisabled,
+              }, exportBusy === 'pack' ? t('exporting') : t('exportPackOnly'))),
+            h('div', { style: S.installRow },
+              h('span', { style: S.hint }, '安装命令'),
+              h('code', { style: S.code }, installCommand),
+              h('button', { style: S.linkAccent, onClick: copyInstall }, t('copyCommand'))),
+            cwd ? h('div', { style: { ...S.hint, paddingTop: 8 } }, '当前项目：', h('span', { style: S.mono }, cwd)) : null,
+            result
+              ? h('div', { style: { ...S.banner('info'), marginTop: 12 } },
+                h('div', null, t('exported') + '：', h('span', { style: S.mono }, result.file)),
+                h('div', { style: S.hint }, nf(result.files) + ' 个文件 · ' + nf(result.bytes) + ' bytes'),
+                copyArchive ? h('button', { style: { ...S.linkAccent, marginTop: 6 }, onClick: copyArchive }, t('copyPath')) : null)
+              : null,
+            exportError ? h('div', { style: { marginTop: 12 } },
+              h(ErrorState, {
+                operation: '导出工作方式包',
+                message: exportError,
+                onRetry: (lastMode === null || lastMode === undefined) ? undefined : () => exportAction(lastMode),
+              })) : null),
+          h(Section, { id: 'dsw-distribution-history', label: '最近导出', count: history.length },
+            historyError
+              ? h('div', { style: { paddingBottom: history.length ? 12 : 0 } },
+                h(ErrorState, { operation: '加载导出历史', message: historyError, onRetry: onRetryHistory }))
+              : null,
+            history.length
+              ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, history.map((item) =>
+                h('div', { key: item.file, style: S.ruleRowV5 },
+                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                    h('span', { style: S.ruleTitle }, item.file || '—'),
+                    h('span', { style: S.hint }, when(item.modifiedAt) || '—')),
+                  h('span', { style: S.ruleSideText }, (item.packId || '—') + ' v' + (item.packVersion || '—')),
+                  h('span', { style: S.mutedBadge }, nf(item.bytes) + ' bytes'))))
+              : !historyError
+                ? h('div', { style: S.empty },
+                  h('div', { style: S.hint }, '还没有导出记录。复制安装命令后，导出一个包交给队友。'),
+                  h('button', { style: S.buttonPrimary, disabled: exportDisabled, onClick: () => exportAction(false) }, t('exportPackOnly')))
+                : null))
+      }
 
-          statusRail,
-          todoBar,
-          onboardingTip,
+      const DistillPage = ({ onNavigate, onScan, historyError, onRetryHistory }) => {
+        const sourceEntries = Object.entries((report && report.sources) || {})
+        const sourceLabels = { claude: 'Claude Code', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' }
+        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+          h('div', { style: S.tile },
+            h('div', { style: S.ruleTitleRow },
+              h('span', { style: S.ruleTitle }, '蒸馏审阅'),
+              h('span', { style: S.badge }, '本地数据')),
+            h('div', { style: S.hint }, '扫描本机会话生成聚合建议；不联网、不上传，不保存 prompt 原文。'),
+            h('div', { style: { ...S.actionsBar, paddingTop: 12 } },
+              h('button', { style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary, disabled: !!busy, onClick: onScan },
+                busy === 'distill' ? t('distilling') : t('distill')),
+              h('span', { style: S.actionsNote }, latest ? '最近生成：' + when(latest.generatedAt) : '尚未扫描')),
+            sourceEntries.length
+              ? h('div', { style: { ...S.sourceList, paddingBottom: 0 } }, sourceEntries.map(([key, source]) =>
+                h('div', { key, style: S.sourceRow },
+                  h('span', { style: S.sourceName }, sourceLabels[key] || key),
+                  h('span', { style: S.sourcePath }, source && source.available ? '可用' : '未发现'))))
+              : h('div', { style: S.hint }, '扫描后显示本机来源状态。')),
+          h(Section, { id: 'dsw-distill-review', label: '建议审阅', count: suggestions.length, right: reviewSectionRight },
+            reviewSectionBody),
+          h(Section, { id: 'dsw-distill-history', label: '报告历史', count: reports.length },
+            historyError
+              ? h('div', { style: { paddingBottom: reports.length ? 12 : 0 } },
+                h(ErrorState, { operation: '加载报告历史', message: historyError, onRetry: onRetryHistory }))
+              : null,
+            reports.length
+              ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, reports.map((item) =>
+                h('div', { key: item.file, style: S.ruleRowV5 },
+                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                    h('span', { style: S.ruleTitle }, when(item.generatedAt) || item.file),
+                    h('span', { style: S.hint }, item.file)),
+                  h('span', { style: S.ruleSideText }, Object.entries(item.sources || {}).filter(([, available]) => available).map(([key]) => sourceLabels[key] || key).join(' · ') || '无可用来源'),
+                  h('span', { style: S.mutedBadge }, String(item.suggestionCount || 0) + ' 条建议'))))
+              : !historyError
+                ? h('div', { style: S.empty }, h('div', { style: S.hint }, '还没有报告。扫描本地数据后，这里只显示生成时间、来源和建议数量。'))
+                : null),
+          h('a', { href: '#/metrics', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'metrics' }) } }, '查看代理度量 →'))
+      }
 
-          error ? h('div', { style: S.banner('error') }, t('error') + '：' + error) : null,
-          notice ? h('div', { style: S.banner('info') }, notice) : null,
-          envError ? h('div', { style: S.banner('error') }, t('envUnavailable') + envError) : null,
+      const MetricsPage = ({ metrics, onNavigate, onScan }) => {
+        const available = metrics && metrics.available
+        const metricWindow = metrics && (metrics.window || metrics.scanned || (metrics.generatedAt ? '生成于 ' + when(metrics.generatedAt) : ''))
+        const metricCardsPage = (metrics && metrics.metrics || []).slice(0, 4).map((metric) => {
+          const delta = metricDelta(metrics, metric)
+          return h('div', { key: metric.id, style: S.metricCard },
+          h('div', { style: S.metricTop }, h('span', { style: S.metricLabel }, metric.label),
+            delta !== null
+              ? h('span', {
+                style: delta > 0 ? S.deltaUp : S.deltaDown,
+                title: metrics.baseline && metrics.baseline.note ? metrics.baseline.note : '',
+              }, t('baseline') + ' ' + (delta > 0 ? '+' : '') + delta + '%')
+              : null),
+          h('div', { style: S.metricValueRow }, h('span', { style: S.metricValue }, metric.value), h('span', { style: S.metricUnit }, metric.unit)),
+          h('div', { style: S.metricFormula }, h('strong', null, '公式：'), metric.formula || '—'),
+          h('div', { style: S.metricFormula }, h('strong', null, '分母：'), metric.denominator || '—'),
+          metric.window ? h('div', { style: S.hint }, '窗口：' + metric.window) : null)
+        })
+        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
+          h('div', { style: S.tile },
+            h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, '代理度量'), h('span', { style: S.badge }, '可复算')),
+            h('div', { style: S.hint }, '这些数字描述可观察的提示与来源覆盖，不能说明模型是否遵守规则。'),
+            metricWindow ? h('div', { style: { ...S.hint, paddingTop: 8 } }, '窗口：' + metricWindow) : null),
+          available
+            ? h('div', null,
+              h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
+                h('button', {
+                  style: metricTab === 'metrics' ? { ...S.pill, ...S.pillActive } : S.pill,
+                  'aria-pressed': metricTab === 'metrics' ? 'true' : 'false',
+                  onClick: () => setMetricTab('metrics'),
+                }, '度量'),
+                h('button', {
+                  style: metricTab === 'sources' ? { ...S.pill, ...S.pillActive } : S.pill,
+                  'aria-pressed': metricTab === 'sources' ? 'true' : 'false',
+                  onClick: () => setMetricTab('sources'),
+                }, '来源')),
+              metricTab === 'metrics'
+                ? h('div', null, h('div', { style: S.metricGrid }, metricCardsPage), h('div', { style: S.caveat }, metrics.caveat || '这些是代理指标，只描述可观察信号。'))
+                : h('div', { style: S.evidenceGrid }, (metrics.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
+                  h('span', { style: S.statLabel }, item.label), h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
+                  h('span', { style: S.statSub }, item.available ? '可用' : '未发现')))))
+            : h(EmptyState, {
+              title: '还没有可用度量',
+              description: t('metricsUnavailable') + '先蒸馏一次本机会话，再回来查看代理度量。',
+              action: '先去蒸馏 →', href: '#/distill',
+              onAction: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'distill' }) },
+            }))
+      }
 
-          tabBar,
+      const pageBody = route.page === 'run'
+        ? h('section', { 'aria-labelledby': 'dsw-run-title' },
+          h('h2', { id: 'dsw-run-title', style: { ...S.sectionLabel, fontSize: 18, margin: '0 0 12px' } }, '运行台'), runBody)
+        : route.page === 'packs' || route.page === 'pack'
+          ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
+            h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? '工作方式包详情' : '工作方式包'), packDetailPageBody)
+          : route.page === 'distill'
+            ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏审阅'), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
+            : route.page === 'metrics'
+              ? h('section', { 'aria-labelledby': 'dsw-metrics-title' }, h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, '度量台'), h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }))
+              : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
+                h('h2', { id: 'dsw-distribute-title', style: { ...S.sectionLabel, fontSize: 18 } }, '分发'),
+                h(DistributionPage, {
+                  exports,
+                  cwd: environment.cwd,
+                  onExport,
+                  onCopy,
+                  result: exportResult,
+                  busy: exportBusy,
+                  disabled: !!exportBusy || !!busy,
+                  error: error,
+                  lastMode: exportMode,
+                  historyError: exportsError,
+                  onRetryHistory: load,
+                }))
 
-          tab === 'inject' ? tabPanel('inject', injectBlock) : null,
-          tab === 'presets' ? tabPanel('presets', h('div', null,
-            rulesBlock,
-            presetsBlock,
-            (reviewOpen || pendingCount > 0 || allHandled) ? h(Section, {
-              id: 'dsw-review',
-              label: t('review'),
-              count: suggestions.length,
-              right: allHandled
-                ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 10 } },
-                  h('span', null, t('allHandled') + ' · ' + handledSuggestions.length + ' ' + t('inPackUnit')),
-                  h('button', {
-                    style: S.linkAccent,
-                    onClick: () => setShowHandled((prev) => !prev),
-                  }, showHandled ? t('hideHandled') : t('viewHandled')))
-                : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null),
-            }, reviewSectionBody) : null,
-          )) : null,
-          tab === 'metrics' ? tabPanel('metrics', metricsBlock) : null,
-          tab === 'distribution' ? tabPanel('distribution', h('div', null, distributionBlock, evidenceSection)) : null,
+      const headerNode = h('div', { style: S.header },
+        h('div', { style: S.brandRow },
+          h('div', { style: { minWidth: 0 } },
+            h('h1', { style: S.title }, t('title')),
+            h('div', { style: S.statusLine },
+              h('span', null,
+                t('session') + ' ',
+                h('span', { style: S.statusStrong }, session && session.id ? session.id.slice(0, 12) : '-')),
+              h('span', { style: S.statusDivider }),
+              h('span', null, projectFileText || t('noProjectFile')),
+              h('span', { style: S.statusDivider }),
+              h('span', null, active.displayName + ' v' + active.version)))),
+        h('div', { style: S.toolbar },
+          h('select', {
+            style: S.select, value: active.id, disabled: busy === 'apply',
+            onChange: (event) => onApply(event.target.value), title: t('packs'),
+          }, packs.map((pack) => h('option', { key: pack.id, value: pack.id },
+            (pack.displayName || pack.name || pack.id) + '  v' + pack.version))),
+          h('button', {
+            style: busy ? { ...S.button, ...S.disabled } : S.button,
+            onClick: load, disabled: !!busy,
+          }, t('refresh'))))
 
-          h('div', { style: S.footer },
-            h('span', null, BUILD),
-            h('span', null, t('privacy')),
-            h('span', { style: S.mono }, 'dsh-workstyle v' + status.plugin.version))))
+      const footerNode = h('div', { style: S.footer },
+        h('span', null, BUILD),
+        h('span', null, t('privacy')),
+        h('span', { style: S.mono }, 'dsh-workstyle v' + status.plugin.version))
+
+      return shell(pageBody, headerNode, footerNode, true)
     }
 
 
@@ -2010,7 +2482,12 @@ window.__ModuleLoader__.load({
         key: NS,
         locale: NS,
         inject: () => ({ t }),
-      }, () => h(Panel, { t })))
+      }, (host) => h(Panel, {
+        t,
+        cwd: host && host.cwd,
+        sessionId: host && host.sessionId,
+        sessionIds: host && host.sessionIds,
+      })))
 
       ctx.slots.inject('sidebar.panellist', () => ctx.slots.register({
         name: 'sidebar.panellist',

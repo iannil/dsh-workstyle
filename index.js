@@ -18,6 +18,12 @@ import {
 } from './lib/pack.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
+import {
+  checkPresetId, composeScope, listPresets, listTemplates, projectFilePath, readProjectScope,
+  readSessionScope, sessionFilePath, writeProjectScope, writeSessionScope,
+} from './lib/scope.js'
+import { packForRender, renderInjectText } from './lib/inject-text.js'
+import { computeMetrics } from './lib/metrics.js'
 
 const PKG_DIR = path.dirname(fileURLToPath(import.meta.url))
 const PKG_JSON = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'))
@@ -80,6 +86,85 @@ function loadAllPacks() {
   return packs
 }
 
+function packDetail(pack) {
+  return {
+    id: pack.id,
+    name: pack.name,
+    displayName: pack.displayName,
+    version: pack.version,
+    license: pack.license,
+    description: pack.description,
+    format: pack.format,
+    ruleCount: pack.rules.length,
+    skillCount: pack.skillCount,
+    rules: pack.rules,
+    presets: listPresets(pack.presets),
+    templates: listTemplates(pack.templates),
+    skills: (pack.skillList || []).map((skill) => ({
+      name: skill.name,
+      description: skill.description || '',
+      whenToUse: skill.whenToUse || '',
+    })),
+  }
+}
+
+function listReportMetadata() {
+  let names
+  try { names = fs.readdirSync(reportsDir()) } catch { return [] }
+  const candidates = names.filter((name) => /^report-.*\.json$/.test(name))
+  if (!candidates.length && names.includes('latest.json')) candidates.push('latest.json')
+  const reports = []
+  for (const file of candidates) {
+    try {
+      const report = JSON.parse(fs.readFileSync(path.join(reportsDir(), file), 'utf8'))
+      const sources = report.sources && typeof report.sources === 'object' ? report.sources : {}
+      reports.push({
+        file,
+        generatedAt: typeof report.generatedAt === 'string' ? report.generatedAt : null,
+        sources: Object.fromEntries(Object.entries(sources).map(([key, value]) => [key, !!(value && value.available)])),
+        suggestionCount: Array.isArray(report.suggestedRules) ? report.suggestedRules.length : 0,
+      })
+    } catch { /* ignore corrupt report metadata */ }
+  }
+  return reports.sort((a, b) => String(b.generatedAt || '').localeCompare(String(a.generatedAt || '')))
+}
+
+function listExportMetadata() {
+  let names
+  try { names = fs.readdirSync(exportsDir()) } catch { return [] }
+  return names
+    .filter((file) => file.endsWith('.tar.gz'))
+    .map((file) => {
+      try {
+        const stat = fs.statSync(path.join(exportsDir(), file))
+        const timestampAt = file.search(/-\d{4}-\d{2}-\d{2}T/)
+        const stem = timestampAt > 0 ? file.slice(0, timestampAt) : file.replace(/\.tar\.gz$/, '')
+        const versionAt = stem.lastIndexOf('-v')
+        return {
+          file,
+          bytes: stat.size,
+          modifiedAt: stat.mtime.toISOString(),
+          packId: versionAt > 0 ? stem.slice(0, versionAt) : null,
+          packVersion: versionAt > 0 ? stem.slice(versionAt + 2) : null,
+        }
+      } catch { return undefined }
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt))
+}
+
+function projectSnapshotFor(cwd) {
+  const scope = readProjectScope(cwd)
+  return {
+    $schema: 'dsh-workstyle/project@1',
+    version: 1,
+    ...(scope.rules.length ? { rules: scope.rules } : {}),
+    ...(scope.disabledRules.length ? { disabledRules: scope.disabledRules } : {}),
+    ...(scope.disabledSkills.length ? { disabledSkills: scope.disabledSkills } : {}),
+    ...(scope.preset ? { preset: scope.preset } : {}),
+  }
+}
+
 /* ------------------------------------------------------------------ */
 /* Adopted rules: distillation review → pack overlay                   */
 /*                                                                     */
@@ -111,6 +196,52 @@ function mergeRules(pack, adopted) {
   const ids = new Set(pack.rules.map((rule) => rule.id))
   const extra = (adopted || []).filter((rule) => !ids.has(rule.id))
   return [...pack.rules, ...extra.map((rule) => ({ ...rule, source: 'distilled' }))]
+}
+
+/* ------------------------------------------------------------------ */
+/* Local overrides: per-pack enable/disable, never written to the pack  */
+/*                                                                     */
+/* The pack directory stays immutable. `overrides.json` records which   */
+/* rules/skills the user turned off on this machine, keyed by pack id.  */
+/* Exports ignore overrides, so sharing a pack never drops a rule.      */
+/* ------------------------------------------------------------------ */
+
+function overridesPath() {
+  return path.join(workstyleHome(), 'overrides.json')
+}
+
+function readOverrides() {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(overridesPath(), 'utf8'))
+    return parsed && typeof parsed === 'object' ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function disabledFor(packId) {
+  const all = readOverrides()
+  const entry = all.packs && all.packs[packId]
+  const list = (value) => new Set(Array.isArray(value) ? value.filter((id) => typeof id === 'string') : [])
+  return {
+    rules: list(entry && entry.disabledRules),
+    skills: list(entry && entry.disabledSkills),
+  }
+}
+
+function writeDisabled(packId, kind, ids) {
+  const all = readOverrides()
+  const packs = { ...(all.packs && typeof all.packs === 'object' ? all.packs : {}) }
+  const entry = { ...(packs[packId] && typeof packs[packId] === 'object' ? packs[packId] : {}) }
+  const key = kind === 'rule' ? 'disabledRules' : 'disabledSkills'
+  const sorted = [...new Set(ids)].sort()
+  if (sorted.length) entry[key] = sorted
+  else delete entry[key]
+  if (Object.keys(entry).length) packs[packId] = { ...entry, updatedAt: new Date().toISOString() }
+  else delete packs[packId]
+  const next = { ...all, schemaVersion: 1, packs }
+  fs.mkdirSync(workstyleHome(), { recursive: true })
+  fs.writeFileSync(overridesPath(), JSON.stringify(next, null, 2) + '\n')
 }
 
 function jsonResponse(value, status = 200) {
@@ -149,7 +280,93 @@ export function apply(ctx) {
     return { ...pack, skillList: skills, skillCount: skills.length }
   }
 
-  const effectiveActive = () => ({ ...active, rules: mergeRules(active, adoptedRulesFor(active.id)) })
+  const allActiveRules = () => mergeRules(active, adoptedRulesFor(active.id))
+
+  const effectiveActive = () => {
+    const off = disabledFor(active.id)
+    return {
+      ...active,
+      rules: allActiveRules().filter((rule) => !off.rules.has(rule.id)),
+      skillCount: (active.skillList || []).filter((skill) => !off.skills.has(skill.name)).length,
+    }
+  }
+
+  /**
+   * Which project and session the page is looking at.
+   *
+   * The panel passes them explicitly (it knows the live session); a tool call
+   * or command usually does not, so those fall back to the process cwd and to
+   * no session at all. Never guesses a session id.
+   */
+  /**
+   * Every keyword any enabled rule measures itself by. Distillation counts
+   * these while it still holds the prompts; the report keeps only tallies.
+   */
+  const measureKeywords = (input) => {
+    const words = new Set()
+    // Keywords come from the rules actually in effect for this context —
+    // project and session layers included — not from the pack alone.
+    const rules = input ? scopeFor(input).enabledRules : allActiveRules()
+    for (const rule of rules) {
+      if (!Array.isArray(rule.measures)) continue
+      for (const word of rule.measures) {
+        if (typeof word === 'string' && word) words.add(word)
+      }
+    }
+    return [...words]
+  }
+
+  const resolveContext = (input) => {
+    const cwd = input && typeof input.cwd === 'string' && input.cwd.trim()
+      ? path.resolve(input.cwd.trim())
+      : process.cwd()
+    const sessionId = input && typeof input.sessionId === 'string' && input.sessionId.trim()
+      ? input.sessionId.trim()
+      : undefined
+    return { cwd, sessionId }
+  }
+
+  /** Compose every layer into the effective rule/skill set for a context. */
+  const scopeFor = (input) => {
+    const { cwd, sessionId } = resolveContext(input)
+    return {
+      ...resolveContext(input),
+      ...composeScope({
+        baseRules: allActiveRules(),
+        allSkills: active.skillList || [],
+        packPresets: active.presets || [],
+        packTemplates: active.templates || [],
+        cwd,
+        sessionId,
+        disabledGlobal: [...disabledFor(active.id).rules],
+        presetId: input && typeof input.preset === 'string' ? input.preset : undefined,
+      }),
+    }
+  }
+
+  /** The exact text the system prompt section emits for a context. */
+  const injectFor = (input) => {
+    const scope = scopeFor(input)
+    const rendered = renderInjectText(packForRender({
+      pack: active,
+      enabledRules: scope.enabledRules,
+      enabledSkillCount: scope.counts.skills,
+    }))
+    return {
+      ...rendered,
+      section: 'dsh-workstyle.rules',
+      packId: active.id,
+      packDisplayName: active.displayName,
+      packVersion: active.version,
+      cwd: scope.cwd,
+      sessionId: scope.sessionId || null,
+      projectFile: projectFilePath(scope.cwd),
+      sessionFile: scope.sessionId ? sessionFilePath(scope.sessionId) : null,
+      counts: scope.counts,
+      preset: scope.activePreset ? scope.activePreset.id : null,
+      presetScope: scope.presetScope,
+    }
+  }
 
   const findPack = (idOrDir) => {
     const packsNow = loadAllPacks()
@@ -163,35 +380,61 @@ export function apply(ctx) {
 
   const buildStatus = () => {
     const latest = readLatestReport()
-    const effective = effectiveActive()
+    const off = disabledFor(active.id)
     const packRuleIds = new Set(active.rules.map((rule) => rule.id))
     const adopted = adoptedRulesFor(active.id)
     const adoptedIds = new Set(adopted.map((rule) => rule.id))
+    const rules = allActiveRules().map((rule) => ({
+      ...rule,
+      enabled: !off.rules.has(rule.id),
+      origin: rule.source === 'distilled' ? 'distilled' : 'pack',
+    }))
+    const skills = (active.skillList || []).map((skill) => ({
+      name: skill.name,
+      description: skill.description,
+      whenToUse: skill.whenToUse,
+      enabled: !off.skills.has(skill.name),
+      origin: 'pack',
+    }))
+    const suggestions = latest && Array.isArray(latest.suggestedRules)
+      ? latest.suggestedRules.map((rule) => ({
+          id: rule.id,
+          title: rule.title,
+          text: rule.text,
+          evidence: rule.evidence || '',
+          confidence: rule.confidence || 'medium',
+          adopted: adoptedIds.has(rule.id),
+          present: packRuleIds.has(rule.id),
+        }))
+      : []
+    const enabledRules = rules.filter((rule) => rule.enabled)
+    const enabledSkills = skills.filter((skill) => skill.enabled)
     return {
       plugin: {
         name, version: VERSION, home: workstyleHome(),
-        reports: reportsDir(), exports: exportsDir(),
+        reports: reportsDir(), exports: exportsDir(), overrides: overridesPath(),
       },
       activePackId: active.id,
-      activePack: packSummary(effective),
+      activePack: packSummary(active),
       packs: packs.map(packSummary),
-      rules: effective.rules,
+      summary: {
+        ruleCount: rules.length,
+        enabledRuleCount: enabledRules.length,
+        disabledRuleCount: rules.length - enabledRules.length,
+        skillCount: skills.length,
+        enabledSkillCount: enabledSkills.length,
+        disabledSkillCount: skills.length - enabledSkills.length,
+        adoptedRuleCount: adopted.length,
+        pendingSuggestionCount: suggestions.filter((rule) => !(rule.adopted || rule.present)).length,
+        noEvidenceRuleCount: enabledRules.filter((rule) => !rule.evidence).length,
+      },
+      rules,
       adoptions: adopted.map((rule) => ({
         id: rule.id, title: rule.title, text: rule.text,
         evidence: rule.evidence || '', adoptedAt: rule.adoptedAt,
       })),
-      suggestions: latest && Array.isArray(latest.suggestedRules)
-        ? latest.suggestedRules.map((rule) => ({
-            id: rule.id,
-            title: rule.title,
-            text: rule.text,
-            evidence: rule.evidence || '',
-            confidence: rule.confidence || 'medium',
-            adopted: adoptedIds.has(rule.id),
-            present: packRuleIds.has(rule.id),
-          }))
-        : [],
-      skills: effective.skillList.map((skill) => ({ name: skill.name, description: skill.description, whenToUse: skill.whenToUse })),
+      suggestions,
+      skills,
       latestDistill: latest
         ? { generatedAt: latest.generatedAt, file: path.join(reportsDir(), 'latest.json') }
         : undefined,
@@ -249,7 +492,13 @@ export function apply(ctx) {
         adoptedAt: new Date().toISOString(),
       })
     }
-    if (added.length) writeAdoptionsFor(active.id, [...existing, ...added])
+    if (added.length) {
+      writeAdoptionsFor(active.id, [...existing, ...added])
+      const off = disabledFor(active.id)
+      let changed = false
+      for (const rule of added) if (off.rules.delete(rule.id)) changed = true
+      if (changed) writeDisabled(active.id, 'rule', [...off.rules])
+    }
     log('adopted rules:', added.map((rule) => rule.id).join(', ') || '(none)')
     return { added: added.map((rule) => rule.id), skipped, ruleCount: effectiveActive().rules.length }
   }
@@ -259,11 +508,42 @@ export function apply(ctx) {
     const next = existing.filter((rule) => rule.id !== ruleId)
     if (next.length === existing.length) throw new Error('rule not adopted: ' + ruleId)
     writeAdoptionsFor(active.id, next)
+    const off = disabledFor(active.id)
+    if (off.rules.has(ruleId)) {
+      off.rules.delete(ruleId)
+      writeDisabled(active.id, 'rule', [...off.rules])
+    }
     log('revoked adopted rule:', ruleId)
     return { removed: ruleId, ruleCount: effectiveActive().rules.length }
   }
 
-  const exportActivePack = (idOrDir) => {
+  /**
+   * Enable/disable one rule or skill for the active pack on this machine.
+   * Disabled items leave the system prompt and the skills provider, but the
+   * pack directory and exports stay untouched.
+   */
+  const toggleItem = (kind, id, enabled) => {
+    if (kind !== 'rule' && kind !== 'skill') throw new Error('kind must be "rule" or "skill"')
+    const target = typeof id === 'string' ? id.trim() : ''
+    if (!target) throw new Error('id is required')
+    const off = disabledFor(active.id)
+    if (kind === 'rule') {
+      if (!allActiveRules().some((rule) => rule.id === target)) throw new Error('unknown rule: ' + target)
+      if (enabled) off.rules.delete(target)
+      else off.rules.add(target)
+      writeDisabled(active.id, 'rule', [...off.rules])
+    } else {
+      if (!(active.skillList || []).some((skill) => skill.name === target)) throw new Error('unknown skill: ' + target)
+      if (enabled) off.skills.delete(target)
+      else off.skills.add(target)
+      writeDisabled(active.id, 'skill', [...off.skills])
+      try { skillControl?.invalidate() } catch { /* provider may be gone */ }
+    }
+    log((enabled ? 'enabled ' : 'disabled ') + kind + ':', target)
+    return { kind, id: target, enabled: !!enabled, summary: buildStatus().summary }
+  }
+
+  const exportActivePack = (idOrDir, projectSnapshot) => {
     let target = active
     if (idOrDir) {
       const found = findPack(idOrDir)
@@ -275,6 +555,7 @@ export function apply(ctx) {
       pack: { ...target, pluginVersion: VERSION },
       rules,
       destDir: exportsDir(),
+      ...(projectSnapshot ? { projectSnapshot } : {}),
     })
     log('exported pack:', target.id, '→', out.file)
     return {
@@ -298,7 +579,16 @@ export function apply(ctx) {
     ctx.effect(() => ctx.systemPrompt.section({
       name: 'dsh-workstyle.rules',
       order,
-      text: () => renderRules(effectiveActive()),
+      text: () => {
+        // One compose, one render: the panel preview and this section must
+        // never render the same state twice and disagree about the bytes.
+        const scope = scopeFor({})
+        return renderInjectText(packForRender({
+          pack: active,
+          enabledRules: scope.enabledRules,
+          enabledSkillCount: scope.counts.skills,
+        })).text
+      },
     }), 'dsh-workstyle: system prompt rules')
   } catch (error) {
     log('system prompt section unavailable:', error && error.message ? error.message : String(error))
@@ -314,7 +604,9 @@ export function apply(ctx) {
           const candidates = []
           let rank = 0
           for (const pack of packs) {
+            const off = disabledFor(pack.id)
             for (const skill of pack.skillList || []) {
+              if (off.skills.has(skill.name)) continue
               candidates.push({
                 name: skill.name,
                 description: skill.description,
@@ -385,7 +677,10 @@ export function apply(ctx) {
         activePack: status.activePack.id,
         activePackVersion: status.activePack.version,
         ruleCount: status.activePack.ruleCount,
+        enabledRuleCount: status.summary.enabledRuleCount,
+        disabledRuleCount: status.summary.disabledRuleCount,
         skillCount: status.activePack.skillCount,
+        enabledSkillCount: status.summary.enabledSkillCount,
         packs: status.packs.map((pack) => ({ id: pack.id, version: pack.version, rules: pack.ruleCount, skills: pack.skillCount })),
         adoptedRules: status.adoptions.map((rule) => rule.id),
         suggestions: status.suggestions.map((rule) => ({ id: rule.id, title: rule.title, adopted: rule.adopted, present: rule.present })),
@@ -404,12 +699,15 @@ export function apply(ctx) {
     },
     async execute() {
       const effective = effectiveActive()
+      const off = disabledFor(active.id)
       return {
         activePack: active.id,
         ruleCount: effective.rules.length,
         adoptedRules: adoptedRulesFor(active.id).map((rule) => rule.id),
         packs: packs.map(packSummary),
-        skills: effective.skillList.map((skill) => ({ name: skill.name, description: skill.description })),
+        skills: effective.skillList
+          .filter((skill) => !off.skills.has(skill.name))
+          .map((skill) => ({ name: skill.name, description: skill.description })),
       }
     },
   })
@@ -450,7 +748,7 @@ export function apply(ctx) {
     },
     async execute(args) {
       const limit = args && Number.isFinite(args.dshSessions) ? Math.max(0, Math.min(50, args.dshSessions)) : 12
-      const { file, report } = await distill({ dshSessions: limit })
+      const { file, report } = await distill({ dshSessions: limit, keywords: measureKeywords() })
       return {
         file,
         suggestedRules: report.suggestedRules.length,
@@ -505,6 +803,37 @@ export function apply(ctx) {
   })
 
   registerTool({
+    name: 'workstyle_toggle',
+    description: 'Enable or disable one rule or skill in the active pack on this machine. The pack directory and exports are unchanged; a disabled rule leaves the system prompt and a disabled skill leaves the skills provider.',
+    parameters: {
+      type: 'object',
+      properties: {
+        kind: { type: 'string', enum: ['rule', 'skill'], description: 'Item type.' },
+        id: { type: 'string', description: 'Rule id or skill name.' },
+        enabled: { type: 'boolean', description: 'true enables, false disables.' },
+      },
+      required: ['kind', 'id', 'enabled'],
+      additionalProperties: false,
+    },
+    output: {
+      schema: { type: 'object', properties: { kind: { type: 'string' }, id: { type: 'string' }, enabled: { type: 'boolean' }, ruleCount: { type: 'number' }, skillCount: { type: 'number' } } },
+      render: (args, value) => textBlock(
+        (value.enabled ? '已启用 ' : '已停用 ') + (value.kind === 'rule' ? '规则 ' : '技能 ') + value.id +
+        '（生效 ' + value.ruleCount + ' 规则 / ' + value.skillCount + ' 技能；包文件未改动）'),
+    },
+    async execute(args) {
+      const result = toggleItem(args && args.kind, args && args.id, !!(args && args.enabled))
+      return {
+        kind: result.kind,
+        id: result.id,
+        enabled: result.enabled,
+        ruleCount: result.summary.enabledRuleCount,
+        skillCount: result.summary.enabledSkillCount,
+      }
+    },
+  })
+
+  registerTool({
     name: 'workstyle_export',
     description: 'Export a workstyle pack (rules + bundled skills, including adopted distillation rules) as a portable .tar.gz that a teammate can extract and apply.',
     parameters: {
@@ -528,8 +857,8 @@ export function apply(ctx) {
   try {
     ctx.inject(['commands'], (scoped) => scoped.effect(() => scoped.commands.register({
       name: 'workstyle',
-      description: '工作方式包：/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | export',
-      input: { hint: 'status | apply <pack> | distill | adopt <id|all> | undo <id> | export' },
+      description: '工作方式包：/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export',
+      input: { hint: 'status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export' },
       async handler(invocation) {
         const raw = String(invocation.rawInput || '').trim()
         const [head, ...rest] = raw.split(/\s+/)
@@ -548,7 +877,7 @@ export function apply(ctx) {
             return { kind: 'success', text: '已应用：' + summary.id + '（' + summary.ruleCount + ' 规则 / ' + summary.skillCount + ' 技能）' }
           }
           if (head === 'distill') {
-            const { file, report } = await distill({})
+            const { file, report } = await distill({ keywords: measureKeywords() })
             return { kind: 'success', text: '蒸馏完成：' + file + '（建议规则 ' + report.suggestedRules.length + ' 条）' }
           }
           if (head === 'adopt') {
@@ -566,11 +895,23 @@ export function apply(ctx) {
             const result = unadoptRule(id)
             return { kind: 'success', text: '已撤销采纳：' + result.removed + '（当前 ' + result.ruleCount + ' 条规则）' }
           }
+          if (head === 'on' || head === 'off') {
+            const id = rest.join(' ').trim()
+            if (!id) return { kind: 'error', text: '用法：/workstyle ' + head + ' <rule-id|skill-name>' }
+            const enabled = head === 'on'
+            const kind = allActiveRules().some((rule) => rule.id === id) ? 'rule' : 'skill'
+            const result = toggleItem(kind, id, enabled)
+            return {
+              kind: 'success',
+              text: (enabled ? '已启用 ' : '已停用 ') + (kind === 'rule' ? '规则 ' : '技能 ') + id +
+                '（生效 ' + result.summary.enabledRuleCount + ' 规则 / ' + result.summary.enabledSkillCount + ' 技能）',
+            }
+          }
           if (head === 'export') {
             const out = exportActivePack(rest.join(' ') || undefined)
             return { kind: 'success', text: '已导出：' + out.file + '（' + out.ruleCount + ' 规则 / ' + out.skillCount + ' 技能）' }
           }
-          return { kind: 'error', text: '未知子命令：' + head + '（可用 status / apply / distill / adopt / undo / export）' }
+          return { kind: 'error', text: '未知子命令：' + head + '（可用 status / apply / distill / adopt / undo / on / off / export）' }
         } catch (error) {
           return { kind: 'error', text: error && error.message ? error.message : String(error) }
         }
@@ -597,6 +938,31 @@ export function apply(ctx) {
         methods: ['GET'],
         requestBody: 'buffered',
         fetch: async () => jsonResponse(buildStatus()),
+      })
+      register({
+        path: ROUTE_BASE + '/pack',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const idOrDir = new URL(request.url).searchParams.get('id')
+          if (!idOrDir) return jsonResponse({ error: 'id is required' }, 400)
+          const found = findPack(idOrDir)
+          return found.next
+            ? jsonResponse({ pack: packDetail(found.next) })
+            : jsonResponse({ error: 'unknown pack: ' + idOrDir }, 404)
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/reports',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async () => jsonResponse({ reports: listReportMetadata() }),
+      })
+      register({
+        path: ROUTE_BASE + '/exports',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async () => jsonResponse({ exports: listExportMetadata() }),
       })
       register({
         path: ROUTE_BASE + '/evidence',
@@ -631,7 +997,12 @@ export function apply(ctx) {
           const body = await readJsonBody(request)
           const limit = body && Number.isFinite(body.dshSessions) ? Math.max(0, Math.min(50, body.dshSessions)) : 12
           try {
-            const { file, report } = await distill({ dshSessions: limit })
+            const { file, report } = await distill({
+              dshSessions: limit,
+              // The panel distils for the project it is showing, so its rules
+              // get measured too.
+              keywords: measureKeywords({ cwd: body && body.cwd, sessionId: body && body.sessionId }),
+            })
             return jsonResponse({ file, generatedAt: report.generatedAt, suggestedRules: report.suggestedRules.length, sources: report.sources })
           } catch (error) {
             return jsonResponse({ error: error && error.message ? error.message : String(error) }, 500)
@@ -671,14 +1042,170 @@ export function apply(ctx) {
         },
       })
       register({
+        path: ROUTE_BASE + '/toggle',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = await readJsonBody(request)
+          const kind = body && body.kind
+          const id = body && typeof body.id === 'string' ? body.id.trim() : ''
+          const enabled = !!(body && body.enabled)
+          if (kind !== 'rule' && kind !== 'skill') return jsonResponse({ error: 'kind must be "rule" or "skill"' }, 400)
+          if (!id) return jsonResponse({ error: 'id is required' }, 400)
+          try {
+            const result = toggleItem(kind, id, enabled)
+            return jsonResponse({ ...result, status: buildStatus() })
+          } catch (error) {
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, 404)
+          }
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/scope',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const query = new URL(request.url).searchParams
+          const scope = scopeFor({ cwd: query.get('cwd') || undefined, sessionId: query.get('session') || undefined })
+          return jsonResponse({
+            cwd: scope.cwd,
+            sessionId: scope.sessionId || null,
+            project: scope.project,
+            session: scope.session,
+            counts: scope.counts,
+            rules: scope.rules,
+            skills: scope.skills,
+            presets: scope.presets,
+            templates: scope.templates,
+            activePreset: scope.activePreset,
+            presetScope: scope.presetScope,
+          })
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/scope',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = await readJsonBody(request)
+          const layer = body && body.layer
+          const patch = body && body.patch && typeof body.patch === 'object' ? body.patch : {}
+          try {
+            if (layer === 'project') {
+              if (!body.cwd) return jsonResponse({ error: 'cwd is required' }, 400)
+              writeProjectScope(body.cwd, patch)
+            } else if (layer === 'session') {
+              if (!body.sessionId) return jsonResponse({ error: 'sessionId is required' }, 400)
+              writeSessionScope(body.sessionId, patch)
+            } else {
+              return jsonResponse({ error: "layer must be 'project' or 'session'" }, 400)
+            }
+            const scope = scopeFor({ cwd: body.cwd, sessionId: body.sessionId })
+            return jsonResponse({ saved: layer, project: scope.project, session: scope.session, counts: scope.counts })
+          } catch (error) {
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
+          }
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/inject',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const query = new URL(request.url).searchParams
+          return jsonResponse(injectFor({
+            cwd: query.get('cwd') || undefined,
+            sessionId: query.get('session') || undefined,
+          }))
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/metrics',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const query = new URL(request.url).searchParams
+          const scope = scopeFor({ cwd: query.get('cwd') || undefined, sessionId: query.get('session') || undefined })
+          return jsonResponse(computeMetrics({ rules: scope.rules.filter((rule) => rule.enabled) }))
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/rule',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = (await readJsonBody(request)) || {}
+          const rule = body.rule && typeof body.rule === 'object' ? body.rule : {}
+          const id = typeof rule.id === 'string' ? rule.id.trim() : ''
+          if (!id) return jsonResponse({ error: 'rule.id is required' }, 400)
+          if (!body.cwd) return jsonResponse({ error: 'cwd is required' }, 400)
+          try {
+            const title = typeof rule.title === 'string' && rule.title.trim() ? rule.title.trim() : id
+            const current = readProjectScope(body.cwd)
+            const nextRules = current.rules.filter((item) => item.id !== id)
+            if (body.remove !== true) {
+              if (typeof rule.text !== 'string' || !rule.text.trim()) {
+                return jsonResponse({ error: 'rule.text is required to save a rule' }, 400)
+              }
+              nextRules.push({ ...rule, id, title, text: rule.text.trim() })
+            }
+            writeProjectScope(body.cwd, { rules: nextRules })
+            return jsonResponse({ saved: body.remove === true ? 'removed' : 'rule', id, scope: scopeFor({ cwd: body.cwd }) })
+          } catch (error) {
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
+          }
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/preset',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = (await readJsonBody(request)) || {}
+          const action = typeof body.action === 'string' ? body.action : 'save'
+          try {
+            if (action === 'use') {
+              const presetId = checkPresetId(body.preset)
+              if (!body.cwd && !body.sessionId) return jsonResponse({ error: 'cwd or sessionId is required to switch preset' }, 400)
+              if (body.cwd) writeProjectScope(body.cwd, { preset: presetId })
+              else writeSessionScope(body.sessionId, { preset: presetId })
+              return jsonResponse({ used: presetId, scope: scopeFor({ cwd: body.cwd, sessionId: body.sessionId }) })
+            }
+            if (action === 'save') {
+              const preset = body.preset && typeof body.preset === 'object' ? body.preset : {}
+              const presetId = checkPresetId(preset.id)
+              const state = readState()
+              const list = Array.isArray(state.presets) ? state.presets.filter((item) => item && item.id !== presetId) : []
+              list.push({
+                id: presetId,
+                title: typeof preset.title === 'string' && preset.title.trim() ? preset.title.trim() : presetId,
+                description: typeof preset.description === 'string' ? preset.description : '',
+                rules: Array.isArray(preset.rules) ? preset.rules.filter((r) => typeof r === 'string') : [],
+                skills: Array.isArray(preset.skills) ? preset.skills.filter((s) => typeof s === 'string') : [],
+                templates: Array.isArray(preset.templates) ? preset.templates.filter((t) => typeof t === 'string') : [],
+              })
+              writeState({ presets: list })
+              return jsonResponse({ saved: presetId, presets: list })
+            }
+            return jsonResponse({ error: "action must be 'save' or 'use'" }, 400)
+          } catch (error) {
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
+          }
+        },
+      })
+      register({
         path: ROUTE_BASE + '/export',
         methods: ['POST'],
         requestBody: 'buffered',
         fetch: async (request) => {
           const body = await readJsonBody(request)
           const packArg = body && typeof body.pack === 'string' && body.pack.trim() ? body.pack.trim() : undefined
+          if (body && body.withProject === true && !(typeof body.cwd === 'string' && body.cwd.trim())) {
+            return jsonResponse({ error: 'cwd is required when withProject is true' }, 400)
+          }
           try {
-            return jsonResponse(exportActivePack(packArg))
+            const projectSnapshot = body && body.withProject === true ? projectSnapshotFor(path.resolve(body.cwd.trim())) : undefined
+            return jsonResponse(exportActivePack(packArg, projectSnapshot))
           } catch (error) {
             return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
           }
