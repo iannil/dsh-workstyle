@@ -142,9 +142,9 @@ const sampleStatus = {
 }
 
 const currentStatus = JSON.parse(JSON.stringify(sampleStatus))
-const detailControl = { delayed: false, pending: [] }
+const detailControl = { delayed: false, fail: false, pending: [] }
 const envControl = { delayed: false, pending: [] }
-const statusControl = { delayed: false, pending: [] }
+const statusControl = { delayed: false, fail: false, noActive: false, pending: [] }
 const detailPacks = {
   'fde-engineering': {
     id: 'fde-engineering', displayName: 'FDE 工程工作方式', version: '0.1.0', format: 'json',
@@ -230,13 +230,14 @@ const json = (data) => ({ ok: true, json: async () => data })
    one environment route fail while the others succeed. */
 const fetchLog = []
 const exportCalls = []
-const exportControl = { fail: false, delayed: false, pending: [], failHistory: false }
+const exportControl = { fail: false, delayed: false, pending: [], failHistory: false, failReports: false }
 const failEnv = { scope: false, inject: false, metrics: false, emptyMetrics: false, adopt: false }
 
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
   fetchLog.push(target)
   if (target.endsWith('/api/dsh-workstyle/reports')) {
+    if (exportControl.failReports) return { ok: false, json: async () => ({}) }
     // Metadata only, same shape as the host route: no report bodies, no prompt text.
     return json({ reports: [
       { file: 'report-2026-11-07.json', generatedAt: '2026-11-07T17:00:00.000Z', sources: { claude: true, codex: true, dsh: true, pi: false }, suggestionCount: 2 },
@@ -283,7 +284,10 @@ globalThis.fetch = async (url, options = {}) => {
     return json({ ruleCount: currentStatus.summary.ruleCount, status: currentStatus })
   }
   if (target.endsWith('/api/dsh-workstyle/status')) {
-    const response = json(currentStatus)
+    if (statusControl.fail) return { ok: false, json: async () => ({}) }
+    const response = json(statusControl.noActive
+      ? { ...currentStatus, activePack: null }
+      : currentStatus)
     if (statusControl.delayed) return new Promise((resolve) => statusControl.pending.push(() => resolve(response)))
     return response
   }
@@ -302,6 +306,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   if (target.includes('/api/dsh-workstyle/pack?id=')) {
     const id = new URL(target, 'http://panel.test').searchParams.get('id')
+    if (detailControl.fail) return { ok: false, json: async () => ({ error: 'pack detail rejected' }) }
     const pack = detailPacks[id]
     const response = pack ? json({ pack }) : { ok: false, json: async () => ({ error: 'unknown pack: ' + id }) }
     if (detailControl.delayed) return new Promise((resolve) => detailControl.pending.push(() => resolve(response)))
@@ -813,6 +818,13 @@ view = await settle()
 text = textOf(view)
 ok(!text.includes('3 分钟上手'), 'tip stays hidden after remount when storage says done')
 
+/* Reset hook state for a fresh mount from other suites: hooks re-run with
+   their initial values, refs keep their current values. */
+function remount() {
+  stateStore.length = 0
+  effectRan.length = 0
+}
+
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 
-export { route, hashChange, settle, act, textOf, findHost, button, input, checkbox, currentStatus, detailPacks, detailControl, envControl, statusControl, hostContext, fetchLog, failEnv }
+export { route, hashChange, settle, act, remount, textOf, findHost, button, input, checkbox, currentStatus, detailPacks, detailControl, envControl, statusControl, exportControl, exportCalls, hostContext, fetchLog, failEnv }

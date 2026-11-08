@@ -998,6 +998,13 @@ window.__ModuleLoader__.load({
       const [exports, setExports] = React.useState([])
       const [exportResult, setExportResult] = React.useState(null)
       const [exportBusy, setExportBusy] = React.useState('')
+      // The export mode the user picked, kept so a failed export can be
+      // retried with the same mode (and the same fresh scope inputs).
+      const [exportMode, setExportMode] = React.useState(null)
+      // Per-history failures: the panel stays usable and the rows it already
+      // has stay visible next to an explanation and a retry action.
+      const [reportsError, setReportsError] = React.useState('')
+      const [exportsError, setExportsError] = React.useState('')
       const [busy, setBusy] = React.useState('')
       const [error, setError] = React.useState('')
       const [notice, setNotice] = React.useState('')
@@ -1082,6 +1089,9 @@ window.__ModuleLoader__.load({
       const envRequest = React.useRef(0)
       const [packLoading, setPackLoading] = React.useState(false)
       const [packError, setPackError] = React.useState('')
+      // A generation counter, not a route change: retrying a failed detail
+      // fetch must refetch even when the route hash stays exactly the same.
+      const [packReload, setPackReload] = React.useState(0)
       const [envLoading, setEnvLoading] = React.useState(false)
       const navigate = React.useCallback((next) => {
         const target = typeof next === 'string' ? { page: next } : next
@@ -1120,7 +1130,7 @@ window.__ModuleLoader__.load({
           setPackDetail(result.data.pack)
         }).finally(() => { if (!cancelled) setPackLoading(false) })
         return () => { cancelled = true }
-      }, [route.page, route.packId])
+      }, [route.page, route.packId, packReload])
 
       const loadEnv = React.useCallback(() => {
         const requestId = ++envRequest.current
@@ -1160,16 +1170,21 @@ window.__ModuleLoader__.load({
         const requestId = ++statusRequest.current
         const requestEnvQuery = envQuery
         setError('')
+        setReportsError('')
+        setExportsError('')
         setStatusLoading(true)
+        // History refreshes never block the panel and never clear the rows
+        // they failed to replace: stale metadata stays visible next to the
+        // per-history error and its retry action.
         getJson('reports').then((result) => {
-          if (requestId === statusRequest.current && result.ok && result.data && Array.isArray(result.data.reports)) {
-            setReports(result.data.reports)
-          }
+          if (requestId !== statusRequest.current) return
+          if (result.ok && result.data && Array.isArray(result.data.reports)) setReports(result.data.reports)
+          else setReportsError(result.error || (result.data && result.data.error) || '报告历史不可用')
         })
         getJson('exports').then((result) => {
-          if (requestId === statusRequest.current && result.ok && result.data && Array.isArray(result.data.exports)) {
-            setExports(result.data.exports)
-          }
+          if (requestId !== statusRequest.current) return
+          if (result.ok && result.data && Array.isArray(result.data.exports)) setExports(result.data.exports)
+          else setExportsError(result.error || (result.data && result.data.error) || '导出历史不可用')
         })
         fetch('/api/dsh-workstyle/status', { headers: { accept: 'application/json' } })
           .then((response) => {
@@ -1300,6 +1315,7 @@ window.__ModuleLoader__.load({
         const kind = withProject ? 'scoped' : 'pack'
         const requestId = ++exportRequest.current
         exportBusyRef.current = kind
+        setExportMode(withProject)
         setExportBusy(kind); setError(''); setNotice(''); setExportResult(null)
         call('export', withProject ? { withProject: true, cwd: (env && env.scope && env.scope.cwd) || props.cwd || '' } : { withProject: false })
           .then(({ ok, data }) => {
@@ -1438,12 +1454,66 @@ window.__ModuleLoader__.load({
 
       const severityLabel = (severity) => t(severity === 'high' ? 'severityHigh' : severity === 'low' ? 'severityLow' : 'severityMedium')
 
+      /* ---------------------- shared shell around every state ---------------- */
+
+      /* Everything the shell needs exists before the status gate: route,
+         navigation, environment state and the local session context. The
+         shell renders around initial loading, hard failures and the
+         no-active-pack path too, so navigation, the 当前环境 context bar,
+         the main landmark and the focus stylesheet never disappear. */
+      const sc = env && env.scope ? env.scope : null
+      const inj = env && env.inject ? env.inject : null
+      const met = env && env.metrics ? env.metrics : null
+      const environment = {
+        status,
+        scope: sc,
+        inject: inj,
+        metrics: met,
+        report,
+        cwd: (sc && sc.cwd) || (session && session.cwd) || props.cwd || '',
+        sessionId: (sc && sc.sessionId) || (session && session.id) || props.sessionId || '',
+        loading: statusLoading || envLoading,
+        error: error || envError,
+      }
+      const pageLinks = [
+        ['run', '运行台'], ['packs', '工作方式包'], ['distill', '蒸馏'],
+        ['metrics', '度量台'], ['distribute', '分发'],
+      ]
+      const primaryNav = h('nav', { 'aria-label': '工作方式', style: S.tabs },
+        pageLinks.map(([page, label]) => h('a', {
+          key: page,
+          href: routeHash(page),
+          'aria-current': route.page === page ? 'page' : undefined,
+          style: route.page === page ? { ...S.tab, ...S.tabOn, textDecoration: 'none' } : { ...S.tab, textDecoration: 'none' },
+          onClick: (event) => {
+            if (event && event.preventDefault) event.preventDefault()
+            navigate({ page })
+          },
+        }, label)))
+      const environmentBar = h(EnvironmentContextBar, { environment })
+      const rootStyle = {
+        ...S.page,
+        '--dsw-color-ink': INK, '--dsw-color-paper': PAPER, '--dsw-color-surface': SURFACE,
+        '--dsw-color-amber': AMBER, '--dsw-color-amber-dark': AMBER_DARK,
+        '--dsw-color-blue-gray': BLUE_GRAY, '--dsw-color-error': ERROR,
+      }
+      const shell = (mainChildren, headerContent, footerContent, showBanners) => h('div', { id: 'dsw-root', style: rootStyle },
+        h('style', null, CSS),
+        h('div', { style: S.inner },
+          primaryNav,
+          environmentBar,
+          headerContent || null,
+          showBanners && error ? h(ErrorState, { operation: '执行当前操作', message: error, onRetry: load }) : null,
+          showBanners && notice ? h(Notice, null, notice) : null,
+          showBanners && envError ? h(ErrorState, { operation: '刷新当前环境', message: envError, onRetry: load }) : null,
+          h('main', { id: 'dsw-main', 'aria-live': 'polite' }, mainChildren),
+          footerContent || null))
+
       if (!status) {
         if (error) {
-          return h('div', { style: S.page },
-            h('div', { style: S.inner }, h(ErrorState, { operation: '状态加载', message: error, onRetry: load })))
+          return shell(h(ErrorState, { operation: '状态加载', message: error, onRetry: load }), null, null, false)
         }
-        return h(Loading, { label: '正在加载工作方式状态…' })
+        return shell(h(Loading, { label: '正在加载工作方式状态…' }), null, null, false)
       }
 
       const active = status.activePack
@@ -1457,8 +1527,7 @@ window.__ModuleLoader__.load({
       const summary = status.summary || {}
 
       if (!active) {
-        return h('div', { style: S.page },
-          h('div', { style: S.inner }, h(ErrorState, { operation: '读取当前工作方式包', message: '没有可用的当前工作方式包。', onRetry: load })))
+        return shell(h(ErrorState, { operation: '读取当前工作方式包', message: '没有可用的当前工作方式包。', onRetry: load }), null, null, false)
       }
 
       const enabledRules = rules.filter((rule) => rule.enabled !== false)
@@ -1682,9 +1751,8 @@ window.__ModuleLoader__.load({
 
       /* ---------------------------- v5 · environment ---------------------------- */
 
-      const sc = env && env.scope ? env.scope : null
-      const inj = env && env.inject ? env.inject : null
-      const met = env && env.metrics ? env.metrics : null
+      /* sc/inj/met and `environment` are computed above the status gate so the
+         shared shell can render before any data arrives. */
       const scopedRules = sc && Array.isArray(sc.rules) ? sc.rules : rules
       const scopedSkills = sc && Array.isArray(sc.skills) ? sc.skills : skills
       const presets = sc && Array.isArray(sc.presets) ? sc.presets : []
@@ -1696,17 +1764,6 @@ window.__ModuleLoader__.load({
       const activePresetId = sc && sc.activePreset ? sc.activePreset.id : null
       const scopedDisabled = scopedRules.filter((rule) => rule.enabled === false)
       const projectRules = scopedRules.filter((rule) => rule.origin === 'project')
-      const environment = {
-        status,
-        scope: sc,
-        inject: inj,
-        metrics: met,
-        report,
-        cwd: (sc && sc.cwd) || (session && session.cwd) || props.cwd || '',
-        sessionId: (sc && sc.sessionId) || (session && session.id) || props.sessionId || '',
-        loading: statusLoading || envLoading,
-        error: error || envError,
-      }
 
       const todoItems = [
         { key: 'distill', label: t('todoDistill'), count: pendingCount, target: 'distill' },
@@ -2078,23 +2135,6 @@ window.__ModuleLoader__.load({
                     : null,
                 ]
 
-      const pageLinks = [
-        ['run', '运行台'], ['packs', '工作方式包'], ['distill', '蒸馏'],
-        ['metrics', '度量台'], ['distribute', '分发'],
-      ]
-      const primaryNav = h('nav', { 'aria-label': '工作方式', style: S.tabs },
-        pageLinks.map(([page, label]) => h('a', {
-          key: page,
-          href: routeHash(page),
-          'aria-current': route.page === page ? 'page' : undefined,
-          style: route.page === page ? { ...S.tab, ...S.tabOn, textDecoration: 'none' } : { ...S.tab, textDecoration: 'none' },
-          onClick: (event) => {
-            if (event && event.preventDefault) event.preventDefault()
-            navigate({ page })
-          },
-        }, label)))
-      const environmentBar = h(EnvironmentContextBar, { environment })
-
       const evidenceSection = h(Section, {
         id: 'dsw-evidence',
         label: t('about'),
@@ -2178,16 +2218,16 @@ window.__ModuleLoader__.load({
         ? packListBody
         : packLoading && !selectedPack
           ? h(Loading, { label: '正在加载工作方式包…' })
-          : (packError && !selectedPack) || !selectedPack
+          : (packError && !routePackDetail) || !selectedPack
             ? h('div', { style: S.empty },
-              h(ErrorState, { operation: '加载工作方式包', message: '找不到工作方式包：' + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => navigate({ page: 'pack', packId: route.packId }) }),
+              h(ErrorState, { operation: '加载工作方式包', message: '找不到工作方式包：' + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => setPackReload((n) => n + 1) }),
               h('a', { href: '#/packs', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'packs' }) } }, '返回工作方式包'))
             : h('div', null,
               h('div', { style: S.tile }, h('div', { style: S.ruleTitleRow }, h('span', { style: S.ruleTitle }, selectedPack.displayName || selectedPack.name || selectedPack.id), selectedIsActive ? h('span', { style: S.badge }, '当前') : h('span', { style: S.mutedBadge }, '未启用')), h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version), h('span', { style: S.hint }, '来源：' + (selectedPack.source || '本地内置') + ' · ' + selectedPack.ruleCount + ' 条规则 · ' + selectedPack.skillCount + ' 个技能')),
               h('div', { role: 'tablist', 'aria-label': '工作方式包资源', style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
               h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
-      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError }) => {
+      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory }) => {
         const history = Array.isArray(exportHistory) ? exportHistory : []
         const copyInstall = () => copyAction(installCommand, installCommand)
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
@@ -2217,8 +2257,17 @@ window.__ModuleLoader__.load({
                 h('div', { style: S.hint }, nf(result.files) + ' 个文件 · ' + nf(result.bytes) + ' bytes'),
                 copyArchive ? h('button', { style: { ...S.linkAccent, marginTop: 6 }, onClick: copyArchive }, t('copyPath')) : null)
               : null,
-            exportError ? h('div', { style: { ...S.banner('error'), marginTop: 12 }, role: 'alert' }, exportError) : null),
+            exportError ? h('div', { style: { marginTop: 12 } },
+              h(ErrorState, {
+                operation: '导出工作方式包',
+                message: exportError,
+                onRetry: (lastMode === null || lastMode === undefined) ? undefined : () => exportAction(lastMode),
+              })) : null),
           h(Section, { id: 'dsw-distribution-history', label: '最近导出', count: history.length },
+            historyError
+              ? h('div', { style: { paddingBottom: history.length ? 12 : 0 } },
+                h(ErrorState, { operation: '加载导出历史', message: historyError, onRetry: onRetryHistory }))
+              : null,
             history.length
               ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, history.map((item) =>
                 h('div', { key: item.file, style: S.ruleRowV5 },
@@ -2227,12 +2276,14 @@ window.__ModuleLoader__.load({
                     h('span', { style: S.hint }, when(item.modifiedAt) || '—')),
                   h('span', { style: S.ruleSideText }, (item.packId || '—') + ' v' + (item.packVersion || '—')),
                   h('span', { style: S.mutedBadge }, nf(item.bytes) + ' bytes'))))
-              : h('div', { style: S.empty },
-                h('div', { style: S.hint }, '还没有导出记录。复制安装命令后，导出一个包交给队友。'),
-                h('button', { style: S.buttonPrimary, disabled: exportDisabled, onClick: () => exportAction(false) }, t('exportPackOnly')))))
+              : !historyError
+                ? h('div', { style: S.empty },
+                  h('div', { style: S.hint }, '还没有导出记录。复制安装命令后，导出一个包交给队友。'),
+                  h('button', { style: S.buttonPrimary, disabled: exportDisabled, onClick: () => exportAction(false) }, t('exportPackOnly')))
+                : null))
       }
 
-      const DistillPage = ({ onNavigate, onScan }) => {
+      const DistillPage = ({ onNavigate, onScan, historyError, onRetryHistory }) => {
         const sourceEntries = Object.entries((report && report.sources) || {})
         const sourceLabels = { claude: 'Claude Code', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' }
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
@@ -2254,6 +2305,10 @@ window.__ModuleLoader__.load({
           h(Section, { id: 'dsw-distill-review', label: '建议审阅', count: suggestions.length, right: reviewSectionRight },
             reviewSectionBody),
           h(Section, { id: 'dsw-distill-history', label: '报告历史', count: reports.length },
+            historyError
+              ? h('div', { style: { paddingBottom: reports.length ? 12 : 0 } },
+                h(ErrorState, { operation: '加载报告历史', message: historyError, onRetry: onRetryHistory }))
+              : null,
             reports.length
               ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, reports.map((item) =>
                 h('div', { key: item.file, style: S.ruleRowV5 },
@@ -2262,7 +2317,9 @@ window.__ModuleLoader__.load({
                     h('span', { style: S.hint }, item.file)),
                   h('span', { style: S.ruleSideText }, Object.entries(item.sources || {}).filter(([, available]) => available).map(([key]) => sourceLabels[key] || key).join(' · ') || '无可用来源'),
                   h('span', { style: S.mutedBadge }, String(item.suggestionCount || 0) + ' 条建议'))))
-              : h('div', { style: S.empty }, h('div', { style: S.hint }, '还没有报告。扫描本地数据后，这里只显示生成时间、来源和建议数量。'))),
+              : !historyError
+                ? h('div', { style: S.empty }, h('div', { style: S.hint }, '还没有报告。扫描本地数据后，这里只显示生成时间、来源和建议数量。'))
+                : null),
           h('a', { href: '#/metrics', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); onNavigate({ page: 'metrics' }) } }, '查看代理度量 →'))
       }
 
@@ -2322,7 +2379,7 @@ window.__ModuleLoader__.load({
           ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
             h('h2', { id: 'dsw-packs-title', style: { ...S.sectionLabel, fontSize: 18 } }, route.packId ? '工作方式包详情' : '工作方式包'), packDetailPageBody)
           : route.page === 'distill'
-            ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏审阅'), h(DistillPage, { onNavigate: navigate, onScan: onDistill }))
+            ? h('section', { 'aria-labelledby': 'dsw-distill-title' }, h('h2', { id: 'dsw-distill-title', style: { ...S.sectionLabel, fontSize: 18 } }, '蒸馏审阅'), h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
             : route.page === 'metrics'
               ? h('section', { 'aria-labelledby': 'dsw-metrics-title' }, h('h2', { id: 'dsw-metrics-title', style: { ...S.sectionLabel, fontSize: 18 } }, '度量台'), h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }))
               : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
@@ -2336,46 +2393,40 @@ window.__ModuleLoader__.load({
                   busy: exportBusy,
                   disabled: !!exportBusy || !!busy,
                   error: error,
+                  lastMode: exportMode,
+                  historyError: exportsError,
+                  onRetryHistory: load,
                 }))
 
-      return h('div', { id: 'dsw-root', style: { ...S.page, '--dsw-color-ink': INK, '--dsw-color-paper': PAPER, '--dsw-color-surface': SURFACE, '--dsw-color-amber': AMBER, '--dsw-color-amber-dark': AMBER_DARK, '--dsw-color-blue-gray': BLUE_GRAY, '--dsw-color-error': ERROR } },
-        h('style', null, CSS),
-        h('div', { style: S.inner },
-          primaryNav,
-          environmentBar,
-          h('div', { style: S.header },
-            h('div', { style: S.brandRow },
-              h('div', { style: { minWidth: 0 } },
-                h('h1', { style: S.title }, t('title')),
-                h('div', { style: S.statusLine },
-                  h('span', null,
-                    t('session') + ' ',
-                    h('span', { style: S.statusStrong }, session && session.id ? session.id.slice(0, 12) : '-')),
-                  h('span', { style: S.statusDivider }),
-                  h('span', null, projectFileText || t('noProjectFile')),
-                  h('span', { style: S.statusDivider }),
-                  h('span', null, active.displayName + ' v' + active.version)))),
-            h('div', { style: S.toolbar },
-              h('select', {
-                style: S.select, value: active.id, disabled: busy === 'apply',
-                onChange: (event) => onApply(event.target.value), title: t('packs'),
-              }, packs.map((pack) => h('option', { key: pack.id, value: pack.id },
-                (pack.displayName || pack.name || pack.id) + '  v' + pack.version))),
-              h('button', {
-                style: busy ? { ...S.button, ...S.disabled } : S.button,
-                onClick: load, disabled: !!busy,
-              }, t('refresh')))),
+      const headerNode = h('div', { style: S.header },
+        h('div', { style: S.brandRow },
+          h('div', { style: { minWidth: 0 } },
+            h('h1', { style: S.title }, t('title')),
+            h('div', { style: S.statusLine },
+              h('span', null,
+                t('session') + ' ',
+                h('span', { style: S.statusStrong }, session && session.id ? session.id.slice(0, 12) : '-')),
+              h('span', { style: S.statusDivider }),
+              h('span', null, projectFileText || t('noProjectFile')),
+              h('span', { style: S.statusDivider }),
+              h('span', null, active.displayName + ' v' + active.version)))),
+        h('div', { style: S.toolbar },
+          h('select', {
+            style: S.select, value: active.id, disabled: busy === 'apply',
+            onChange: (event) => onApply(event.target.value), title: t('packs'),
+          }, packs.map((pack) => h('option', { key: pack.id, value: pack.id },
+            (pack.displayName || pack.name || pack.id) + '  v' + pack.version))),
+          h('button', {
+            style: busy ? { ...S.button, ...S.disabled } : S.button,
+            onClick: load, disabled: !!busy,
+          }, t('refresh'))))
 
-          error ? h(ErrorState, { operation: '执行当前操作', message: error, onRetry: load }) : null,
-          notice ? h(Notice, null, notice) : null,
-          envError ? h(ErrorState, { operation: '刷新当前环境', message: envError, onRetry: load }) : null,
+      const footerNode = h('div', { style: S.footer },
+        h('span', null, BUILD),
+        h('span', null, t('privacy')),
+        h('span', { style: S.mono }, 'dsh-workstyle v' + status.plugin.version))
 
-          h('main', { id: 'dsw-main', 'aria-live': 'polite' }, pageBody),
-
-          h('div', { style: S.footer },
-            h('span', null, BUILD),
-            h('span', null, t('privacy')),
-            h('span', { style: S.mono }, 'dsh-workstyle v' + status.plugin.version))))
+      return shell(pageBody, headerNode, footerNode, true)
     }
 
 

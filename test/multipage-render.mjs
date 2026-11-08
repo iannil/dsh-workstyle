@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 
 const panel = await import('./panel-render.mjs')
-const { route, hashChange, settle, textOf, findHost, button, input, checkbox, detailControl, envControl, statusControl, fetchLog, failEnv } = panel
+const { route, hashChange, settle, act, remount, textOf, findHost, button, input, checkbox, detailControl, envControl, statusControl, exportControl, exportCalls, fetchLog, failEnv } = panel
 let checks = 0
 function ok(condition, label) {
   checks += 1
@@ -223,5 +223,115 @@ ok(!!root && root.props.style['--dsw-color-ink'] === '#14171C' && root.props.sty
 ok(!!style && textOf(style).includes('focus-visible') && textOf(style).includes('prefers-reduced-motion'), 'focus-visible and reduced-motion rules stay scoped')
 failEnv.emptyMetrics = false
 view = await panel.act(() => button(view, '刷新').props.onClick())
+
+/* Fix round: review findings — in-place pack retry, the shell around every
+   initial state, export retry preserving its mode, and per-history errors. */
+
+/* 1. Pack detail retry refetches in place on both supported pack routes:
+   navigating to the same route must not be the retry mechanism. */
+detailControl.fail = true
+view = await navigateHash('#/pack/fde-engineering')
+text = textOf(view)
+ok(text.includes('加载工作方式包失败') && text.includes('重试'), '#/pack/<id> failure surfaces the shared error state')
+const packRetry = findHost(view, (node) => node.type === 'button' && textOf(node) === '重试')
+detailControl.fail = false
+view = await panel.act(() => packRetry.props.onClick())
+text = textOf(view)
+ok(text.includes('FDE 工程工作方式') && text.includes('先方案后实现'), '#/pack/<id> retry refetches the detail without navigating')
+ok(route.hash === '#/pack/fde-engineering', '#/pack/<id> retry preserves the route hash')
+
+detailControl.fail = true
+view = await navigateHash('#/packs/fde-engineering')
+const packsRetry = findHost(view, (node) => node.type === 'button' && textOf(node) === '重试')
+detailControl.fail = false
+view = await panel.act(() => packsRetry.props.onClick())
+text = textOf(view)
+ok(text.includes('FDE 工程工作方式') && text.includes('先方案后实现'), '#/packs/<id> retry refetches the detail without navigating')
+
+/* 3. A failed export names the operation and retries the same export mode. */
+view = await navigateHash('#/distribute')
+exportControl.fail = true
+view = await panel.act(() => button(view, '导出包 + 作用域快照').props.onClick())
+const exportErrNode = findHost(view, (node) => node.props && node.props.role === 'alert' && textOf(node).includes('导出工作方式包失败'))
+ok(!!exportErrNode && textOf(exportErrNode).includes('重试'), 'export failure names the operation with a retry action')
+exportControl.fail = false
+const exportRetry = exportErrNode && findHost(exportErrNode, (node) => node.type === 'button' && textOf(node) === '重试')
+const exportRetryBefore = fetchLog.filter((url) => url.endsWith('/api/dsh-workstyle/export')).length
+view = await panel.act(() => exportRetry.props.onClick())
+const exportRetryAfter = fetchLog.filter((url) => url.endsWith('/api/dsh-workstyle/export')).length
+ok(exportRetryAfter === exportRetryBefore + 1, 'export retry re-posts the export route')
+ok(exportCalls[exportCalls.length - 1] && exportCalls[exportCalls.length - 1].withProject === true, 'export retry preserves the scoped mode')
+
+/* 4. Report/export history failures explain and retry while the stale rows stay visible. */
+exportControl.failReports = true
+view = await panel.act(() => button(view, '刷新').props.onClick())
+view = await navigateHash('#/distill')
+const distillHistoryDuring = findHost(view, (node) => node.props && node.props.id === 'dsw-distill-history')
+const reportsErrNode = distillHistoryDuring && findHost(distillHistoryDuring, (node) => node.props && node.props.role === 'alert')
+ok(!!reportsErrNode && textOf(reportsErrNode).includes('加载报告历史失败') && textOf(reportsErrNode).includes('重试'), 'report history failure explains with retry')
+ok(!!distillHistoryDuring && textOf(distillHistoryDuring).includes('report-2026-11-07.json'), 'failed report history keeps the stale metadata rows')
+exportControl.failReports = false
+const reportsRetry = reportsErrNode && findHost(reportsErrNode, (node) => node.type === 'button' && textOf(node) === '重试')
+view = await panel.act(() => reportsRetry.props.onClick())
+const distillHistoryAfter = findHost(view, (node) => node.props && node.props.id === 'dsw-distill-history')
+ok(!!distillHistoryAfter && textOf(distillHistoryAfter).includes('report-2026-11-07.json') && !textOf(distillHistoryAfter).includes('加载报告历史失败'), 'report history retry restores the metadata rows')
+
+exportControl.failHistory = true
+view = await panel.act(() => button(view, '刷新').props.onClick())
+view = await navigateHash('#/distribute')
+const distributionHistoryDuring = findHost(view, (node) => node.props && node.props.id === 'dsw-distribution-history')
+const exportsErrNode = distributionHistoryDuring && findHost(distributionHistoryDuring, (node) => node.props && node.props.role === 'alert')
+ok(!!exportsErrNode && textOf(exportsErrNode).includes('加载导出历史失败') && textOf(exportsErrNode).includes('重试'), 'export history failure explains with retry')
+ok(!!distributionHistoryDuring && textOf(distributionHistoryDuring).includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz'), 'failed export history keeps the stale metadata rows')
+exportControl.failHistory = false
+const exportsRetry = exportsErrNode && findHost(exportsErrNode, (node) => node.type === 'button' && textOf(node) === '重试')
+view = await panel.act(() => exportsRetry.props.onClick())
+const distributionHistoryAfter = findHost(view, (node) => node.props && node.props.id === 'dsw-distribution-history')
+ok(!!distributionHistoryAfter && textOf(distributionHistoryAfter).includes('fde-engineering-v0.1.0-2026-11-08T01-00-00-000Z.tar.gz') && !textOf(distributionHistoryAfter).includes('加载导出历史失败'), 'export history retry restores the metadata rows')
+
+/* 2. Initial loading, initial status failure, and a status without an active
+   pack all render inside the shared shell. */
+route.hash = '#/run'
+statusControl.delayed = true
+remount()
+view = await settle(2)
+text = textOf(view)
+ok(text.includes('正在加载工作方式状态'), 'initial loading explains itself')
+ok(!!findHost(view, (node) => node.type === 'nav'), 'initial loading keeps semantic navigation')
+ok(text.includes('当前环境'), 'initial loading keeps the shared context bar')
+ok(!!findHost(view, (node) => node.type === 'main' && node.props && node.props.id === 'dsw-main'), 'initial loading keeps the main landmark')
+ok(!!findHost(view, (node) => node.props && node.props['aria-current'] === 'page'), 'initial loading announces the active route')
+const initialStyle = findHost(view, (node) => node.type === 'style')
+ok(!!initialStyle && textOf(initialStyle).includes('focus-visible'), 'initial loading keeps the focus stylesheet')
+statusControl.delayed = false
+while (statusControl.pending.length) statusControl.pending.shift()()
+view = await settle(10)
+ok(textOf(view).includes('FDE 工程工作方式'), 'resolving the initial status restores the full panel')
+
+statusControl.fail = true
+remount()
+view = await settle(3)
+text = textOf(view)
+ok(text.includes('状态加载失败') && text.includes('重试'), 'initial status failure explains and offers retry')
+ok(!!findHost(view, (node) => node.type === 'nav'), 'initial status failure keeps semantic navigation')
+ok(text.includes('当前环境'), 'initial status failure keeps the shared context bar')
+ok(!!findHost(view, (node) => node.type === 'main' && node.props && node.props.id === 'dsw-main'), 'initial status failure keeps the main landmark')
+statusControl.fail = false
+const statusRetry = findHost(view, (node) => node.type === 'button' && textOf(node) === '重试')
+view = await act(() => statusRetry.props.onClick())
+ok(textOf(view).includes('FDE 工程工作方式'), 'retrying the initial status failure recovers the panel')
+
+statusControl.noActive = true
+remount()
+view = await settle(3)
+text = textOf(view)
+ok(text.includes('读取当前工作方式包失败') && text.includes('重试'), 'missing active pack explains and offers retry')
+ok(!!findHost(view, (node) => node.type === 'nav'), 'missing active pack keeps semantic navigation')
+ok(text.includes('当前环境'), 'missing active pack keeps the shared context bar')
+ok(!!findHost(view, (node) => node.type === 'main' && node.props && node.props.id === 'dsw-main'), 'missing active pack keeps the main landmark')
+statusControl.noActive = false
+const noActiveRetry = findHost(view, (node) => node.type === 'button' && textOf(node) === '重试')
+view = await act(() => noActiveRetry.props.onClick())
+ok(textOf(view).includes('FDE 工程工作方式'), 'retrying after a missing active pack recovers the panel')
 
 console.log('\nMULTIPAGE RENDER: ' + checks + ' CHECKS PASSED')
