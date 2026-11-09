@@ -134,6 +134,27 @@ window.__ModuleLoader__.load({
       packInactiveBadge: '未启用',
       packActiveNow: '当前生效',
       packViewable: '可查看',
+      packNew: '新建包',
+      packImport: '导入包',
+      packDuplicate: '复制',
+      packRename: '重命名',
+      packDelete: '删除',
+      packRestore: '恢复',
+      packTrash: '回收站',
+      packTrashHint: '删除的包会移到本机回收站，可以在这里恢复。',
+      packReadonlyNote: '只读包：不能重命名或删除。',
+      packWritableNote: '本机包：可以重命名、复制和删除。',
+      packImportPath: '包目录',
+      packIdLabel: '包 id',
+      packDisplayNameLabel: '显示名称',
+      packFieldRequired: '请填写必填项。',
+      packSave: '保存',
+      packDeleteConfirm: '确认删除',
+      packDeleteHint: '删除后移入回收站，可稍后恢复。',
+      revisionsTitle: '修订历史',
+      revisionsEmpty: '还没有修订记录。',
+      revisionRestore: '回滚',
+      presetAddedNotice: '已加入当前预设',
       sourcePrefix: '来源：',
       sourceBuiltin: '本地内置',
       rulesUnit: '条规则',
@@ -404,6 +425,27 @@ window.__ModuleLoader__.load({
       packInactiveBadge: 'inactive',
       packActiveNow: 'currently active',
       packViewable: 'viewable',
+      packNew: 'New pack',
+      packImport: 'Import pack',
+      packDuplicate: 'Duplicate',
+      packRename: 'Rename',
+      packDelete: 'Delete',
+      packRestore: 'Restore',
+      packTrash: 'Trash',
+      packTrashHint: 'Deleted packs move to the local trash and can be restored here.',
+      packReadonlyNote: 'Read-only pack: rename and delete are unavailable.',
+      packWritableNote: 'Local pack: rename, duplicate and delete are available.',
+      packImportPath: 'Pack directory',
+      packIdLabel: 'Pack id',
+      packDisplayNameLabel: 'Display name',
+      packFieldRequired: 'Fill in the required fields.',
+      packSave: 'Save',
+      packDeleteConfirm: 'Confirm delete',
+      packDeleteHint: 'The pack moves to the trash and can be restored later.',
+      revisionsTitle: 'Revision history',
+      revisionsEmpty: 'No revisions yet.',
+      revisionRestore: 'Roll back',
+      presetAddedNotice: 'Added to the current preset',
       sourcePrefix: 'Source: ',
       sourceBuiltin: 'bundled',
       rulesUnit: 'rules',
@@ -1373,6 +1415,16 @@ window.__ModuleLoader__.load({
          recoverable: the panel asks, then re-posts with force=true. */
       const [presetForce, setPresetForce] = React.useState(null)
       const [presetBusy, setPresetBusy] = React.useState('')
+      /* Pack lifecycle: the editor draft (create/rename/import), the delete
+         confirmation, and the trash rows carried by delete responses. The
+         host's /pack GET has no trash listing, so restore is only offered for
+         entries the user just deleted in this panel. */
+      const [packEditing, setPackEditing] = React.useState(null)
+      const [packDeleting, setPackDeleting] = React.useState('')
+      const [packTrash, setPackTrash] = React.useState([])
+      const [revisions, setRevisions] = React.useState([])
+      const [revisionsError, setRevisionsError] = React.useState('')
+      const [revisionsReload, setRevisionsReload] = React.useState(0)
       const [scopeFilter, setScopeFilter] = React.useState('all')
       const ONBOARDING_KEY = 'dsw-workstyle:onboarding-v1'
       const [onboardingOpen, setOnboardingOpen] = React.useState(() => {
@@ -1494,6 +1546,24 @@ window.__ModuleLoader__.load({
         }).finally(() => { if (!cancelled) setPackLoading(false) })
         return () => { cancelled = true }
       }, [route.page, route.packId, packReload])
+
+      /* Revision history is local state only: it is read from the host when the
+         distribution page is open, and re-read after a rollback so the rows
+         always describe the files the host has now. */
+      React.useEffect(() => {
+        if (route.page !== 'distribute') return undefined
+        let cancelled = false
+        setRevisionsError('')
+        getJson('revisions').then((result) => {
+          if (cancelled) return
+          if (!result.ok || !result.data || !Array.isArray(result.data.revisions)) {
+            setRevisionsError(result.error || (result.data && result.data.error) || 'revisions unavailable')
+            return
+          }
+          setRevisions(result.data.revisions)
+        })
+        return () => { cancelled = true }
+      }, [route.page, revisionsReload])
 
       const loadEnv = React.useCallback(() => {
         const requestId = ++envRequest.current
@@ -1746,6 +1816,97 @@ window.__ModuleLoader__.load({
         return false
       }
 
+      /* ---------------------------- packs & revisions --------------------------- */
+
+      /* The detail route carries no dir, so writability is read from the
+         status summary. Only a pack under the host's workstyle/packs root can
+         be renamed or deleted in place; bundled packs stay read-only. */
+      const packWritable = (pack) => /(^|[\\/])workstyle[\\/]packs[\\/]/.test((pack && pack.dir) || '')
+
+      const packSummaryOf = (id) => {
+        const list = status && Array.isArray(status.packs) ? status.packs : []
+        return list.find((pack) => pack.id === id) || null
+      }
+
+      const sendPackAction = (body, message) => {
+        setBusy('pack'); setError(''); setNotice('')
+        return postJson('pack', body)
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'pack action failed')
+            if (data && data.status) setStatus(data.status)
+            else if (data && Array.isArray(data.packs)) {
+              setStatus((prev) => {
+                if (!prev) return prev
+                const activePack = data.packs.find((pack) => pack.id === data.activePackId) || prev.activePack
+                return { ...prev, packs: data.packs, activePack }
+              })
+            }
+            const packId = (data && data.packId) || body.pack || body.id || body.from || ''
+            /* The host's GET /pack has no trash listing, so a deleted pack is
+               only restorable from the response that moved it to the trash. */
+            if (body.action === 'delete' && data && data.trash) {
+              setPackTrash((prev) => [{ id: packId, entry: data.trash }, ...prev].slice(0, 8))
+            }
+            if (body.action === 'restore') setPackTrash((prev) => prev.filter((row) => row.id !== packId))
+            setNotice(message + (packId ? '：' + packId : ''))
+            setPackReload((value) => value + 1)
+            return loadEnv().then(() => true)
+          })
+          .catch((err) => {
+            setError(String(err && err.message ? err.message : err))
+            return false
+          })
+          .finally(() => setBusy(''))
+      }
+
+      const onPackAction = (action, packId) => {
+        if (action === 'apply') return sendPackAction({ action: 'apply', pack: packId }, t('packSwitch'))
+        if (action === 'duplicate') return sendPackAction({ action: 'duplicate', from: packId }, t('packDuplicate'))
+        if (action === 'delete') {
+          setPackDeleting('')
+          return sendPackAction({ action: 'delete', id: packId }, t('packDelete'))
+            .then((saved) => { if (saved) navigate({ page: 'pack' }); return saved })
+        }
+        return Promise.resolve(false)
+      }
+
+      const onRestorePack = (packId) => sendPackAction({ action: 'restore', id: packId }, t('packRestore'))
+
+      const onSavePack = (draft) => {
+        if (!packEditing) return Promise.resolve()
+        const mode = packEditing.mode
+        const id = mode === 'rename' ? packEditing.id : String((draft && draft.id) || '').trim()
+        const displayName = String((draft && draft.displayName) || '').trim()
+        const dir = String((draft && draft.path) || '').trim()
+        if (mode === 'import' ? !dir : (!id || !displayName)) {
+          setError(t('packFieldRequired'))
+          return Promise.resolve()
+        }
+        const body = mode === 'create' ? { action: 'create', id, displayName }
+          : mode === 'rename' ? { action: 'rename', id, displayName }
+            : { action: 'import', path: dir }
+        const message = mode === 'create' ? t('packNew') : mode === 'rename' ? t('packRename') : t('packImport')
+        return sendPackAction(body, message).then((saved) => {
+          if (saved) setPackEditing(null)
+          return saved
+        })
+      }
+
+      const onRestoreRevision = (id) => {
+        setBusy('revision'); setError(''); setNotice('')
+        return postJson('revisions', { action: 'restore', id })
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'revision restore failed')
+            if (data && data.status) setStatus(data.status)
+            const file = data && data.restored ? data.restored.file : ''
+            setNotice(t('revisionRestore') + '：' + (file || id))
+            setRevisionsReload((value) => value + 1)
+            return loadEnv()
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setBusy(''))
+      }
+
       /** Enable or disable a rule in the layer that owns the decision. */
       const onRuleToggle = (rule, enabled) => {
         if (!rule || !requireCurrentContext()) return
@@ -1822,11 +1983,20 @@ window.__ModuleLoader__.load({
           .finally(() => setBusy(''))
       }
 
-      /* Where a rule lives decides where a write lands: the project layer
-         needs its cwd, every other owner is addressed by pack id. */
+      /* Where a rule lives decides where a write lands: an explicit writable
+         wins, a project-owned row falls back to the project layer, and a row
+         with no write target must not silently become a project write. */
+      const writeTargetOf = (rule) => {
+        if (!rule) return null
+        if (rule.writable && rule.writable.scope) return rule.writable
+        if (rule.origin === 'project' || rule.textScope === 'project') return { scope: 'project' }
+        return null
+      }
+
       const ruleWriteBody = (rule, extra) => {
-        const writable = rule && rule.writable ? rule.writable : null
-        const target = writable && writable.scope ? writable.scope : 'project'
+        const writable = writeTargetOf(rule)
+        if (!writable) return null
+        const target = writable.scope
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
         const packId = (writable && writable.packId)
           || (status && status.activePack ? status.activePack.id : '')
@@ -1840,6 +2010,7 @@ window.__ModuleLoader__.load({
         const normalizedId = typeof rule.id === 'string' ? rule.id.trim() : ''
         if (!normalizedId) return
         const body = ruleWriteBody({ ...rule, id: normalizedId }, { remove: true })
+        if (!body) { setError(t('targetUnknown')); return }
         if (!body.cwd && body.target === undefined) return
         if (body.target !== undefined && !body.packId) return
         setBusy('rule'); setError(''); setNotice('')
@@ -1857,6 +2028,7 @@ window.__ModuleLoader__.load({
         const normalizedId = typeof rule.id === 'string' ? rule.id.trim() : ''
         if (!normalizedId) return
         const body = ruleWriteBody({ ...rule, id: normalizedId }, { action: 'restore' })
+        if (!body) { setError(t('targetUnknown')); return }
         if (!body.cwd && body.target === undefined) return
         if (body.target !== undefined && !body.packId) return
         setBusy('rule'); setError(''); setNotice('')
@@ -1891,7 +2063,7 @@ window.__ModuleLoader__.load({
         })
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'preset save failed')
-            return refreshEnvironment(ruleId, t('addToPreset'))
+            return refreshEnvironment(ruleId, t('presetAddedNotice'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -2357,15 +2529,16 @@ window.__ModuleLoader__.load({
       /* One editor serves every store; the row carries where the text lives,
          so save/remove/restore write back to the layer that owns the rule. */
       const openRuleEditor = (rule) => {
-        const writable = rule && rule.writable ? rule.writable : null
+        const writable = writeTargetOf(rule)
+        if (!writable) { setError(t('targetUnknown')); return }
         setEditing({
           id: rule.id,
           title: rule.title,
           text: rule.text,
           existing: true,
-          target: writable && writable.scope ? writable.scope : 'project',
-          file: writable ? writable.file : undefined,
-          packId: writable ? writable.packId : undefined,
+          target: writable.scope,
+          file: writable.file,
+          packId: writable.packId,
         })
       }
 
@@ -2494,12 +2667,14 @@ window.__ModuleLoader__.load({
           scopeBadge(rule),
           h('span', { style: S.ruleSideText }, t('severity') + ' ' + (rule.severity === 'high' ? t('severityHigh') : rule.severity === 'low' ? t('severityLow') : t('severityMedium')))),
         h('div', { style: { display: 'flex', gap: 8 } },
-          rule.removed
-            ? h('button', { style: S.linkButton, onClick: () => onRestoreRule(rule) }, t('restoreRule'))
-            : h('button', { style: S.linkButton, onClick: () => openRuleEditor(rule) }, t('editRule')),
-          rule.removed
-            ? null
-            : h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule) }, t('removeRule')))))
+          writeTargetOf(rule)
+            ? (rule.removed
+              ? h('button', { style: S.linkButton, onClick: () => onRestoreRule(rule) }, t('restoreRule'))
+              : h('button', { style: S.linkButton, onClick: () => openRuleEditor(rule) }, t('editRule')))
+            : null,
+          writeTargetOf(rule) && !rule.removed
+            ? h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule) }, t('removeRule'))
+            : null)))
 
       const editor = editing
         ? h('div', { style: S.editorBox },
@@ -2901,8 +3076,54 @@ window.__ModuleLoader__.load({
           right: reviewSectionRight,
         }, reviewSectionBody) : null)
 
+      /* One editor serves create, rename and import: the mode decides which
+         fields appear and what the save posts. */
+      const packEditor = packEditing
+        ? h('div', { style: S.editorBox },
+          h('div', { style: S.fieldRow },
+            packEditing.mode === 'import'
+              ? h('label', { style: S.field },
+                h('span', { style: S.fieldLabel }, t('packImportPath')),
+                h('input', {
+                  style: S.input,
+                  value: packEditing.path || '',
+                  placeholder: '/path/to/pack',
+                  onChange: (event) => setPackEditing({ ...packEditing, path: event.target.value }),
+                }))
+              : h('label', { style: S.field },
+                h('span', { style: S.fieldLabel }, t('packIdLabel')),
+                h('input', {
+                  style: S.input,
+                  value: packEditing.id || '',
+                  disabled: packEditing.mode === 'rename',
+                  placeholder: 'my-pack',
+                  onChange: (event) => setPackEditing({ ...packEditing, id: event.target.value }),
+                })),
+            packEditing.mode === 'import'
+              ? null
+              : h('label', { style: S.field },
+                h('span', { style: S.fieldLabel }, t('packDisplayNameLabel')),
+                h('input', {
+                  style: S.input,
+                  value: packEditing.displayName || '',
+                  placeholder: t('packDisplayNameLabel'),
+                  onChange: (event) => setPackEditing({ ...packEditing, displayName: event.target.value }),
+                }))),
+          h('div', { style: S.editorActions },
+            h('button', { style: S.button, onClick: () => setPackEditing(null) }, t('cancel')),
+            h('button', {
+              style: busy === 'pack' ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+              disabled: busy === 'pack',
+              onClick: () => onSavePack(packEditing),
+            }, t('packSave'))))
+        : null
+
       const packListBody = h('div', null,
-        h('div', { style: S.hint }, t('packHint')),
+        h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', paddingTop: 4 } },
+          h('span', { style: S.hint }, t('packHint')),
+          h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing({ mode: 'create', id: '', displayName: '' }) }, '+ ' + t('packNew')),
+          h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing({ mode: 'import', path: '' }) }, t('packImport'))),
+        packEditor,
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10, paddingTop: 14 } },
           packs.map((pack) => h('a', {
             key: pack.id, href: routeHash('pack', pack.id), style: { ...S.card, textDecoration: 'none' },
@@ -2913,7 +3134,20 @@ window.__ModuleLoader__.load({
               pack.id === active.id ? h('span', { style: S.badge }, t('packActiveBadge')) : null),
             h('span', { style: S.mono }, pack.id + ' · v' + pack.version),
             h('span', { style: S.ruleSideText }, t('sourcePrefix') + (pack.source || t('sourceBuiltin')) + ' · ' + (pack.ruleCount || 0) + ' ' + t('rulesUnit') + ' · ' + (pack.skillCount || 0) + ' ' + t('skillsUnit')),
-            pack.id === active.id ? h('span', { style: S.hint }, t('packActiveNow')) : h('span', { style: S.hint }, t('packViewable'))))))
+            pack.id === active.id ? h('span', { style: S.hint }, t('packActiveNow')) : h('span', { style: S.hint }, t('packViewable'))))),
+        /* The host has no trash listing route: these rows are the entries the
+           delete responses returned in this panel session. */
+        packTrash.length
+          ? h('div', { 'data-testid': 'dsw-pack-trash' },
+            h(Section, { id: 'dsw-pack-trash-section', label: t('packTrash'), count: packTrash.length },
+              h('div', { style: S.hint }, t('packTrashHint')),
+              h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } },
+                packTrash.map((row) => h('div', { key: row.id, style: S.ruleRowV5 },
+                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                    h('span', { style: S.ruleTitle }, row.id),
+                    h('span', { style: S.mono }, typeof row.entry === 'string' ? row.entry : '')),
+                  h('button', { style: S.linkButton, disabled: busy === 'pack', onClick: () => onRestorePack(row.id) }, t('packRestore')))))))
+          : null)
 
       const routePackDetail = packDetail && packDetail.id === route.packId ? packDetail : null
       const selectedPack = routePackDetail || packs.find((pack) => pack.id === route.packId) || null
@@ -2956,11 +3190,35 @@ window.__ModuleLoader__.load({
                 h('span', { style: S.sectionRight },
                   h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version),
                   h('span', null, t('sourcePrefix') + (selectedPack.source || t('sourceBuiltin')) + ' · ' + selectedPack.ruleCount + ' ' + t('rulesUnit') + ' · ' + selectedPack.skillCount + ' ' + t('skillsUnit')))),
+              (() => {
+                const summary = packSummaryOf(selectedPack.id) || selectedPack
+                const writable = packWritable(summary)
+                return h('div', { 'data-testid': 'dsw-pack-actions', style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingBottom: 10 } },
+                  h('span', { style: S.hint }, writable ? t('packWritableNote') : t('packReadonlyNote')),
+                  writable && summary.dir ? h('span', { style: S.mono }, summary.dir) : null,
+                  selectedIsActive
+                    ? null
+                    : h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => onPackAction('apply', selectedPack.id) }, t('packSwitch')),
+                  writable
+                    ? h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing({ mode: 'rename', id: selectedPack.id, displayName: selectedPack.displayName || selectedPack.id }) }, t('packRename'))
+                    : null,
+                  h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => onPackAction('duplicate', selectedPack.id) }, t('packDuplicate')),
+                  writable
+                    ? (packDeleting === selectedPack.id
+                      ? h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
+                        h('span', { style: S.hint }, t('packDeleteHint')),
+                        h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => onPackAction('delete', selectedPack.id) }, t('packDeleteConfirm')),
+                        h('button', { style: S.linkButton, onClick: () => setPackDeleting('') }, t('cancel')))
+                      : h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackDeleting(selectedPack.id) }, t('packDelete')))
+                    : null)
+              })(),
+              packEditor,
               h('div', { role: 'tablist', 'aria-label': scopedT('packResourcesAria'), style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
               h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
 
-      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory }) => {
+      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory, revisions: revisionRows, revisionsError, onRestoreRevision }) => {
         const history = Array.isArray(exportHistory) ? exportHistory : []
+        const revisionsList = Array.isArray(revisionRows) ? revisionRows : []
         const copyInstall = () => copyAction(installCommand, installCommand)
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
@@ -3009,6 +3267,21 @@ window.__ModuleLoader__.load({
                 ? h('div', { style: S.empty },
                   h('div', { style: S.hint }, scopedT('noExportsYet')),
                   h('button', { style: S.buttonPrimary, disabled: exportDisabled, onClick: () => exportAction(false) }, t('exportPackOnly')))
+                : null),
+          h(Section, { id: 'dsw-revision-history', label: scopedT('revisionsTitle'), count: revisionsList.length },
+            revisionsError
+              ? h(ErrorState, { operation: scopedT('revisionsTitle'), message: revisionsError, onRetry: () => setRevisionsReload((n) => n + 1) })
+              : null,
+            revisionsList.length
+              ? h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } }, revisionsList.map((item) =>
+                h('div', { key: item.id, style: S.ruleRowV5 },
+                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                    h('span', { style: S.mono }, item.file || '—'),
+                    h('span', { style: S.hint }, when(item.at) + ' · ' + nf(item.bytes) + ' B · ' + String(item.reason || '').replace(/^[^:]+:/, ''))),
+                  h('button', { style: S.linkButton, disabled: busy === 'revision', onClick: () => onRestoreRevision(item.id) }, t('revisionRestore'))))
+              )
+              : !revisionsError
+                ? h('div', { style: S.empty }, h('div', { style: S.hint }, scopedT('revisionsEmpty')))
                 : null))
       }
 
@@ -3197,12 +3470,14 @@ window.__ModuleLoader__.load({
                   scopeBadge(rule),
                   h('span', { style: S.ruleSideText }, t('severity') + ' ' + (rule.severity === 'high' ? t('severityHigh') : rule.severity === 'low' ? t('severityLow') : t('severityMedium')))),
                 h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
-                  rule.removed
-                    ? h('button', { style: S.linkButton, onClick: () => onRestoreRule(rule) }, t('restoreRule'))
-                    : h('button', { style: S.linkButton, onClick: () => openRuleEditor(rule) }, t('editRule')),
-                  rule.removed
-                    ? null
-                    : h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule) }, t('removeRule')),
+                  writeTargetOf(rule)
+                    ? (rule.removed
+                      ? h('button', { style: S.linkButton, onClick: () => onRestoreRule(rule) }, t('restoreRule'))
+                      : h('button', { style: S.linkButton, onClick: () => openRuleEditor(rule) }, t('editRule')))
+                    : null,
+                  writeTargetOf(rule) && !rule.removed
+                    ? h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule) }, t('removeRule'))
+                    : null,
                   rule.outsidePreset && scopedPreset
                     ? h('button', { style: S.linkButton, onClick: () => onAddToPreset(rule.id) }, t('addToPreset'))
                     : null))
@@ -3273,6 +3548,9 @@ window.__ModuleLoader__.load({
                   lastMode: exportMode,
                   historyError: exportsError,
                   onRetryHistory: load,
+                  revisions,
+                  revisionsError,
+                  onRestoreRevision,
                 }))
 
       const headerNode = h('div', { style: S.header },

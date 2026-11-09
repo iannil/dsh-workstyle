@@ -113,6 +113,7 @@ const sampleStatus = {
   packs: [
     { id: 'fde-engineering', displayName: 'FDE 工程工作方式', version: '0.1.0' },
     { id: 'minimal', displayName: '极简工作方式', version: '0.2.0' },
+    { id: 'local-pack', displayName: '本机包', version: '0.1.0', dir: '/tmp/home/.dsh/workstyle/packs/local-pack' },
   ],
   rules: [
     { id: 'plan-first', title: '先方案后实现', text: '规则正文-先方案', severity: 'high', evidence: '证据-1', enabled: true, origin: 'pack' },
@@ -161,6 +162,14 @@ const detailPacks = {
     skills: [{ name: 'minimal-skill', description: 'B 包技能', whenToUse: 'B 包场景' }],
     presets: [{ id: 'minimal-default', title: 'B 包预设', description: 'B 包预设说明', rules: [], skills: [], templates: [] }],
     templates: [{ id: 'minimal-template', title: 'B 包模板', text: 'B 模板正文' }],
+  },
+  'local-pack': {
+    id: 'local-pack', displayName: '本机包', version: '0.1.0', format: 'json',
+    ruleCount: 1, skillCount: 0,
+    rules: [{ id: 'local-rule', title: '本机规则', text: '本机规则正文' }],
+    skills: [],
+    presets: [],
+    templates: [],
   },
 }
 
@@ -238,6 +247,10 @@ const failEnv = { scope: false, inject: false, metrics: false, emptyMetrics: fal
    a recoverable 400, `blockedIds` are bundled presets (delete ⇒ block),
    `duplicateExists` forces the duplicate-id conflict. */
 const presetControl = { sessions: [], blockedIds: [], duplicateExists: false }
+/* Pack lifecycle answers like the host `/pack` route: bundled ids refuse
+   rename/delete with a 400, and a delete returns the trash entry the panel
+   may restore. `failRevisions` simulates an unreadable revision index. */
+const packControl = { failDelete: false, failRevisions: false, revisions: [] }
 
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
@@ -447,6 +460,97 @@ globalThis.fetch = async (url, options = {}) => {
       return json({ removed: 'local', id: body.preset })
     }
     return json({ saved: body.preset && body.preset.id, presets: [] })
+  }
+  if (target.endsWith('/api/dsh-workstyle/pack')) {
+    const body = JSON.parse(options.body || '{}')
+    mutationCalls.push({ path: 'pack', body })
+    const bundled = new Set(['fde-engineering'])
+    const refuses = (body.action === 'rename' || body.action === 'delete')
+      && (bundled.has(body.id) || packControl.failDelete)
+    if (refuses) return { ok: false, json: async () => ({ error: 'bundled packs are read-only: ' + body.id }) }
+    const lifecycle = () => ({
+      packs: currentStatus.packs,
+      activePackId: currentStatus.activePack ? currentStatus.activePack.id : null,
+    })
+    if (body.action === 'apply') {
+      const next = (currentStatus.packs || []).find((pack) => pack.id === body.pack)
+      currentStatus.activePack = { ...(currentStatus.activePack || {}), ...(next || {}), id: body.pack }
+      return json({ action: 'apply', applied: { id: body.pack }, status: currentStatus })
+    }
+    if (body.action === 'create') {
+      if ((currentStatus.packs || []).some((pack) => pack.id === body.id)) {
+        return { ok: false, json: async () => ({ error: 'pack already exists: ' + body.id }) }
+      }
+      const displayName = body.displayName || body.id
+      currentStatus.packs = [...(currentStatus.packs || []), {
+        id: body.id, displayName, version: '0.1.0', dir: '/tmp/home/.dsh/workstyle/packs/' + body.id,
+      }]
+      detailPacks[body.id] = {
+        id: body.id, displayName, version: '0.1.0', format: 'json',
+        ruleCount: 0, skillCount: 0, rules: [], skills: [], presets: [], templates: [],
+      }
+      return json({ action: 'create', packId: body.id, ...lifecycle() })
+    }
+    if (body.action === 'duplicate') {
+      const source = (currentStatus.packs || []).find((pack) => pack.id === body.from) || { id: body.from, displayName: body.from }
+      const newId = body.id || (body.from + '-copy')
+      currentStatus.packs = [...(currentStatus.packs || []), {
+        ...source, id: newId, displayName: (source.displayName || source.id) + ' copy',
+      }]
+      detailPacks[newId] = { ...(detailPacks[body.from] || {}), id: newId, displayName: (source.displayName || source.id) + ' copy' }
+      return json({ action: 'duplicate', packId: newId, ...lifecycle() })
+    }
+    if (body.action === 'rename') {
+      currentStatus.packs = (currentStatus.packs || []).map((pack) => pack.id === body.id
+        ? { ...pack, displayName: body.displayName }
+        : pack)
+      if (detailPacks[body.id]) detailPacks[body.id] = { ...detailPacks[body.id], displayName: body.displayName }
+      return json({ action: 'rename', packId: body.id, ...lifecycle() })
+    }
+    if (body.action === 'delete') {
+      currentStatus.packs = (currentStatus.packs || []).filter((pack) => pack.id !== body.id)
+      if (currentStatus.activePack && currentStatus.activePack.id === body.id) {
+        currentStatus.activePack = {
+          ...currentStatus.activePack, id: 'fde-engineering', displayName: 'FDE 工程工作方式',
+          dir: '/tmp/dsh-workstyle/pack',
+        }
+      }
+      return json({
+        action: 'delete', packId: body.id,
+        trash: '/tmp/home/.dsh/workstyle/trash/' + body.id + '-2026-11-09T07-00-00-000Z',
+        ...lifecycle(),
+      })
+    }
+    if (body.action === 'restore') {
+      if (!(currentStatus.packs || []).some((pack) => pack.id === body.id)) {
+        currentStatus.packs = [...(currentStatus.packs || []), {
+          id: body.id, displayName: '本机包', version: '0.1.0',
+          dir: '/tmp/home/.dsh/workstyle/packs/' + body.id,
+        }]
+      }
+      return json({ action: 'restore', packId: body.id, ...lifecycle() })
+    }
+    if (body.action === 'import') {
+      const id = 'imported-pack'
+      if (!(currentStatus.packs || []).some((pack) => pack.id === id)) {
+        currentStatus.packs = [...(currentStatus.packs || []), {
+          id, displayName: '导入包', version: '0.1.0',
+          dir: '/tmp/home/.dsh/workstyle/packs/' + id,
+        }]
+      }
+      return json({ action: 'import', packId: id, ...lifecycle() })
+    }
+    return json({ action: body.action, packId: body.id || '', ...lifecycle() })
+  }
+  if (target.endsWith('/api/dsh-workstyle/revisions')) {
+    if (options.method === 'POST') {
+      const body = JSON.parse(options.body || '{}')
+      mutationCalls.push({ path: 'revisions', body })
+      const hit = (packControl.revisions || []).find((revision) => revision.id === body.id)
+      return json({ restored: { file: hit ? hit.file : '/tmp/revision-target.json', revision: body.id }, status: currentStatus })
+    }
+    if (packControl.failRevisions) return { ok: false, json: async () => ({}) }
+    return json({ revisions: packControl.revisions })
   }
   if (target.endsWith('/api/dsh-workstyle/toggle')) {
     const body = JSON.parse(options.body || '{}')
@@ -1311,6 +1415,212 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     currentScope.presets = originalPresets
     currentScope.blockedPresets = originalBlocked
     currentScope.activePreset = originalActivePreset
+    route.hash = '#/run'
+    if (hashChange) hashChange()
+    view = await act(() => button(view, '刷新').props.onClick())
+  }
+}
+
+/* --- Task 11: pack lifecycle + revision rollback --- */
+{
+  const originalPacks = currentStatus.packs
+  const originalActive = currentStatus.activePack
+  const originalRulesFix = currentScope.rules
+  const originalPresetsFix = currentScope.presets
+  const originalActivePresetFix = currentScope.activePreset
+  const goPack = async (id) => {
+    route.hash = id ? '#/pack/' + id : '#/pack'
+    if (hashChange) hashChange()
+    return settle(14)
+  }
+  const goDist = async () => {
+    route.hash = '#/distribute'
+    if (hashChange) hashChange()
+    return settle(14)
+  }
+  const packCalls = (from) => mutationCalls.slice(from).filter((call) => call.path === 'pack')
+  const revisionCalls = (from) => mutationCalls.slice(from).filter((call) => call.path === 'revisions')
+  const testId = (v, id) => findHost(v, (node) => node.props && node.props['data-testid'] === id)
+  const rowOf = (v, title) => findHost(v, (node) => node.type === 'div'
+    && node.props && node.props.className === 'dsw-row' && textOf(node).includes(title))
+  const actionsOf = (v) => testId(v, 'dsw-pack-actions')
+  try {
+    packControl.failDelete = false
+    packControl.failRevisions = false
+    packControl.revisions = []
+
+    /* The list page owns create/import; neither opens a write by itself. */
+    view = await goPack()
+    ok(!!button(view, '+ 新建包') && !!button(view, '导入包'), 'pack list offers create and import actions')
+    let since = mutationCalls.length
+    view = await act(() => button(view, '+ 新建包').props.onClick())
+    ok(packCalls(since).length === 0, 'opening the pack editor posts nothing')
+    ok(!!input(view, 'my-pack'), 'create dialog renders the pack id field')
+    view = await act(() => input(view, 'my-pack').props.onChange({ target: { value: 'local-two' } }))
+    view = await act(() => input(view, '显示名称').props.onChange({ target: { value: '本地二' } }))
+    since = mutationCalls.length
+    view = await act(() => button(view, '保存').props.onClick())
+    let calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'create' && calls[0].body.id === 'local-two'
+      && calls[0].body.displayName === '本地二', 'create posts the id and display name')
+    ok(!button(view, '保存'), 'a successful create closes its editor')
+    ok(textOf(view).includes('本地二'), 'the new pack appears in the list from the host response')
+
+    /* Import only sends the chosen directory; the host validates it. */
+    view = await goPack()
+    view = await act(() => button(view, '导入包').props.onClick())
+    const importField = input(view, '/path/to/pack')
+    ok(!!importField, 'import dialog asks for the pack directory')
+    view = await act(() => importField.props.onChange({ target: { value: '/tmp/import-me' } }))
+    since = mutationCalls.length
+    view = await act(() => button(view, '保存').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'import' && calls[0].body.path === '/tmp/import-me',
+      'import posts the chosen directory')
+
+    /* Writability comes from the status dir: only workstyle/packs is editable. */
+    view = await goPack('local-pack')
+    let actions = actionsOf(view)
+    ok(!!actions && textOf(actions).includes('本机包：可以'), 'a pack under workstyle/packs is writable')
+    ok(!!button(actions, '重命名') && !!button(actions, '删除'), 'a writable pack offers rename and delete')
+
+    view = await goPack('fde-engineering')
+    actions = actionsOf(view)
+    ok(!!actions && textOf(actions).includes('只读包'), 'a bundled pack is marked read-only')
+    ok(!!actions && !button(actions, '重命名') && !button(actions, '删除'), 'a read-only pack hides rename and delete')
+    ok(!!button(actions, '复制'), 'a read-only pack can still be duplicated')
+
+    /* Rename edits the display name only, with the id locked. */
+    view = await goPack('local-pack')
+    actions = actionsOf(view)
+    since = mutationCalls.length
+    view = await act(() => button(actions, '重命名').props.onClick())
+    ok(packCalls(since).length === 0, 'opening the rename editor posts nothing')
+    const lockedId = input(view, 'my-pack')
+    ok(!!lockedId && lockedId.props.disabled === true && lockedId.props.value === 'local-pack',
+      'rename locks the pack id')
+    view = await act(() => input(view, '显示名称').props.onChange({ target: { value: '本机包 v2' } }))
+    since = mutationCalls.length
+    view = await act(() => button(view, '保存').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'rename' && calls[0].body.id === 'local-pack'
+      && calls[0].body.displayName === '本机包 v2', 'rename posts the new display name')
+
+    /* Delete asks first; the host response carries the trash entry. */
+    view = await goPack('local-pack')
+    actions = actionsOf(view)
+    since = mutationCalls.length
+    view = await act(() => button(actions, '删除').props.onClick())
+    ok(packCalls(since).length === 0, 'delete asks for confirmation first')
+    ok(textOf(view).includes('确认删除'), 'delete confirmation names the action')
+    since = mutationCalls.length
+    view = await act(() => button(view, '确认删除').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'delete' && calls[0].body.id === 'local-pack',
+      'confirmed delete posts the pack id')
+    const trash = testId(view, 'dsw-pack-trash')
+    ok(!!trash && textOf(trash).includes('回收站') && !!button(trash, '恢复'),
+      'the delete response feeds a trash entry with restore')
+    since = mutationCalls.length
+    view = await act(() => button(trash, '恢复').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'restore' && calls[0].body.id === 'local-pack',
+      'restore posts the trashed pack id')
+
+    view = await goPack('local-pack')
+    packControl.failDelete = true
+    view = await act(() => button(actionsOf(view), '删除').props.onClick())
+    view = await act(() => button(view, '确认删除').props.onClick())
+    ok(textOf(view).includes('bundled packs are read-only: local-pack'),
+      'a refused delete surfaces the host error verbatim')
+    packControl.failDelete = false
+
+    /* Duplicate and apply both live on the detail page. */
+    view = await goPack('minimal')
+    actions = actionsOf(view)
+    since = mutationCalls.length
+    view = await act(() => button(actions, '复制').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'duplicate' && calls[0].body.from === 'minimal',
+      'duplicate posts the source pack id')
+    view = await goPack('minimal')
+    actions = actionsOf(view)
+    since = mutationCalls.length
+    view = await act(() => button(actions, '切换包').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'apply' && calls[0].body.pack === 'minimal',
+      'switching from the detail uses the pack apply action')
+
+    /* Distribution page: revision rows, reason without its prefix, rollback. */
+    packControl.revisions = [
+      { id: 'rev-b', at: '2026-11-09T06:00:00.000Z', bytes: 240, reason: 'restore:rev-a', file: '/tmp/home/.dsh/workstyle/state.json' },
+      { id: 'rev-a', at: '2026-11-08T06:00:00.000Z', bytes: 120, reason: 'write', file: '/tmp/home/.dsh/workstyle/overrides.json' },
+    ]
+    view = await goDist()
+    ok(textOf(view).includes('修订历史'), 'distribution page carries the revision history')
+    ok(textOf(view).includes('state.json') && /240 B/.test(textOf(view)), 'each revision names its file and size')
+    ok(textOf(view).includes('rev-a') && !textOf(view).includes('restore:rev-a'),
+      'the revision reason drops its action prefix')
+    since = mutationCalls.length
+    view = await act(() => button(view, '回滚').props.onClick())
+    calls = revisionCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'restore' && calls[0].body.id === 'rev-b',
+      'rollback posts the newest revision id')
+    packControl.revisions = []
+    route.hash = '#/run'
+    if (hashChange) hashChange()
+    await settle(10)
+    view = await goDist()
+    ok(textOf(view).includes('还没有修订记录'), 'an empty revision index renders its empty state')
+
+    /* Carried-over Task 9 fix: no silent project fallback without a target. */
+    route.hash = '#/rules'
+    if (hashChange) hashChange()
+    view = await settle(12)
+    const unknownRow = rowOf(view, '证据优先')
+    ok(!!unknownRow && !button(unknownRow, '编辑') && !button(unknownRow, '移除'),
+      'a rule without a write target offers no write actions')
+
+    /* Carried-over Task 9 fix: the add-to-preset toast is a sentence. */
+    currentScope.rules = [...originalRulesFix, {
+      id: 'outside-two', title: '预设外规则', text: '预设外正文', enabled: false, outsidePreset: 'writing',
+      writable: { scope: 'pack', file: '/tmp/dsh-workstyle/pack/workstyle.json', packId: 'fde-engineering' },
+    }]
+    // Point the save at a healthy preset: earlier suites leave activePreset as a
+    // degraded `writing` placeholder, and saving that back would clobber the
+    // real `writing` card for later suites.
+    currentScope.activePreset = {
+      id: 'fde-delivery', title: 'FDE 交付', description: '', rules: ['plan-first', 'verify-first'],
+      skills: [], templates: [],
+    }
+    view = await act(() => button(view, '刷新').props.onClick())
+    route.hash = '#/rules'
+    if (hashChange) hashChange()
+    view = await settle(12)
+    const outsideRow = rowOf(view, '预设外规则')
+    view = await act(() => button(outsideRow, '加入当前预设').props.onClick())
+    ok(textOf(view).includes('已加入当前预设'),
+      'adding a rule to the preset reports a sentence, not the button label')
+
+    const packKeys = ['packNew', 'packImport', 'packDuplicate', 'packRename', 'packDelete', 'packRestore',
+      'packTrash', 'packReadonlyNote', 'packWritableNote', 'packImportPath', 'packIdLabel',
+      'packDisplayNameLabel', 'revisionsTitle', 'revisionsEmpty', 'revisionRestore']
+    ok(packKeys.every((key) => typeof zh[key] === 'string' && zh[key]
+      && typeof en[key] === 'string' && en[key] && en[key] !== zh[key]),
+      'every new pack key exists in both dictionaries with an English label')
+    console.log('  ✓ pack lifecycle / trash / revision rollback flow')
+  } finally {
+    packControl.failDelete = false
+    packControl.failRevisions = false
+    packControl.revisions = []
+    currentStatus.packs = originalPacks
+    currentStatus.activePack = originalActive
+    currentScope.rules = originalRulesFix
+    currentScope.presets = originalPresetsFix
+    currentScope.activePreset = originalActivePresetFix
+    for (const id of ['local-two', 'imported-pack', 'minimal-copy']) delete detailPacks[id]
+    const cancel = button(view, '取消')
+    if (cancel) view = await act(() => cancel.props.onClick())
     route.hash = '#/run'
     if (hashChange) hashChange()
     view = await act(() => button(view, '刷新').props.onClick())
