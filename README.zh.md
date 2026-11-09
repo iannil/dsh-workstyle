@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/icon-180.png" width="88" alt="dsh-workstyle" />
+  <img src="https://raw.githubusercontent.com/iannil/dsh-workstyle/master/docs/assets/icon-180.png" width="88" alt="dsh-workstyle" />
   <h1>dsh-workstyle</h1>
 
   <p><b>让 DeepSeek Harness 的 Agent 像你一样工作。</b></p>
@@ -7,17 +7,17 @@
   <p><sub>把工作方式打包成可版本化的规则、技能与预设，按全局 / 项目 / 会话作用域注入系统提示，再用一个文件交给同事。</sub></p>
 
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
-    <a href="package.json"><img src="https://img.shields.io/github/package-json/v/iannil/dsh-workstyle" alt="version" /></a>
+    <a href="https://github.com/iannil/dsh-workstyle/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
+    <a href="https://github.com/iannil/dsh-workstyle/blob/master/package.json"><img src="https://img.shields.io/github/package-json/v/iannil/dsh-workstyle" alt="version" /></a>
     <img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-4b6ef5" alt="DeepSeek Harness plugin" />
     <a href="https://github.com/iannil/dsh-workstyle"><img src="https://img.shields.io/github/stars/iannil/dsh-workstyle" alt="GitHub stars" /></a>
     <a href="https://github.com/iannil/dsh-workstyle/commits/master"><img src="https://img.shields.io/github/last-commit/iannil/dsh-workstyle" alt="last commit" /></a>
   </p>
 
-  <p><a href="README.md">English</a> | 中文</p>
+  <p><a href="https://github.com/iannil/dsh-workstyle/blob/master/README.md">English</a> | 中文</p>
 </div>
 
-![工作方式面板：全局作用域下的 7 条生效规则](docs/assets/panel-rules.jpg)
+![工作方式面板：全局作用域下的 7 条生效规则](https://raw.githubusercontent.com/iannil/dsh-workstyle/master/docs/assets/panel-rules.jpg)
 
 > ⭐ **如果这个项目对你有用，[点个 Star](https://github.com/iannil/dsh-workstyle)**，让更多 Harness 用户找到它。
 
@@ -90,7 +90,7 @@ graph LR
 
 `market/packs/fde-engineering/` 是随插件附带的默认包：**7 条规则**（先方案后实现、证据优先、验证后才宣称完成、中文短句先结论、产物化、范围守卫、本地隐私）与来自 [iannil/skills](https://github.com/iannil/skills) 的 **40 个技能**（commit `b75ace6`，MIT）。首次启动时插件把随包快照复制到 `$DSH_HOME/workstyle/packs/fde-engineering/` 并设为当前包，不联网。
 
-`#/market` 读取 `market/registry.json` 的公开包；归档由 CI 构建、放在 GitHub Releases，仓库只存文本源。检测到新版本会提示「可更新」，但下载与替换必须人工确认。提交包见 [market/README.md](market/README.md)。
+`#/market` 读取 `market/registry.json` 的公开包；归档由 CI 构建、放在 GitHub Releases，仓库只存文本源。检测到新版本会提示「可更新」，但下载与替换必须人工确认。提交包见 [market/README.md](https://github.com/iannil/dsh-workstyle/blob/master/market/README.md)。
 
 ## Pack 格式
 
@@ -133,15 +133,15 @@ node scripts/build-market.mjs --check   # CI 用的严格比对
 node scripts/build-market.mjs --write   # 生成 .market-dist/ 与 registry.json
 ```
 
-数据目录与内部细节见 [docs/USAGE.md](docs/USAGE.md)；设计稿与验证记录见 [docs/](docs/)。
+数据目录与内部细节见 [docs/USAGE.md](https://github.com/iannil/dsh-workstyle/blob/master/docs/USAGE.md)；设计稿与验证记录见 [docs/](https://github.com/iannil/dsh-workstyle/tree/master/docs)。
 
 ## Contributing
 
-欢迎 PR。改完请跑上面的测试；设计稿与验证记录在 [`docs/`](docs/)。
+欢迎 PR。改完请跑上面的测试；设计稿与验证记录在 [`docs/`](https://github.com/iannil/dsh-workstyle/tree/master/docs)。
 
 ## 许可
 
-本插件 MIT，见 [LICENSE](LICENSE)。内置参考技能包来自 [iannil/skills](https://github.com/iannil/skills)（MIT，见 `market/packs/fde-engineering/workstyle.json` 的 `license` 字段）。
+本插件 MIT，见 [LICENSE](https://github.com/iannil/dsh-workstyle/blob/master/LICENSE)。内置参考技能包来自 [iannil/skills](https://github.com/iannil/skills)（MIT，见 `market/packs/fde-engineering/workstyle.json` 的 `license` 字段）。
 
 ## Star History
 

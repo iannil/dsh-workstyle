@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/icon-180.png" width="88" alt="dsh-workstyle" />
+  <img src="https://raw.githubusercontent.com/iannil/dsh-workstyle/master/docs/assets/icon-180.png" width="88" alt="dsh-workstyle" />
   <h1>dsh-workstyle</h1>
 
   <p><b>Make DeepSeek Harness agents work like you.</b></p>
@@ -7,17 +7,17 @@
   <p><sub>Package your working style as a versioned set of rules, skills and presets, inject it into the system prompt at global, project or session scope, and hand the pack to a teammate as one file.</sub></p>
 
   <p>
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
-    <a href="package.json"><img src="https://img.shields.io/github/package-json/v/iannil/dsh-workstyle" alt="version" /></a>
+    <a href="https://github.com/iannil/dsh-workstyle/blob/master/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="MIT license" /></a>
+    <a href="https://github.com/iannil/dsh-workstyle/blob/master/package.json"><img src="https://img.shields.io/github/package-json/v/iannil/dsh-workstyle" alt="version" /></a>
     <img src="https://img.shields.io/badge/DeepSeek%20Harness-plugin-4b6ef5" alt="DeepSeek Harness plugin" />
     <a href="https://github.com/iannil/dsh-workstyle"><img src="https://img.shields.io/github/stars/iannil/dsh-workstyle" alt="GitHub stars" /></a>
     <a href="https://github.com/iannil/dsh-workstyle/commits/master"><img src="https://img.shields.io/github/last-commit/iannil/dsh-workstyle" alt="last commit" /></a>
   </p>
 
-  <p><a href="README.md">English</a> | <a href="README.zh.md">中文</a></p>
+  <p><a href="https://github.com/iannil/dsh-workstyle/blob/master/README.md">English</a> | <a href="https://github.com/iannil/dsh-workstyle/blob/master/README.zh.md">中文</a></p>
 </div>
 
-![Workstyle panel: seven active rules injected at global scope](docs/assets/panel-rules.jpg)
+![Workstyle panel: seven active rules injected at global scope](https://raw.githubusercontent.com/iannil/dsh-workstyle/master/docs/assets/panel-rules.jpg)
 
 > ⭐ **If this looks useful, [star the repo](https://github.com/iannil/dsh-workstyle)** — it helps other DeepSeek Harness users find it.
 
@@ -90,7 +90,7 @@ Human commands: `/workstyle status | apply | distill | adopt | undo | on | off |
 
 `market/packs/fde-engineering/` is the default pack: **7 rules** (plan first, evidence first, verify before claiming done, short Chinese answers, artifact-oriented, scope guard, local privacy) and **40 skills** from [iannil/skills](https://github.com/iannil/skills) (commit `b75ace6`, MIT). On first boot the plugin copies the bundled snapshot to `$DSH_HOME/workstyle/packs/fde-engineering/` and activates it offline.
 
-`#/market` lists public packs from `market/registry.json`; archives are built by CI and hosted on GitHub Releases, and the repo stores text sources only. New versions are detected automatically, but downloading and replacing a pack always needs confirmation. To publish a pack, see [market/README.md](market/README.md).
+`#/market` lists public packs from `market/registry.json`; archives are built by CI and hosted on GitHub Releases, and the repo stores text sources only. New versions are detected automatically, but downloading and replacing a pack always needs confirmation. To publish a pack, see [market/README.md](https://github.com/iannil/dsh-workstyle/blob/master/market/README.md).
 
 ## Pack format
 
@@ -133,15 +133,15 @@ node scripts/build-market.mjs --check   # strict comparison used by CI
 node scripts/build-market.mjs --write   # regenerate .market-dist/ and registry.json
 ```
 
-State directory and internals: [docs/USAGE.md](docs/USAGE.md) (Chinese). Design notes and verification records: [docs/](docs/).
+State directory and internals: [docs/USAGE.md](https://github.com/iannil/dsh-workstyle/blob/master/docs/USAGE.md) (Chinese). Design notes and verification records: [docs/](https://github.com/iannil/dsh-workstyle/tree/master/docs).
 
 ## Contributing
 
-PRs welcome. Run the test suites above before sending a change; design and verification records are in [`docs/`](docs/).
+PRs welcome. Run the test suites above before sending a change; design and verification records are in [`docs/`](https://github.com/iannil/dsh-workstyle/tree/master/docs).
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The bundled reference skill pack comes from [iannil/skills](https://github.com/iannil/skills) (MIT; see the `license` field in `market/packs/fde-engineering/workstyle.json`).
+MIT — see [LICENSE](https://github.com/iannil/dsh-workstyle/blob/master/LICENSE). The bundled reference skill pack comes from [iannil/skills](https://github.com/iannil/skills) (MIT; see the `license` field in `market/packs/fde-engineering/workstyle.json`).
 
 ## Star history
 
