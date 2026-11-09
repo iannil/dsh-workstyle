@@ -17,8 +17,8 @@ import {
   renderRules, reportsDir, statePath, workstyleHome, writeJsonAtomic, writeState,
 } from './lib/pack.js'
 import {
-  applyRuleOverlay, blockPreset, checkPackId, commit, isUserPack, patchOverlay, removeOverlay,
-  resolveWrite, restoreOverlay, snapshot, trashDir, userPacksDir,
+  applyRuleOverlay, blockPreset, checkPackId, commit, isUserPack, listRevisions, patchOverlay, removeOverlay,
+  resolveWrite, restore as restoreRevision, restoreOverlay, snapshot, trashDir, userPacksDir,
 } from './lib/manage.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
@@ -1780,6 +1780,63 @@ export function apply(ctx) {
             return jsonResponse({ error: "action must be 'save', 'use', 'delete', 'duplicate', 'block' or 'unblock'" }, 400)
           } catch (error) {
             return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
+          }
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/revisions',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          /* An unknown or foreign path has no key in the index, so a filter
+             that names one reads as "no revisions" instead of an error. */
+          const file = new URL(request.url).searchParams.get('file') || undefined
+          return jsonResponse({
+            revisions: listRevisions(file).map((rev) => ({
+              id: rev.id, at: rev.at, bytes: rev.bytes, reason: rev.reason, file: rev.path,
+            })),
+          })
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/revisions',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = await readJsonBody(request)
+          if (!body) return jsonResponse({ error: 'request body must be JSON' }, 400)
+          if (body.action !== 'restore') return jsonResponse({ error: "action must be 'restore'" }, 400)
+          const id = typeof body.id === 'string' ? body.id.trim() : ''
+          if (!id) return jsonResponse({ error: 'id is required' }, 400)
+          try {
+            const out = restoreRevision(id)
+            /*
+             * The snapshot can be state.json, a user-pack manifest or a
+             * project file, and it is already on disk. Reload the packs first,
+             * then re-resolve `active` from the restored state: refreshPacks
+             * keeps the pre-restore active pack whenever it still exists, so
+             * without this step /status and /inject would serve stale bytes
+             * after a 200.
+             */
+            const refreshed = refreshPacks()
+            if (!refreshed.ok) {
+              return jsonResponse({ error: refreshed.error || 'failed to reload packs', reload: 'failed' }, 500)
+            }
+            const restoredState = readState()
+            active = packs.find((pack) => pack.id === restoredState.activePack) || packs[0]
+            /* Mirror applyPack: the provider may cache skill lists per pack. */
+            try { skillControl?.invalidate() } catch { /* provider may be gone */ }
+            return jsonResponse({
+              restored: { file: out.file, revision: out.revision ? out.revision.id : null },
+              status: buildStatus(),
+            })
+          } catch (error) {
+            const message = error && error.message ? error.message : String(error)
+            /* A vanished snapshot is data damage (500); an id nobody knows is
+               a client error (404). */
+            const status = /^revision file is missing: /.test(message) ? 500
+              : /^unknown revision: /.test(message) ? 404 : 500
+            return jsonResponse({ error: message }, status)
           }
         },
       })

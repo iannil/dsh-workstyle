@@ -116,7 +116,7 @@ fs.writeFileSync(reportPath, JSON.stringify(fakeReport, null, 2) + '\n')
 console.log('tools:')
 ok(registered.tools.size === 8, '8 tools registered (' + [...registered.tools.keys()].join(', ') + ')')
 const registeredPaths = new Set([...registered.routes.keys()].map((key) => key.split(' ')[0]))
-ok(registeredPaths.size === 16, '16 HTTP route paths registered (' + [...registeredPaths].length + ')')
+ok(registeredPaths.size === 17, '17 HTTP route paths registered (' + [...registeredPaths].length + ')')
 ok(registered.commands.has('workstyle'), '/workstyle command registered')
 ok(registered.sections.has('dsh-workstyle.rules'), 'system prompt section registered')
 ok(registered.providers.length === 1, 'skills provider registered')
@@ -1517,6 +1517,87 @@ const unblockForcedBlock = await postPreset({ action: 'unblock', packId: 'fde-en
 ok(unblockForcedBlock.status === 200, 'the forced block for block is cleaned up')
 
 await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
+
+/* ---------------- revisions ---------------- */
+
+console.log('revisions:')
+
+const revList = await callRoute('/api/dsh-workstyle/revisions')
+ok(revList.status === 200 && Array.isArray(revList.data.revisions), 'GET /revisions lists snapshots')
+const firstRev = revList.data.revisions.find((rev) => rev.reason && rev.reason.startsWith('preset-save:'))
+ok(!!firstRev, 'preset edits leave revisions behind')
+ok(typeof firstRev.file === 'string' && firstRev.file.length > 0, 'revision rows report the file they belong to')
+
+const revByFile = await callRoute('/api/dsh-workstyle/revisions?file=' + encodeURIComponent(firstRev.file))
+ok(revByFile.status === 200 && revByFile.data.revisions.every((rev) => rev.file === firstRev.file), 'GET /revisions filters by file')
+
+const revUnknownFile = await callRoute('/api/dsh-workstyle/revisions?file=' + encodeURIComponent(path.join(home, 'not-a-workstyle-file.json')))
+ok(revUnknownFile.status === 200 && revUnknownFile.data.revisions.length === 0,
+  'an unknown file filters to an empty list, never an error')
+
+const restoreRev = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'restore', id: firstRev.id } })
+ok(restoreRev.status === 200, 'POST /revisions restores a snapshot')
+ok(restoreRev.data.restored.file === firstRev.file, 'restore reports the file it wrote')
+ok(typeof restoreRev.data.restored.revision === 'string', 'restore snapshots the overwritten content')
+
+const revRestoreUnknown = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'restore', id: 'no-such-revision' } })
+ok(revRestoreUnknown.status === 404, 'unknown revision id is a 404')
+const revRestoreBad = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'nope' } })
+ok(revRestoreBad.status === 400, 'unknown revision action is a 400')
+const revRestoreNoId = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'restore' } })
+ok(revRestoreNoId.status === 400, 'restore without an id is a 400')
+const revPostRoute = registered.routes.get('/api/dsh-workstyle/revisions POST')
+assert.ok(revPostRoute, 'route missing: /api/dsh-workstyle/revisions POST')
+const badJsonBody = await revPostRoute.fetch(new Request('http://localhost/api/dsh-workstyle/revisions', {
+  method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"action":',
+}))
+const badJsonData = await badJsonBody.json()
+ok(badJsonBody.status === 400 && typeof badJsonData.error === 'string', 'a malformed JSON body is a 400')
+
+/* ---- state rollback: what the panel's restore button actually does ---- */
+
+console.log('state rollback:')
+await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
+const pristineRule = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
+const patchBefore = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', rule: { id: 'plan-first', title: '回滚前标题', text: '回滚前正文。' } },
+})
+ok(patchBefore.status === 200, 'a bundled rule patch lands in state.json')
+ok((await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first').title === '回滚前标题',
+  '/scope shows the patched title before the rollback')
+/* Move the active pack away: the rollback must re-resolve it from the restored
+ * state, not keep whatever was active before the restore. */
+ok((await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'smoke-pack' } })).status === 200,
+  'the active pack moves to smoke-pack before the rollback')
+
+const stateRevs = await callRoute('/api/dsh-workstyle/revisions?file=' + encodeURIComponent(stateFilePath))
+ok(stateRevs.status === 200 && stateRevs.data.revisions.length > 0, 'state.json has revisions')
+/* Newest first: this is the snapshot the patch took before it overwrote
+ * state.json, so replaying it drops the patch and restores the fde-engineering
+ * active pack at that moment. */
+const patchRev = stateRevs.data.revisions.find((rev) => rev.reason === 'rule-patch:plan-first')
+ok(!!patchRev, 'the rule patch left a state.json revision behind')
+const rollback = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'restore', id: patchRev.id } })
+ok(rollback.status === 200 && rollback.data.restored.file === stateFilePath, 'restoring a state.json revision succeeds')
+ok(rollback.data.status && rollback.data.status.activePackId === 'fde-engineering',
+  'the rollback response re-resolves the active pack from the restored state')
+const afterRollback = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
+ok(afterRollback.title === pristineRule.title && afterRollback.text === pristineRule.text,
+  '/scope serves the pre-patch rule text again')
+ok((await callRoute('/api/dsh-workstyle/status')).data.activePackId === 'fde-engineering',
+  '/status names the pack the restored state points at')
+
+/* ---- a snapshot that vanished is data damage, not a client error ---- */
+
+const damagedList = await callRoute('/api/dsh-workstyle/revisions')
+const doomedRev = damagedList.data.revisions[0]
+const doomedSnapshot = path.join(home, 'workstyle', 'revisions', doomedRev.id.slice(0, 10), doomedRev.id.slice(11) + '.json')
+assert.ok(fs.existsSync(doomedSnapshot), 'expected snapshot file missing: ' + doomedSnapshot)
+fs.rmSync(doomedSnapshot, { force: true })
+const revMissingSnapshot = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'restore', id: doomedRev.id } })
+ok(revMissingSnapshot.status === 500 && /revision file is missing/.test(revMissingSnapshot.data.error || ''),
+  'a snapshot file that vanished is a 500, not a 404')
 
 /* ------------------------------- cleanup ------------------------------- */
 
