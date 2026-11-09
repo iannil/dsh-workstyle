@@ -248,6 +248,27 @@ window.__ModuleLoader__.load({
       presetRules: '规则',
       presetSkills: '技能',
       presetTemplates: '模板',
+      editPreset: '编辑',
+      duplicatePreset: '复制',
+      deletePreset: '删除',
+      restorePreset: '恢复',
+      savePreset: '保存',
+      presetEditorTitle: '编辑预设',
+      presetIdLabel: '预设 id',
+      presetDescLabel: '说明',
+      presetWhitelistHint: '提示：只有勾选的规则会被注入',
+      presetDanglingRules: '预设引用的规则已不存在',
+      presetIdRequired: '预设 id 和名称不能为空',
+      presetSaved: '预设已保存到本机覆盖层',
+      presetDeleted: '预设已删除',
+      presetDeletedLocal: '本机预设已删除',
+      presetBlockedNotice: '包内预设不能删除，已屏蔽',
+      presetDuplicated: '预设已复制',
+      presetRestored: '预设已恢复',
+      presetBlockedTitle: '已屏蔽预设',
+      presetBlockedHint: '屏蔽的预设不再参与组装；恢复后重新出现在列表里。',
+      presetForceTitle: '预设仍被会话占用',
+      presetForceBody: '以下会话仍在使用这个预设；强制删除后它们会退回全局规则集。确认删除请点「删除」',
       metricsUnavailable: '尚未蒸馏：先运行一次蒸馏，度量才有可复算的底稿。',
       baseline: '较上次',
       distributionTitle: '分发',
@@ -497,6 +518,27 @@ window.__ModuleLoader__.load({
       presetRules: 'Rules',
       presetSkills: 'Skills',
       presetTemplates: 'Templates',
+      editPreset: 'Edit',
+      duplicatePreset: 'Duplicate',
+      deletePreset: 'Delete',
+      restorePreset: 'Restore',
+      savePreset: 'Save',
+      presetEditorTitle: 'Edit preset',
+      presetIdLabel: 'Preset id',
+      presetDescLabel: 'Description',
+      presetWhitelistHint: 'Hint: only ticked rules are injected',
+      presetDanglingRules: 'Preset references rules that no longer exist',
+      presetIdRequired: 'Preset id and title are required',
+      presetSaved: 'Preset saved to the local overlay',
+      presetDeleted: 'Preset deleted',
+      presetDeletedLocal: 'Local preset deleted',
+      presetBlockedNotice: 'A bundled preset cannot be deleted; it was blocked instead',
+      presetDuplicated: 'Preset duplicated',
+      presetRestored: 'Preset restored',
+      presetBlockedTitle: 'Blocked presets',
+      presetBlockedHint: 'A blocked preset no longer takes part in composition; restore it to bring it back into the list.',
+      presetForceTitle: 'Preset still in use',
+      presetForceBody: 'These sessions still pin this preset; forcing the delete falls them back to the global rule set. Confirm with “Delete”',
       metricsUnavailable: 'Not distilled yet: run a distillation first, then the numbers have a source.',
       baseline: 'vs previous',
       distributionTitle: 'Distribute',
@@ -1323,6 +1365,14 @@ window.__ModuleLoader__.load({
       const [packTab, setPackTab] = React.useState('rules')
       const [metricTab, setMetricTab] = React.useState('metrics')
       const [editing, setEditing] = React.useState(null)
+      /* Preset editing is its own draft: a preset is a whitelist of rule,
+         skill and template ids, so it needs a different shape from the rule
+         editor and must never share its draft. */
+      const [presetEditing, setPresetEditing] = React.useState(null)
+      /* A delete refused only because other sessions still pin the preset is
+         recoverable: the panel asks, then re-posts with force=true. */
+      const [presetForce, setPresetForce] = React.useState(null)
+      const [presetBusy, setPresetBusy] = React.useState('')
       const [scopeFilter, setScopeFilter] = React.useState('all')
       const ONBOARDING_KEY = 'dsw-workstyle:onboarding-v1'
       const [onboardingOpen, setOnboardingOpen] = React.useState(() => {
@@ -1863,6 +1913,115 @@ window.__ModuleLoader__.load({
           .finally(() => setBusy(''))
       }
 
+      /* ---------------------------- v5 · presets ---------------------------- */
+
+      const activePackId = () => (status && status.activePack ? status.activePack.id : '')
+
+      const presetDraft = (preset) => ({
+        existing: !!preset,
+        id: preset ? preset.id : '',
+        title: preset ? (preset.title || preset.id) : '',
+        description: preset ? (preset.description || '') : '',
+        rules: preset && Array.isArray(preset.rules) ? preset.rules.slice() : [],
+        skills: preset && Array.isArray(preset.skills) ? preset.skills.slice() : [],
+        templates: preset && Array.isArray(preset.templates) ? preset.templates.slice() : [],
+      })
+
+      const openPresetEditor = (preset) => {
+        setPresetForce(null)
+        setError('')
+        setNotice('')
+        setPresetEditing(presetDraft(preset))
+      }
+
+      const togglePresetRule = (ruleId) => {
+        setPresetEditing((prev) => {
+          if (!prev) return prev
+          const rules = prev.rules.includes(ruleId)
+            ? prev.rules.filter((id) => id !== ruleId)
+            : [...prev.rules, ruleId]
+          return { ...prev, rules }
+        })
+      }
+
+      /* The panel always writes presets to the overlay: the pack manifest is
+         the pack author's file, and a local edit there would vanish on the
+         next pack update. */
+      const onSavePreset = (draft) => {
+        const id = typeof draft.id === 'string' ? draft.id.trim() : ''
+        const title = typeof draft.title === 'string' ? draft.title.trim() : ''
+        if (!id || !title) {
+          setError(t('presetIdRequired'))
+          return Promise.resolve()
+        }
+        const packId = activePackId()
+        if (!packId) { setError(t('envUnavailable') + 'no pack'); return Promise.resolve() }
+        const preset = {
+          id,
+          title,
+          description: typeof draft.description === 'string' ? draft.description.trim() : '',
+          rules: Array.isArray(draft.rules) ? draft.rules.slice() : [],
+          skills: Array.isArray(draft.skills) ? draft.skills.slice() : [],
+          templates: Array.isArray(draft.templates) ? draft.templates.slice() : [],
+        }
+        setPresetBusy('save'); setError(''); setNotice('')
+        return postJson('preset', { action: 'save', packId, target: 'overlay', preset })
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'preset save failed')
+            setPresetEditing(null)
+            return refreshEnvironment(id, t('presetSaved'))
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setPresetBusy(''))
+      }
+
+      const presetNotice = (action, data) => {
+        if (action === 'delete') {
+          const removed = data && data.removed
+          if (removed === 'blocked') return t('presetBlockedNotice')
+          if (removed === 'local') return t('presetDeletedLocal')
+          return t('presetDeleted')
+        }
+        if (action === 'duplicate') return t('presetDuplicated') + '：' + (data && data.saved ? data.saved : '')
+        if (action === 'unblock') return t('presetRestored')
+        if (action === 'block') return t('presetBlockedNotice')
+        return t('presetSaved')
+      }
+
+      const onPresetAction = (action, preset, extra) => {
+        if (!preset || !preset.id) return Promise.resolve()
+        const packId = activePackId()
+        if (!packId) { setError(t('envUnavailable') + 'no pack'); return Promise.resolve() }
+        const opts = extra || {}
+        const body = action === 'duplicate'
+          ? { action, preset: preset.id, packId, newId: opts.newId || (preset.id + '-copy') }
+          : { action, preset: preset.id, packId, ...(opts.force ? { force: true } : {}) }
+        setPresetBusy(action); setError(''); setNotice('')
+        return postJson('preset', body)
+          .then(({ ok, data }) => {
+            if (!ok) {
+              /* Only a cross-session refusal is recoverable; anything else
+                 (`preset is in use` in this very context, a duplicate id, a
+                 read-only pack) is final and stays an error. */
+              if (!opts.force && action !== 'duplicate' && data && Array.isArray(data.sessions) && data.sessions.length) {
+                setPresetForce({ action, preset: preset.id, sessions: data.sessions.slice() })
+                return null
+              }
+              if (opts.force) setPresetForce(null)
+              throw new Error(data && data.error ? data.error : 'preset ' + action + ' failed')
+            }
+            setPresetForce(null)
+            return refreshEnvironment(preset.id, presetNotice(action, data))
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setPresetBusy(''))
+      }
+
+      const onConfirmForce = () => {
+        if (!presetForce) return
+        return onPresetAction(presetForce.action || 'delete', { id: presetForce.preset }, { force: true })
+      }
+
       const toggleSelected = (id) => {
         setSelected((prev) => prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id])
       }
@@ -2163,6 +2322,11 @@ window.__ModuleLoader__.load({
       const scopedSkills = sc && Array.isArray(sc.skills) ? sc.skills : skills
       const presets = sc && Array.isArray(sc.presets) ? sc.presets : []
       const templates = sc && Array.isArray(sc.templates) ? sc.templates : []
+      /* Blocked presets are reported as `[{ id, packId }]`; anything else is
+         ignored so a malformed scope cannot blank the card. */
+      const blockedPresets = sc && Array.isArray(sc.blockedPresets)
+        ? sc.blockedPresets.filter((entry) => entry && typeof entry.id === 'string' && entry.id)
+        : []
       const counts = (sc && sc.counts) || {
         injected: enabledRules.length, total: totalRules, project: 0, disabled: disabledRules,
         skills: enabledSkills.length, skillTotal: totalSkills,
@@ -2406,20 +2570,137 @@ window.__ModuleLoader__.load({
           : h('div', { style: S.empty }, h('div', { style: S.hint }, t('reviewEmpty'))))
 
       /* ③ presets, then what a preset is made of */
-      const presetCards = presets.map((preset) => h('button', {
+      /* A preset card is a `div`, not a `button`: the per-preset actions
+         (编辑 / 复制 / 删除) cannot nest inside a button. The body stays
+         clickable so picking a preset still only takes one click. */
+      const presetCards = presets.map((preset) => h('div', {
         key: preset.id,
+        'data-preset': preset.id,
         style: S.presetCard(preset.id === activePresetId),
-        onClick: () => onUsePreset(preset.id),
-        title: preset.description || preset.id,
       },
-        h('div', { style: S.presetTitleRow },
-          h('span', { style: S.presetTitle }, preset.title),
-          preset.id === activePresetId ? h('span', { style: S.badge }, t('presetCurrent')) : null),
-        preset.description ? h('span', { style: S.presetDesc }, preset.description) : null,
-        h('div', { style: S.presetCounts },
-          h('span', null, t('presetRules') + ' ', h('span', { style: S.presetCountEm }, String(preset.rules.length))),
-          h('span', null, t('presetSkills') + ' ', h('span', { style: S.presetCountEm }, String(preset.skills.length))),
-          h('span', null, t('presetTemplates') + ' ', h('span', { style: S.presetCountEm }, String(preset.templates.length))))))
+        h('button', {
+          type: 'button',
+          style: {
+            display: 'flex', flexDirection: 'column', gap: 7, textAlign: 'left',
+            font: 'inherit', color: 'inherit', background: 'transparent',
+            border: 'none', padding: 0, cursor: 'pointer', minWidth: 0,
+          },
+          onClick: () => onUsePreset(preset.id),
+          title: preset.description || preset.id,
+        },
+          h('div', { style: S.presetTitleRow },
+            h('span', { style: S.presetTitle }, preset.title),
+            preset.id === activePresetId ? h('span', { style: S.badge }, t('presetCurrent')) : null),
+          preset.description ? h('span', { style: S.presetDesc }, preset.description) : null,
+          h('div', { style: S.presetCounts },
+            h('span', null, t('presetRules') + ' ', h('span', { style: S.presetCountEm }, String(preset.rules.length))),
+            h('span', null, t('presetSkills') + ' ', h('span', { style: S.presetCountEm }, String(preset.skills.length))),
+            h('span', null, t('presetTemplates') + ' ', h('span', { style: S.presetCountEm }, String(preset.templates.length))))),
+        h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', paddingTop: 4 } },
+          h('button', { type: 'button', style: S.linkButton, disabled: !!presetBusy, onClick: () => openPresetEditor(preset) }, t('editPreset')),
+          h('button', { type: 'button', style: S.linkButton, disabled: !!presetBusy, onClick: () => onPresetAction('duplicate', preset) }, t('duplicatePreset')),
+          h('button', { type: 'button', style: S.linkButton, disabled: !!presetBusy, onClick: () => onPresetAction('delete', preset) }, t('deletePreset')))))
+
+      /* A preset is a whitelist, so the editor explains that ticking is what
+         injects — unticked rules are not "off", they are outside the preset. */
+      const presetEditor = (() => {
+        if (!presetEditing) return null
+        const draft = presetEditing
+        const known = new Set(scopedRules.map((rule) => rule.id))
+        const dangling = draft.rules.filter((id) => !known.has(id))
+        return h('div', { style: { ...S.card, marginTop: 12 }, 'data-testid': 'dsw-preset-editor' },
+          h('div', { style: S.sectionLabel }, draft.existing ? t('presetEditorTitle') : t('presetNew')),
+          h('div', { style: { display: 'flex', gap: 9, flexWrap: 'wrap', paddingTop: 8 } },
+            h('label', { style: S.field },
+              h('span', { style: S.hint }, t('presetIdLabel')),
+              h('input', {
+                style: S.input,
+                value: draft.id,
+                disabled: draft.existing,
+                placeholder: 'my-preset',
+                onChange: (event) => setPresetEditing({ ...draft, id: event.target.value }),
+              })),
+            h('label', { style: S.field },
+              h('span', { style: S.hint }, t('ruleTitleLabel')),
+              h('input', {
+                style: S.input,
+                value: draft.title,
+                placeholder: t('ruleTitleLabel'),
+                onChange: (event) => setPresetEditing({ ...draft, title: event.target.value }),
+              }))),
+          h('label', { style: { ...S.field, paddingTop: 8 } },
+            h('span', { style: S.hint }, t('presetDescLabel')),
+            h('input', {
+              style: S.input,
+              value: draft.description,
+              placeholder: t('presetDescLabel'),
+              onChange: (event) => setPresetEditing({ ...draft, description: event.target.value }),
+            })),
+          h('div', { style: { ...S.hint, paddingTop: 10 } }, t('presetWhitelistHint')),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto', paddingTop: 6 } },
+            scopedRules.map((rule) => h('label', {
+              key: rule.id,
+              style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
+            },
+              h('input', {
+                type: 'checkbox',
+                checked: draft.rules.includes(rule.id),
+                onChange: () => togglePresetRule(rule.id),
+              }),
+              h('span', { style: S.ruleTitle }, rule.title || rule.id),
+              h('span', { style: S.hint }, rule.id)))),
+          dangling.length
+            ? h('div', { style: { ...S.hint, paddingTop: 6 } }, t('presetDanglingRules') + '：' + dangling.join(', '))
+            : null,
+          h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', paddingTop: 10 } },
+            h('button', { type: 'button', style: S.button, disabled: !!presetBusy, onClick: () => setPresetEditing(null) }, t('cancel')),
+            h('button', {
+              type: 'button',
+              style: presetBusy ? { ...S.button, ...S.disabled } : S.button,
+              disabled: !!presetBusy,
+              onClick: () => onSavePreset(draft),
+            }, t('savePreset'))))
+      })()
+
+      /* Deleting a preset another session still pins is a deliberate choice,
+         never automatic: name the sessions, then let the user confirm. */
+      const presetForcePanel = presetForce
+        ? h('div', { style: { ...S.card, marginTop: 12 }, 'data-testid': 'dsw-preset-force' },
+          h('div', { style: S.sectionLabel }, t('presetForceTitle')),
+          h('div', { style: { ...S.hint, paddingTop: 6 } }, t('presetForceBody') + '：' + presetForce.sessions.join(', ')),
+          h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', paddingTop: 10 } },
+            h('button', {
+              type: 'button', style: S.button,
+              onClick: () => { setPresetForce(null); setError('') },
+            }, t('cancel')),
+            h('button', {
+              type: 'button',
+              style: presetBusy ? { ...S.button, ...S.disabled } : S.button,
+              disabled: !!presetBusy,
+              onClick: onConfirmForce,
+            }, t('deletePreset'))))
+        : null
+
+      /* Blocked presets are hidden from composition, so their rules no longer
+         inject; the card is the only place to bring one back. */
+      const presetBlockedCard = blockedPresets.length
+        ? h('div', { style: { ...S.card, marginTop: 12 }, 'data-testid': 'dsw-preset-blocked' },
+          h('div', { style: S.presetTitleRow },
+            h('span', { style: S.presetTitle }, t('presetBlockedTitle')),
+            h('span', { style: S.badge }, String(blockedPresets.length))),
+          h('div', { style: S.hint }, t('presetBlockedHint')),
+          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, paddingTop: 6 } },
+            blockedPresets.map((entry) => h('div', {
+              key: (entry.packId || '') + ':' + entry.id,
+              style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+            },
+              h('span', { style: S.ruleTitle }, entry.id),
+              entry.packId ? h('span', { style: S.hint }, entry.packId) : null,
+              h('button', {
+                type: 'button', style: S.linkButton, disabled: !!presetBusy,
+                onClick: () => onPresetAction('unblock', { id: entry.id }),
+              }, t('restorePreset'))))))
+        : null
 
       /* The run page is intentionally a compact operational surface. Full rule
          and skill inventories live on their own routes; this page proves what
@@ -2513,9 +2794,13 @@ window.__ModuleLoader__.load({
       /* Preset cards, tab strip and the editor keep their existing logic;
          only the shell changes: the pack page wraps them in a Section, the
          presets page wraps them in a page header. Creation moved to the
-         header-right primary action of whichever page is showing them. */
+         header-right primary action of whichever page is showing them, and
+         both now open the preset editor instead of the rule editor. */
       const presetsBody = h('div', { style: { display: 'flex', flexDirection: 'column' } },
         h('div', { style: { ...S.hint, paddingTop: 8 } }, t('presetsHint')),
+        presetEditor,
+        presetForcePanel,
+        presetBlockedCard,
         presetGridBlock,
         presetTabsBlock,
         presetDetail)
@@ -2523,7 +2808,7 @@ window.__ModuleLoader__.load({
       const presetsBlock = h(Section, {
         id: 'dsw-presets',
         label: '③ ' + t('presetsTitle'),
-        right: h('button', { style: S.linkButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew')),
+        right: h('button', { style: S.linkButton, onClick: () => openPresetEditor(null) }, '+ ' + t('presetNew')),
       }, presetsBody)
 
       /* The only honest comparison is against the previous report window:
@@ -2949,7 +3234,7 @@ window.__ModuleLoader__.load({
                   id: 'dsw-presets-page-title',
                   title: t('navPresets'),
                   count: presets.length,
-                  action: h('button', { type: 'button', style: S.smallButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('presetNew')),
+                  action: h('button', { type: 'button', style: S.smallButton, onClick: () => openPresetEditor(null) }, '+ ' + t('presetNew')),
                 }),
                 presetsBody)
               : route.page === 'skills'

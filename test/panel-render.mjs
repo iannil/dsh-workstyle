@@ -234,6 +234,10 @@ const exportCalls = []
 const mutationCalls = []
 const exportControl = { fail: false, delayed: false, pending: [], failHistory: false, failReports: false }
 const failEnv = { scope: false, inject: false, metrics: false, emptyMetrics: false, adopt: false }
+/* Preset actions answer like the host route: `sessions` refuses a delete with
+   a recoverable 400, `blockedIds` are bundled presets (delete ⇒ block),
+   `duplicateExists` forces the duplicate-id conflict. */
+const presetControl = { sessions: [], blockedIds: [], duplicateExists: false }
 
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
@@ -402,6 +406,45 @@ globalThis.fetch = async (url, options = {}) => {
     if (body.action === 'use') {
       currentScope.activePreset = { id: body.preset, title: body.preset, rules: [], skills: [], templates: [] }
       return json({ used: body.preset, scope: currentScope })
+    }
+    if (body.action === 'save') {
+      const preset = body.preset || {}
+      const list = (currentScope.presets || []).filter((item) => item.id !== preset.id)
+      list.push({ ...preset })
+      currentScope.presets = list
+      return json({ saved: preset.id, presets: list })
+    }
+    if (body.action === 'duplicate') {
+      const newId = body.newId || (body.preset + '-copy')
+      const list = currentScope.presets || []
+      if (presetControl.duplicateExists || list.some((item) => item.id === newId)) {
+        return { ok: false, json: async () => ({ error: 'preset already exists: ' + newId }) }
+      }
+      const source = list.find((item) => item.id === body.preset)
+      currentScope.presets = [...list, {
+        ...(source || { id: body.preset, rules: [], skills: [], templates: [] }),
+        id: newId,
+        title: (source ? source.title : body.preset) + ' copy',
+      }]
+      return json({ saved: newId, from: body.preset })
+    }
+    if (body.action === 'unblock') {
+      currentScope.blockedPresets = (currentScope.blockedPresets || []).filter((entry) => entry.id !== body.preset)
+      return json({ restored: body.preset })
+    }
+    if (body.action === 'delete' || body.action === 'block') {
+      if (presetControl.sessions.length && !body.force) {
+        const sessions = presetControl.sessions.slice()
+        return {
+          ok: false,
+          json: async () => ({ error: 'preset is in use by session ' + sessions.join(', ') + '; switch preset first', sessions }),
+        }
+      }
+      if (body.action === 'delete' && presetControl.blockedIds.includes(body.preset)) {
+        return json({ removed: 'blocked', id: body.preset })
+      }
+      currentScope.presets = (currentScope.presets || []).filter((item) => item.id !== body.preset)
+      return json({ removed: 'local', id: body.preset })
     }
     return json({ saved: body.preset && body.preset.id, presets: [] })
   }
@@ -1133,6 +1176,146 @@ const zhOnly = Object.keys(zh).filter(k => !(k in en))
 const enOnly = Object.keys(en).filter(k => !(k in zh))
 assert.deepEqual(zhOnly.concat(enOnly), [], 'zh/en dictionaries must have identical key sets: ' + zhOnly.concat(enOnly).join(','))
 console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).size + ' t() keys covered in zh/en)')
+
+/* --- Task 10: preset editor with delete / block / duplicate --- */
+{
+  const originalPresets = currentScope.presets
+  const originalBlocked = currentScope.blockedPresets
+  const originalActivePreset = currentScope.activePreset
+  const presetFixtures = () => ([
+    { id: 'fde-delivery', title: 'FDE 交付', description: '工程交付：先方案、证据优先。', rules: ['plan-first', 'verify-first'], skills: ['fde-job', 'fde-inspector'], templates: ['tpl-a'], builtin: true },
+    { id: 'writing', title: '写书', description: '书稿审计与润色。', rules: ['evidence-first'], skills: [], templates: [], builtin: true },
+    { id: 'rc', title: 'RC 探讨', description: '先给判断再给建议。', rules: [], skills: [], templates: [], builtin: true },
+  ])
+  const resetPresets = async (blocked) => {
+    currentScope.presets = presetFixtures()
+    currentScope.blockedPresets = blocked || []
+    view = await act(() => button(view, '刷新').props.onClick())
+    route.hash = '#/presets'
+    if (hashChange) hashChange()
+    return settle(12)
+  }
+  const presetCalls = (from) => mutationCalls.slice(from).filter((call) => call.path === 'preset')
+  const cardOf = (v, id) => findHost(v, (node) => node.type === 'div'
+    && node.props && node.props['data-preset'] === id)
+  const testId = (v, id) => findHost(v, (node) => node.props && node.props['data-testid'] === id)
+  try {
+    presetControl.sessions = []
+    presetControl.blockedIds = []
+    presetControl.duplicateExists = false
+    view = await resetPresets()
+    ok(!!cardOf(view, 'fde-delivery') && !!cardOf(view, 'writing'), 'presets page renders one card per preset')
+
+    /* Opening the editor is a local action: nothing may be written yet. */
+    let since = mutationCalls.length
+    view = await act(() => button(view, '+ 新建预设').props.onClick())
+    ok(presetCalls(since).length === 0, 'opening the preset editor posts nothing')
+    ok(!!input(view, 'my-preset'), 'new-preset editor renders the identifier field')
+    ok(textOf(view).includes('只有勾选的规则会被注入'), 'preset editor explains that rules are a whitelist')
+
+    view = await act(() => input(view, 'my-preset').props.onChange({ target: { value: 'my-slice' } }))
+    view = await act(() => input(view, '标题').props.onChange({ target: { value: '我的切片' } }))
+    since = mutationCalls.length
+    view = await act(() => button(view, '保存').props.onClick())
+    let calls = presetCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'save' && calls[0].body.target === 'overlay'
+      && calls[0].body.packId === 'fde-engineering', 'preset save posts the overlay target for the active pack')
+    ok(calls.length === 1 && calls[0].body.preset.id === 'my-slice' && calls[0].body.preset.title === '我的切片'
+      && Array.isArray(calls[0].body.preset.rules), 'preset save carries the drafted id, title and whitelist')
+
+    /* Editing an existing preset locks the id and keeps its membership. */
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'fde-delivery'), '编辑').props.onClick())
+    const lockedId = input(view, 'my-preset')
+    ok(!!lockedId && lockedId.props.disabled === true, 'an existing preset id is not editable')
+    view = await act(() => input(view, '标题').props.onChange({ target: { value: 'FDE 交付 v2' } }))
+    since = mutationCalls.length
+    view = await act(() => button(view, '保存').props.onClick())
+    calls = presetCalls(since)
+    ok(calls.length === 1 && calls[0].body.preset.id === 'fde-delivery' && calls[0].body.preset.title === 'FDE 交付 v2',
+      'editing a preset saves under its existing id')
+    ok(calls.length === 1 && JSON.stringify(calls[0].body.preset.rules) === JSON.stringify(['plan-first', 'verify-first']),
+      'editing keeps the preset rule membership')
+
+    /* Deleting a local preset is a plain delete, not a block. */
+    view = await resetPresets()
+    since = mutationCalls.length
+    view = await act(() => button(cardOf(view, 'rc'), '删除').props.onClick())
+    calls = presetCalls(since)
+    ok(calls.length === 1 && JSON.stringify(calls[0].body) === JSON.stringify({ action: 'delete', preset: 'rc', packId: 'fde-engineering' }),
+      'delete posts the preset id and pack id')
+    ok(!textOf(view).includes('已屏蔽'), 'a local delete is not reported as a block')
+
+    /* A cross-session refusal names the sessions and asks before forcing. */
+    presetControl.sessions = ['sess-a', 'sess-b']
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'writing'), '删除').props.onClick())
+    text = textOf(view)
+    ok(text.includes('sess-a') && text.includes('sess-b'), 'an in-use refusal names the sessions holding the preset')
+    const forcePanel = testId(view, 'dsw-preset-force')
+    ok(!!forcePanel, 'an in-use refusal offers a deliberate override')
+    since = mutationCalls.length
+    view = await act(() => button(forcePanel, '删除').props.onClick())
+    calls = presetCalls(since)
+    ok(calls.length === 1 && calls[0].body.force === true && calls[0].body.preset === 'writing',
+      'the override re-posts the delete with force=true')
+    presetControl.sessions = []
+
+    /* A bundled preset cannot be deleted: the host blocks it instead. */
+    presetControl.blockedIds = ['writing']
+    view = await resetPresets()
+    since = mutationCalls.length
+    view = await act(() => button(cardOf(view, 'writing'), '删除').props.onClick())
+    ok(presetCalls(since).length === 1 && textOf(view).includes('已屏蔽'),
+      'deleting a bundled preset reports a block, not a delete')
+    presetControl.blockedIds = []
+
+    /* Duplicate creates <id>-copy and surfaces a conflict verbatim. */
+    view = await resetPresets()
+    since = mutationCalls.length
+    view = await act(() => button(cardOf(view, 'writing'), '复制').props.onClick())
+    calls = presetCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'duplicate' && calls[0].body.newId === 'writing-copy',
+      'duplicate posts the <id>-copy identifier')
+    presetControl.duplicateExists = true
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'writing'), '复制').props.onClick())
+    ok(textOf(view).includes('preset already exists: writing-copy'), 'duplicate conflict surfaces the host error verbatim')
+    presetControl.duplicateExists = false
+
+    /* Blocked presets get their own card and a restore action. */
+    view = await resetPresets([{ id: 'rc', packId: 'fde-engineering' }])
+    const blockedCard = testId(view, 'dsw-preset-blocked')
+    ok(!!blockedCard && textOf(blockedCard).includes('已屏蔽预设') && textOf(blockedCard).includes('rc'),
+      'blocked presets render their own card with the id')
+    since = mutationCalls.length
+    view = await act(() => button(blockedCard, '恢复').props.onClick())
+    calls = presetCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'unblock' && calls[0].body.preset === 'rc',
+      'restore posts the unblock action for the blocked id')
+
+    const presetKeys = ['editPreset', 'duplicatePreset', 'deletePreset', 'restorePreset', 'savePreset',
+      'presetEditorTitle', 'presetIdLabel', 'presetDescLabel', 'presetWhitelistHint', 'presetDanglingRules',
+      'presetIdRequired', 'presetSaved', 'presetDeleted', 'presetDeletedLocal', 'presetBlockedNotice',
+      'presetDuplicated', 'presetRestored', 'presetBlockedTitle', 'presetBlockedHint', 'presetForceTitle', 'presetForceBody']
+    ok(presetKeys.every((key) => typeof zh[key] === 'string' && zh[key]
+      && typeof en[key] === 'string' && en[key] && en[key] !== zh[key]),
+      'every new preset key exists in both dictionaries with an English label')
+    console.log('  ✓ preset editor / delete / block / duplicate flow')
+  } finally {
+    presetControl.sessions = []
+    presetControl.blockedIds = []
+    presetControl.duplicateExists = false
+    const cancel = button(view, '取消')
+    if (cancel) view = await act(() => cancel.props.onClick())
+    currentScope.presets = originalPresets
+    currentScope.blockedPresets = originalBlocked
+    currentScope.activePreset = originalActivePreset
+    route.hash = '#/run'
+    if (hashChange) hashChange()
+    view = await act(() => button(view, '刷新').props.onClick())
+  }
+}
 
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')
 
