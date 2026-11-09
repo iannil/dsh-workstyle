@@ -1050,6 +1050,369 @@ ok(fs.readFileSync(stateFilePath, 'utf8') === stateBytesBeforeNoop
   && newestStateRevision() === stateRevisionBeforeNoop,
   'the second delete leaves state.json and its revisions alone')
 
+/* ---------------------------------------------------------------------------
+ * pack lifecycle: POST /pack create / duplicate / rename / delete / restore /
+ * import. A pack is a directory under $DSH_HOME/workstyle/packs; deleting one
+ * is a reversible move into $DSH_HOME/workstyle/trash.
+ * ------------------------------------------------------------------------- */
+
+console.log('pack lifecycle:')
+const packsDir = path.join(home, 'workstyle', 'packs')
+const trashPath = path.join(home, 'workstyle', 'trash')
+const postPack = (body) => callRoute('/api/dsh-workstyle/pack', { method: 'POST', body })
+const readPackManifest = (id) => JSON.parse(fs.readFileSync(path.join(packsDir, id, 'workstyle.json'), 'utf8'))
+const statusPackIds = async () => (await callRoute('/api/dsh-workstyle/status')).data.packs.map((pack) => pack.id)
+const lifecycleShape = (data, action) => data && data.action === action
+  && typeof data.packId === 'string'
+  && Array.isArray(data.packs)
+  && typeof data.activePackId === 'string'
+/* Every pack-shaped directory on disk, whether it ships json or yaml. */
+const packsOnDisk = () => {
+  let names = []
+  try { names = fs.readdirSync(packsDir) } catch { return [] }
+  return names.filter((name) => {
+    const dir = path.join(packsDir, name)
+    try {
+      return fs.statSync(dir).isDirectory()
+        && (fs.existsSync(path.join(dir, 'workstyle.json')) || fs.existsSync(path.join(dir, 'workstyle.yaml')))
+    } catch { return false }
+  }).sort()
+}
+
+/* ---- create ---- */
+
+const createBadAction = await postPack({ action: 'explode' })
+ok(createBadAction.status === 400
+  && ['apply', 'create', 'duplicate', 'rename', 'delete', 'restore', 'import']
+    .every((name) => (createBadAction.data.error || '').includes("'" + name + "'")),
+  'an unknown pack action is refused and lists every supported action')
+
+const createdPack = await postPack({ action: 'create', id: 'smoke-created', displayName: '新建包' })
+ok(createdPack.status === 200 && lifecycleShape(createdPack.data, 'create'),
+  'pack create succeeds and returns the lifecycle shape')
+const createdManifest = readPackManifest('smoke-created')
+ok(createdManifest.id === 'smoke-created' && createdManifest.displayName === '新建包',
+  'the created manifest carries the id and the display name')
+ok(Array.isArray(createdManifest.rules) && createdManifest.rules.length === 0
+  && Array.isArray(createdManifest.presets) && createdManifest.presets.length === 0
+  && Array.isArray(createdManifest.templates) && createdManifest.templates.length === 0,
+  'the created pack has empty rules, presets and templates')
+ok(fs.existsSync(path.join(packsDir, 'smoke-created', 'skills'))
+  && fs.existsSync(path.join(packsDir, 'smoke-created', 'README.md')),
+  'the created pack has a skills directory and a README')
+ok(Object.prototype.hasOwnProperty.call(createdPack.data, 'revision'),
+  'create reports the manifest revision slot')
+ok(createdPack.data.packs.some((pack) => pack.id === 'smoke-created'),
+  'the create response lists the new pack')
+ok((await statusPackIds()).includes('smoke-created'), 'the created pack shows up in /status')
+
+const createExisting = await postPack({ action: 'create', id: 'smoke-created' })
+ok(createExisting.status === 400 && createExisting.data.error === 'pack already exists: smoke-created',
+  'creating an id that already exists is refused')
+const createBadId = await postPack({ action: 'create', id: 'Bad Id' })
+ok(createBadId.status === 400 && /must be lowercase letters, digits and dashes/.test(createBadId.data.error || ''),
+  "creating an invalid id is refused with checkPackId's message")
+const createNoId = await postPack({ action: 'create' })
+ok(createNoId.status === 400 && createNoId.data.error === 'pack id is required',
+  'creating without an id is refused')
+
+/* apply through the /pack route keeps the historical payload */
+const applyViaPackRoute = await postPack({ action: 'apply', pack: 'smoke-created' })
+ok(applyViaPackRoute.status === 200 && applyViaPackRoute.data.action === 'apply'
+  && applyViaPackRoute.data.applied.id === 'smoke-created'
+  && applyViaPackRoute.data.status && applyViaPackRoute.data.status.activePackId === 'smoke-created',
+  'POST /pack apply keeps the {action, applied, status} payload')
+const applyWithoutPack = await postPack({ action: 'apply' })
+ok(applyWithoutPack.status === 400 && applyWithoutPack.data.error === 'pack is required',
+  'POST /pack apply without a pack is refused')
+const applyUnknownPack = await postPack({ action: 'apply', pack: 'ghost-pack' })
+ok(applyUnknownPack.status === 400 && /unknown pack: ghost-pack/.test(applyUnknownPack.data.error || ''),
+  'POST /pack apply on an unknown pack is a 400')
+
+/* ---- duplicate ---- */
+
+const dupDefault = await postPack({ action: 'duplicate', from: 'smoke-created' })
+ok(dupDefault.status === 200 && lifecycleShape(dupDefault.data, 'duplicate')
+  && dupDefault.data.packId === 'smoke-created-copy',
+  'duplicate defaults to <from>-copy')
+const dupDefaultManifest = readPackManifest('smoke-created-copy')
+ok(dupDefaultManifest.id === 'smoke-created-copy' && dupDefaultManifest.name === 'smoke-created-copy',
+  'the duplicate rewrites id and name in the copied manifest')
+ok(dupDefaultManifest.displayName === '新建包 copy', 'the duplicate marks its display name as a copy')
+ok(JSON.stringify(dupDefaultManifest.rules) === JSON.stringify(createdManifest.rules),
+  'the duplicate copies the rule list verbatim')
+
+const dupExplicit = await postPack({ action: 'duplicate', from: 'smoke-pack', id: 'smoke-pack-copy' })
+ok(dupExplicit.status === 200 && dupExplicit.data.packId === 'smoke-pack-copy',
+  'duplicate accepts an explicit id')
+const dupRulesManifest = readPackManifest('smoke-pack-copy')
+const sourcePackManifest = readPackManifest('smoke-pack')
+ok(JSON.stringify(dupRulesManifest.rules) === JSON.stringify(sourcePackManifest.rules),
+  'duplicating a pack with rules copies them verbatim')
+ok(dupRulesManifest.displayName === 'Smoke Pack copy', 'the duplicate derives the copy name from displayName')
+const dupClash = await postPack({ action: 'duplicate', from: 'smoke-created', id: 'smoke-pack-copy' })
+ok(dupClash.status === 400 && dupClash.data.error === 'pack already exists: smoke-pack-copy',
+  'duplicating onto an existing id is refused')
+const dupNoFrom = await postPack({ action: 'duplicate' })
+ok(dupNoFrom.status === 400 && /from is required/.test(dupNoFrom.data.error || ''),
+  'duplicating without a source is refused')
+const dupUnknownFrom = await postPack({ action: 'duplicate', from: 'ghost-pack' })
+ok(dupUnknownFrom.status === 400 && /unknown pack: ghost-pack/.test(dupUnknownFrom.data.error || ''),
+  'duplicating an unknown pack is refused')
+
+/* ---- rename ---- */
+
+const renameBeforeRules = fs.readFileSync(path.join(packsDir, 'smoke-created-copy', 'workstyle.json'), 'utf8')
+const renamedPack = await postPack({ action: 'rename', id: 'smoke-created-copy', displayName: '复制包' })
+ok(renamedPack.status === 200 && lifecycleShape(renamedPack.data, 'rename')
+  && renamedPack.data.packId === 'smoke-created-copy',
+  'pack rename succeeds')
+ok(renamedPack.data.revision && typeof renamedPack.data.revision.id === 'string',
+  'rename reports the manifest revision')
+const renamedManifest = readPackManifest('smoke-created-copy')
+ok(renamedManifest.displayName === '复制包', 'rename writes the new display name')
+ok(renamedManifest.id === 'smoke-created-copy', 'rename leaves the pack id alone')
+ok(JSON.stringify(renamedManifest.rules) === JSON.stringify(JSON.parse(renameBeforeRules).rules),
+  'rename leaves the rule list byte-identical')
+const renameBundled = await postPack({ action: 'rename', id: 'fde-engineering', displayName: '改名' })
+ok(renameBundled.status === 400 && /read-only/.test(renameBundled.data.error || ''),
+  'renaming a bundled pack is refused as read-only')
+const renameNoDisplayName = await postPack({ action: 'rename', id: 'smoke-created-copy' })
+ok(renameNoDisplayName.status === 400 && renameNoDisplayName.data.error === 'displayName is required',
+  'rename without a displayName is refused')
+const renameNoId = await postPack({ action: 'rename', displayName: '无 id' })
+ok(renameNoId.status === 400 && renameNoId.data.error === 'pack id is required',
+  'rename without an id is refused')
+
+/* a YAML user pack has no workstyle.json to rewrite */
+const yamlPackDir = path.join(packsDir, 'smoke-yaml')
+fs.mkdirSync(path.join(yamlPackDir, 'skills'), { recursive: true })
+fs.writeFileSync(path.join(yamlPackDir, 'workstyle.yaml'), [
+  'id: smoke-yaml',
+  'name: smoke-yaml',
+  'displayName: YAML Pack',
+  'version: 0.1.0',
+  'rules:',
+  '  - id: yaml-owned',
+  '    title: YAML 规则',
+  '    text: YAML 包里的规则正文。',
+  '',
+].join('\n'))
+const renameYaml = await postPack({ action: 'rename', id: 'smoke-yaml', displayName: 'YAML 改名' })
+ok(renameYaml.status === 400 && /only json packs can be renamed/.test(renameYaml.data.error || ''),
+  'renaming a YAML user pack is refused')
+
+/* ---- delete the active pack (and persist the switch: item B) ---- */
+
+const applyCopyPack = await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'smoke-created-copy' } })
+ok(applyCopyPack.status === 200, 'the duplicate applies before the delete test')
+/* Give the pack a preset, then point the workspace default at it, so the
+ * delete has a dangling preset id to drop. */
+const copyManifestPath = path.join(packsDir, 'smoke-created-copy', 'workstyle.json')
+const copyManifest = JSON.parse(fs.readFileSync(copyManifestPath, 'utf8'))
+copyManifest.presets = [{ id: 'copy-preset', title: '复制预设', rules: [], skills: [], templates: [] }]
+fs.writeFileSync(copyManifestPath, JSON.stringify(copyManifest, null, 2) + '\n')
+await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'smoke-created-copy' } })
+ok((await callRoute('/api/dsh-workstyle/status')).data.activePackId === 'smoke-created-copy',
+  'the duplicate is the active pack before it is deleted')
+fs.writeFileSync(stateFilePath, JSON.stringify({
+  ...readStateFile(), activePack: 'smoke-created-copy', activePreset: 'copy-preset',
+}, null, 2) + '\n')
+
+const deletedActive = await postPack({ action: 'delete', id: 'smoke-created-copy' })
+ok(deletedActive.status === 200 && lifecycleShape(deletedActive.data, 'delete'),
+  'deleting the active pack succeeds')
+ok(deletedActive.data.activePackId !== 'smoke-created-copy', 'deleting the active pack switches away')
+ok(typeof deletedActive.data.trash === 'string' && fs.existsSync(deletedActive.data.trash),
+  'delete reports the trash path it moved the pack to')
+const persistedAfterDelete = readStateFile()
+ok(persistedAfterDelete.activePack === deletedActive.data.activePackId,
+  'the active pack switch is persisted to state.json')
+ok((await statusPackIds()).includes(persistedAfterDelete.activePack),
+  'the persisted active pack id is a live pack')
+ok(!('activePreset' in persistedAfterDelete),
+  'a workspace preset that belonged to the deleted pack is dropped')
+ok(!(await statusPackIds()).includes('smoke-created-copy'), 'the deleted pack is gone from /status')
+ok(fs.existsSync(trashPath) && fs.readdirSync(trashPath).some((name) => name.startsWith('smoke-created-copy-')),
+  'the deleted pack directory is kept under trash/')
+ok(!fs.existsSync(path.join(packsDir, 'smoke-created-copy')), 'the deleted pack directory left packs/')
+
+const deleteBundled = await postPack({ action: 'delete', id: 'fde-engineering' })
+ok(deleteBundled.status === 400 && /read-only/.test(deleteBundled.data.error || ''),
+  'deleting a bundled pack is refused as read-only')
+const deleteUnknown = await postPack({ action: 'delete', id: 'ghost-pack' })
+ok(deleteUnknown.status === 400 && /unknown pack: ghost-pack/.test(deleteUnknown.data.error || ''),
+  'deleting an unknown pack is refused')
+const deleteNoId = await postPack({ action: 'delete' })
+ok(deleteNoId.status === 400 && deleteNoId.data.error === 'pack id is required',
+  'deleting without an id is refused')
+
+/* ---- restore ---- */
+
+const restoredPack = await postPack({ action: 'restore', id: 'smoke-created-copy' })
+ok(restoredPack.status === 200 && lifecycleShape(restoredPack.data, 'restore')
+  && restoredPack.data.packId === 'smoke-created-copy',
+  'pack restore succeeds')
+ok((await statusPackIds()).includes('smoke-created-copy'), 'the restored pack is back in /status')
+ok(readPackManifest('smoke-created-copy').displayName === '复制包',
+  'restore brings the edited manifest back unchanged')
+const restoreAgain = await postPack({ action: 'restore', id: 'smoke-created-copy' })
+ok(restoreAgain.status === 400 && restoreAgain.data.error === 'pack already exists: smoke-created-copy',
+  'restoring an id that is live again is refused as a clash')
+const restoreUnknown = await postPack({ action: 'restore', id: 'ghost-pack' })
+ok(restoreUnknown.status === 404 && restoreUnknown.data.error === 'no trashed pack: ghost-pack',
+  'restoring an id with no trash entry is a 404')
+fs.rmSync(trashPath, { recursive: true, force: true })
+const restoreEmptyTrash = await postPack({ action: 'restore', id: 'ghost-pack' })
+ok(restoreEmptyTrash.status === 404 && restoreEmptyTrash.data.error === 'trash is empty',
+  'restoring with no trash directory is a 404')
+
+/* ---- import ---- */
+
+const importSource = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-import-'))
+fs.mkdirSync(path.join(importSource, 'skills'), { recursive: true })
+fs.writeFileSync(path.join(importSource, 'workstyle.json'), JSON.stringify({
+  id: 'smoke-imported', name: 'smoke-imported', displayName: 'Imported', version: '0.1.0',
+  rules: [{ id: 'imported-rule', title: '导入规则', text: '导入正文。' }],
+}, null, 2) + '\n')
+const importSourceBytes = fs.readFileSync(path.join(importSource, 'workstyle.json'), 'utf8')
+
+const importedPack = await postPack({ action: 'import', path: importSource })
+ok(importedPack.status === 200 && lifecycleShape(importedPack.data, 'import')
+  && importedPack.data.packId === 'smoke-imported',
+  'pack import from a directory succeeds')
+ok((await statusPackIds()).includes('smoke-imported'), 'the imported pack is listed')
+const importedDetail = await callRoute('/api/dsh-workstyle/pack?id=smoke-imported')
+ok(importedDetail.status === 200 && importedDetail.data.pack.rules.some((rule) => rule.id === 'imported-rule'),
+  'the imported pack keeps its rule')
+ok(fs.existsSync(path.join(packsDir, 'smoke-imported', 'skills')), 'import copies the pack subdirectories')
+ok(fs.readFileSync(path.join(importSource, 'workstyle.json'), 'utf8') === importSourceBytes
+  && fs.statSync(importSource).isDirectory(),
+  'import does not mutate the source directory')
+const importClash = await postPack({ action: 'import', path: importSource })
+ok(importClash.status === 400 && importClash.data.error === 'pack already exists: smoke-imported',
+  'importing the same pack twice is refused as a clash')
+const importMissingPath = await postPack({ action: 'import', path: path.join(os.tmpdir(), 'dsh-workstyle-nope-' + Date.now()) })
+ok(importMissingPath.status === 400 && importMissingPath.data.error === 'path must be an existing directory',
+  'importing a missing path is refused')
+const importNoPath = await postPack({ action: 'import' })
+ok(importNoPath.status === 400 && importNoPath.data.error === 'path must be an existing directory',
+  'importing without a path is refused')
+const importFilePath = path.join(os.tmpdir(), 'dsh-workstyle-import-file-' + Date.now())
+fs.writeFileSync(importFilePath, 'not a pack\n')
+const importAFile = await postPack({ action: 'import', path: importFilePath })
+ok(importAFile.status === 400 && importAFile.data.error === 'path must be an existing directory',
+  'importing a file instead of a directory is refused')
+const noManifestSource = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-empty-'))
+const importNoManifest = await postPack({ action: 'import', path: noManifestSource })
+ok(importNoManifest.status === 400 && /no workstyle\.json or workstyle\.yaml/.test(importNoManifest.data.error || ''),
+  'importing a directory without a manifest is refused')
+/* a source that contains the destination cannot be copied into itself */
+const packsRootManifest = path.join(packsDir, 'workstyle.json')
+fs.writeFileSync(packsRootManifest, JSON.stringify({
+  id: 'self-import', name: 'self-import', version: '0.1.0', rules: [],
+}, null, 2) + '\n')
+const packsRootBytes = fs.readFileSync(packsRootManifest, 'utf8')
+try {
+  const importIntoSelf = await postPack({ action: 'import', path: packsDir })
+  ok(importIntoSelf.status === 400 && importIntoSelf.data.error === 'cannot import a pack into itself',
+    'importing a pack into itself is refused')
+  ok(fs.readFileSync(packsRootManifest, 'utf8') === packsRootBytes,
+    'a refused self-import leaves the source manifest alone')
+} finally {
+  fs.rmSync(packsRootManifest, { force: true })
+}
+fs.rmSync(importSource, { recursive: true, force: true })
+fs.rmSync(importFilePath, { force: true })
+fs.rmSync(noManifestSource, { recursive: true, force: true })
+
+/* ---- item A: a YAML user pack must not advertise an unwritable json file ---- */
+
+console.log('pack YAML writable (item A):')
+const applyYamlPack = await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'smoke-yaml' } })
+ok(applyYamlPack.status === 200, 'the YAML user pack applies')
+const yamlStatus = await callRoute('/api/dsh-workstyle/status')
+const yamlRule = yamlStatus.data.rules.find((rule) => rule.id === 'yaml-owned')
+ok(yamlRule && yamlRule.writable.scope === 'pack' && yamlRule.writable.packId === 'smoke-yaml'
+  && yamlRule.writable.file === null,
+  'a YAML pack rule advertises no writable json file')
+const yamlRuleEdit = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'smoke-yaml', rule: { id: 'yaml-owned', text: '改正文。' } },
+})
+ok(yamlRuleEdit.status === 400
+  && yamlRuleEdit.data.error === 'pack uses workstyle.yaml; edit the file by hand: smoke-yaml',
+  'editing a YAML pack rule points at the yaml file instead of failing with ENOENT')
+ok(fs.existsSync(path.join(yamlPackDir, 'workstyle.yaml'))
+  && !fs.existsSync(path.join(yamlPackDir, 'workstyle.json')),
+  'a refused YAML edit writes no json manifest')
+
+/* the json user pack path still writes through */
+const yamlThenJson = await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'smoke-pack' } })
+ok(yamlThenJson.status === 200, 'a json user pack still applies after the YAML pack')
+const jsonRuleEdit = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'smoke-pack', rule: { id: 'smoke-owned', text: '仍写 json。' } },
+})
+ok(jsonRuleEdit.status === 200, 'a json user pack rule still writes into its manifest')
+await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
+
+/* ---- /status must agree with the packs directory ---- */
+
+console.log('pack status matches the filesystem:')
+const onDisk = packsOnDisk()
+const statusPacks = (await callRoute('/api/dsh-workstyle/status')).data.packs
+/* Bundled packs live in the package, so only compare the user-pack directory. */
+const statusUserIds = statusPacks
+  .filter((pack) => pack.dir.startsWith(packsDir + path.sep))
+  .map((pack) => pack.id)
+  .sort()
+ok(JSON.stringify(statusUserIds) === JSON.stringify(onDisk),
+  '/status lists exactly the user pack directories on disk (' + onDisk.length + ')')
+ok(statusUserIds.includes('smoke-yaml') && statusUserIds.includes('smoke-imported')
+  && statusUserIds.includes('smoke-created'),
+  'the lifecycle fixtures are all present on disk and in /status')
+
+/* ---- item E: force escape hatch for a preset pinned by a stale session ---- */
+
+console.log('preset delete force (item E):')
+const forceSessionId = 'preset-force-' + Date.now()
+fs.mkdirSync(sessionsDirPath, { recursive: true })
+fs.writeFileSync(path.join(sessionsDirPath, forceSessionId + '.json'),
+  JSON.stringify({ preset: 'writing' }) + '\n')
+const deletePinnedPreset = await postPreset({ action: 'delete', packId: 'fde-engineering', preset: 'writing' })
+ok(deletePinnedPreset.status === 400
+  && (deletePinnedPreset.data.sessions || []).includes(forceSessionId),
+  'a preset pinned by a session still refuses delete without force')
+const deleteForcedPreset = await postPreset({ action: 'delete', packId: 'fde-engineering', preset: 'writing', force: true })
+ok(deleteForcedPreset.status === 200 && deleteForcedPreset.data.removed === 'blocked',
+  'force: true skips the cross-session guard')
+ok((readStateFile().presetBlocked?.['fde-engineering'] || []).includes('writing'),
+  'a forced delete still blocks the preset')
+const forcedInNamedSession = await postPreset({
+  action: 'delete', packId: 'fde-engineering', preset: 'writing', force: true, sessionId: forceSessionId,
+})
+ok(forcedInNamedSession.status === 400
+  && forcedInNamedSession.data.error === 'preset is in use: writing; switch preset first',
+  'force never skips the in-request in-use guard')
+const unblockForcedPreset = await postPreset({ action: 'unblock', packId: 'fde-engineering', preset: 'writing' })
+ok(unblockForcedPreset.status === 200, 'the forced block is cleaned up')
+
+const forceBlockSessionId = 'preset-force-block-' + Date.now()
+fs.writeFileSync(path.join(sessionsDirPath, forceBlockSessionId + '.json'),
+  JSON.stringify({ preset: 'fde-delivery' }) + '\n')
+const blockPinnedPreset = await postPreset({ action: 'block', packId: 'fde-engineering', preset: 'fde-delivery' })
+ok(blockPinnedPreset.status === 400
+  && (blockPinnedPreset.data.sessions || []).includes(forceBlockSessionId),
+  'a pinned preset refuses block without force')
+const blockForcedPreset = await postPreset({ action: 'block', packId: 'fde-engineering', preset: 'fde-delivery', force: true })
+ok(blockForcedPreset.status === 200 && blockForcedPreset.data.removed === 'blocked',
+  'force: true skips the cross-session guard for block')
+const unblockForcedBlock = await postPreset({ action: 'unblock', packId: 'fde-engineering', preset: 'fde-delivery' })
+ok(unblockForcedBlock.status === 200, 'the forced block for block is cleaned up')
+
+await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
+
 /* ------------------------------- cleanup ------------------------------- */
 
 

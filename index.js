@@ -17,8 +17,8 @@ import {
   renderRules, reportsDir, statePath, workstyleHome, writeJsonAtomic, writeState,
 } from './lib/pack.js'
 import {
-  applyRuleOverlay, blockPreset, commit, isUserPack, patchOverlay, removeOverlay,
-  resolveWrite, restoreOverlay, snapshot,
+  applyRuleOverlay, blockPreset, checkPackId, commit, isUserPack, patchOverlay, removeOverlay,
+  resolveWrite, restoreOverlay, snapshot, trashDir, userPacksDir,
 } from './lib/manage.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
@@ -383,7 +383,13 @@ export function apply(ctx) {
     }
     const ownedByPack = (ruleId) => (active.rules || []).some((item) => item.id === ruleId)
     if (isUserPack(active) && ownedByPack(rule.id)) {
-      return { scope: 'pack', packId: active.id, file: path.join(active.dir, 'workstyle.json') }
+      // A YAML pack has no manifest this route can rewrite, so point at
+      // nothing rather than at a file that would fail to open on save.
+      return {
+        scope: 'pack',
+        packId: active.id,
+        file: active.format === 'yaml' ? null : path.join(active.dir, 'workstyle.json'),
+      }
     }
     return { scope: 'overlay', packId: active.id, file: statePath() }
   }
@@ -527,6 +533,24 @@ export function apply(ctx) {
     try { skillControl?.invalidate() } catch { /* provider may be gone */ }
     log('applied pack:', active.id)
     return packSummary(effectiveActive())
+  }
+
+  /** Look a pack up by id (or directory) and fail with the same message `/apply` uses. */
+  const packOrThrow = (idOrDir) => {
+    const { packsNow, next } = findPack(idOrDir)
+    if (!next) throw new Error('unknown pack: ' + idOrDir + ' (available: ' + packsNow.map((p) => p.id).join(', ') + ')')
+    packs = packsNow
+    return next
+  }
+
+  const reloadOrThrow = () => {
+    const refreshed = refreshPacks()
+    if (!refreshed.ok) {
+      const error = new Error(refreshed.error || 'failed to reload packs')
+      error.status = 500
+      throw error
+    }
+    return refreshed
   }
 
   /**
@@ -1024,6 +1048,177 @@ export function apply(ctx) {
         },
       })
       register({
+        path: ROUTE_BASE + '/pack',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = (await readJsonBody(request)) || {}
+          const action = typeof body.action === 'string' ? body.action.trim() : ''
+          const lifecycle = () => ({ packs: packs.map(packSummary), activePackId: active.id })
+          const isDir = (value) => {
+            try { return fs.statSync(value).isDirectory() } catch { return false }
+          }
+          /* An id is taken when it is loaded OR when a directory already holds
+           * it: a half-written pack directory must not be overwritten. */
+          const taken = (id) => packs.some((pack) => pack.id === id) || fs.existsSync(path.join(userPacksDir(), id))
+          const stamp = () => new Date().toISOString().replace(/[:.]/g, '-')
+
+          try {
+            if (action === 'apply') {
+              const packArg = typeof body.pack === 'string' ? body.pack.trim() : ''
+              if (!packArg) return jsonResponse({ error: 'pack is required' }, 400)
+              const applied = applyPack(packArg)
+              return jsonResponse({ action, applied, status: buildStatus() })
+            }
+
+            if (action === 'create') {
+              const id = checkPackId(body.id)
+              if (taken(id)) return jsonResponse({ error: 'pack already exists: ' + id }, 400)
+              const displayName = typeof body.displayName === 'string' && body.displayName.trim()
+                ? body.displayName.trim()
+                : id
+              const dir = path.join(userPacksDir(), id)
+              fs.mkdirSync(path.join(dir, 'skills'), { recursive: true })
+              const manifest = {
+                id,
+                name: id,
+                displayName,
+                version: '0.1.0',
+                description: '本机新建的工作方式包。',
+                rules: [],
+                presets: [],
+                templates: [],
+                skills: { dir: 'skills', count: 0 },
+              }
+              const result = commit(path.join(dir, 'workstyle.json'), manifest, { reason: 'pack-create:' + id })
+              fs.writeFileSync(path.join(dir, 'README.md'), '# ' + displayName + '\n\n在这个包里添加规则、预设和技能。\n')
+              reloadOrThrow()
+              return jsonResponse({ action, packId: id, revision: result.revision, ...lifecycle() })
+            }
+
+            if (action === 'duplicate') {
+              const from = typeof body.from === 'string' ? body.from.trim() : ''
+              if (!from) return jsonResponse({ error: 'from is required' }, 400)
+              const source = packOrThrow(from)
+              /* Only a json pack has a manifest this route can rewrite with the
+               * new identity; copying a yaml one would ship a pack whose id and
+               * name still disagree with its directory. */
+              if (source.format !== 'json' || !fs.existsSync(path.join(source.dir, 'workstyle.json'))) {
+                return jsonResponse({ error: 'only json packs can be duplicated: ' + source.id }, 400)
+              }
+              const id = checkPackId(body.id || from + '-copy')
+              if (taken(id)) return jsonResponse({ error: 'pack already exists: ' + id }, 400)
+              const dest = path.join(userPacksDir(), id)
+              fs.mkdirSync(userPacksDir(), { recursive: true })
+              fs.cpSync(source.dir, dest, { recursive: true })
+              const copy = JSON.parse(fs.readFileSync(path.join(dest, 'workstyle.json'), 'utf8'))
+              const result = commit(path.join(dest, 'workstyle.json'), {
+                ...copy,
+                id,
+                name: id,
+                displayName: (source.displayName || copy.displayName || source.id) + ' copy',
+              }, { reason: 'pack-duplicate:' + id })
+              reloadOrThrow()
+              return jsonResponse({ action, packId: id, revision: result.revision, ...lifecycle() })
+            }
+
+            if (action === 'rename') {
+              const id = checkPackId(body.id)
+              const pack = packOrThrow(id)
+              if (!isUserPack(pack)) return jsonResponse({ error: 'bundled packs are read-only: ' + id }, 400)
+              if (pack.format !== 'json') return jsonResponse({ error: 'only json packs can be renamed: ' + id }, 400)
+              const displayName = typeof body.displayName === 'string' ? body.displayName.trim() : ''
+              if (!displayName) return jsonResponse({ error: 'displayName is required' }, 400)
+              const file = path.join(pack.dir, 'workstyle.json')
+              const manifest = JSON.parse(fs.readFileSync(file, 'utf8'))
+              const result = commit(file, { ...manifest, displayName }, { reason: 'pack-rename:' + id })
+              reloadOrThrow()
+              return jsonResponse({ action, packId: id, revision: result.revision, ...lifecycle() })
+            }
+
+            if (action === 'delete') {
+              const id = checkPackId(body.id)
+              const pack = packOrThrow(id)
+              if (!isUserPack(pack)) return jsonResponse({ error: 'bundled packs are read-only: ' + id }, 400)
+              const wasActive = active.id === id
+              /* Deleting is a move, not a purge: overlay keys (rule patches,
+               * removals, adopted rules, preset blocks) are keyed by pack id and
+               * stay behind so a restore comes back with the same edits. */
+              const before = readState()
+              const entry = path.join(trashDir(), id + '-' + stamp())
+              fs.mkdirSync(trashDir(), { recursive: true })
+              fs.renameSync(pack.dir, entry)
+              reloadOrThrow()
+              /* A workspace preset that only the deleted pack shipped is now
+               * dangling; leaving it would point every layer at nothing. */
+              const dangling = typeof before.activePreset === 'string'
+                && (wasActive || (pack.presets || []).some((preset) => preset.id === before.activePreset))
+                && !listPresets(active.presets).some((preset) => preset.id === before.activePreset)
+              if (wasActive || dangling) {
+                writeState({
+                  ...(wasActive ? { activePack: active.id } : {}),
+                  ...(dangling ? { activePreset: undefined } : {}),
+                })
+              }
+              return jsonResponse({ action, packId: id, trash: entry, ...lifecycle() })
+            }
+
+            if (action === 'restore') {
+              const id = checkPackId(body.id)
+              packs = loadAllPacks()
+              const dest = path.join(userPacksDir(), id)
+              if (fs.existsSync(dest) || packs.some((pack) => pack.id === id)) {
+                return jsonResponse({ error: 'pack already exists: ' + id }, 400)
+              }
+              const trash = trashDir()
+              if (!fs.existsSync(trash)) return jsonResponse({ error: 'trash is empty' }, 404)
+              const entries = fs.readdirSync(trash)
+                .filter((name) => name === id || name.startsWith(id + '-'))
+                .sort()
+              if (!entries.length) return jsonResponse({ error: 'no trashed pack: ' + id }, 404)
+              fs.mkdirSync(userPacksDir(), { recursive: true })
+              fs.renameSync(path.join(trash, entries[entries.length - 1]), dest)
+              reloadOrThrow()
+              return jsonResponse({ action, packId: id, ...lifecycle() })
+            }
+
+            if (action === 'import') {
+              const raw = typeof body.path === 'string' ? body.path.trim() : ''
+              if (!raw || !isDir(path.resolve(raw))) {
+                return jsonResponse({ error: 'path must be an existing directory' }, 400)
+              }
+              const sourceAbs = path.resolve(raw)
+              const source = loadPackAt(sourceAbs)
+              if (!source) {
+                return jsonResponse({ error: 'path has no workstyle.json or workstyle.yaml: ' + raw }, 400)
+              }
+              packs = loadAllPacks()
+              const id = checkPackId(source.id)
+              const destAbs = path.resolve(path.join(userPacksDir(), id))
+              /* Copying a pack into a directory it contains would recurse into
+               * its own output; refuse before anything is written. */
+              if (destAbs === sourceAbs || destAbs.startsWith(sourceAbs + path.sep)) {
+                return jsonResponse({ error: 'cannot import a pack into itself' }, 400)
+              }
+              if (fs.existsSync(destAbs) || packs.some((pack) => pack.id === id)) {
+                return jsonResponse({ error: 'pack already exists: ' + id }, 400)
+              }
+              fs.mkdirSync(userPacksDir(), { recursive: true })
+              fs.cpSync(sourceAbs, destAbs, { recursive: true })
+              reloadOrThrow()
+              return jsonResponse({ action, packId: id, ...lifecycle() })
+            }
+
+            return jsonResponse({
+              error: "action must be 'apply', 'create', 'duplicate', 'rename', 'delete', 'restore' or 'import'",
+            }, 400)
+          } catch (error) {
+            const status = error && error.status === 500 ? 500 : 400
+            return jsonResponse({ error: error && error.message ? error.message : String(error) }, status)
+          }
+        },
+      })
+      register({
         path: ROUTE_BASE + '/reports',
         methods: ['GET'],
         requestBody: 'buffered',
@@ -1271,7 +1466,10 @@ export function apply(ctx) {
                its file; adopted/distilled ones stay in the machine overlay. */
             const owned = (targetPack.rules || []).some((rule) => rule.id === id)
             const write = owned && isUserPack(targetPack)
-              ? { scope: 'pack', file: path.join(targetPack.dir, 'workstyle.json') }
+              ? {
+                  scope: 'pack',
+                  file: targetPack.format === 'yaml' ? null : path.join(targetPack.dir, 'workstyle.json'),
+                }
               : { scope: 'overlay' }
 
             if (write.scope === 'overlay') {
@@ -1297,6 +1495,9 @@ export function apply(ctx) {
               return jsonResponse({ error: 'rule.text is required to save a rule' }, 400)
             }
             const file = write.file
+            if (!file) {
+              return jsonResponse({ error: 'pack uses workstyle.yaml; edit the file by hand: ' + targetPack.id }, 400)
+            }
             const manifest = JSON.parse(fs.readFileSync(file, 'utf8'))
             const rules = Array.isArray(manifest.rules) ? [...manifest.rules] : []
             const index = rules.findIndex((rule) => rule && rule.id === id)
@@ -1325,6 +1526,10 @@ export function apply(ctx) {
         fetch: async (request) => {
           const body = (await readJsonBody(request)) || {}
           const action = typeof body.action === 'string' ? body.action : 'save'
+          /* `force` is the panel's escape hatch for a stale session pin: it
+           * skips ONLY the cross-session guard. The in-request guard below
+           * still refuses, because that context is the one asking. */
+          const force = body.force === true
           const packId = typeof body.packId === 'string' && body.packId ? body.packId : active.id
           const isDirectory = (value) => {
             try { return fs.statSync(value).isDirectory() } catch { return false }
@@ -1445,7 +1650,7 @@ export function apply(ctx) {
               if (selectedPresetId(body) === presetId) {
                 return jsonResponse({ error: 'preset is in use: ' + presetId + '; switch preset first' }, 400)
               }
-              const sessionRefusal = sessionPresetRefusal(presetId)
+              const sessionRefusal = force ? null : sessionPresetRefusal(presetId)
               if (sessionRefusal) return sessionRefusal
               writeOverlay(blockPreset(readState(), targetPack.id, presetId, true), 'preset-block:' + presetId)
               return jsonResponse({ removed: 'blocked', id: presetId })
@@ -1463,7 +1668,7 @@ export function apply(ctx) {
               if (selectedPresetId(body) === presetId) {
                 return jsonResponse({ error: 'preset is in use: ' + presetId + '; switch preset first' }, 400)
               }
-              const sessionRefusal = sessionPresetRefusal(presetId)
+              const sessionRefusal = force ? null : sessionPresetRefusal(presetId)
               if (sessionRefusal) return sessionRefusal
               /* Neither shipped nor overlaid: this id no longer exists here, so
                * deleting it must not answer 200 with a no-op write. */
