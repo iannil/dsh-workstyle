@@ -1,3 +1,6 @@
 node_modules/
 *.log
 .DS_Store
+.pnpm-store/
+.tmp-ab/
+.superpowers/brainstorm/
