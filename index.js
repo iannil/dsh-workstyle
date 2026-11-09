@@ -112,6 +112,31 @@ function packDetail(pack) {
   }
 }
 
+/* Trash entries are named `<id>-<ISO stamp>` by the delete branch, with ':'
+   and '.' flattened to '-': 2026-11-09T07-00-00-000Z. Split on that stamp
+   instead of the first dash, so ids that contain dashes survive the round
+   trip, and read the timestamp back for a newest-first listing. */
+const TRASH_NAME = /^(.*)-(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/
+
+function listTrash() {
+  let names
+  try { names = fs.readdirSync(trashDir()) } catch { return [] }
+  const rows = []
+  for (const name of names) {
+    const match = TRASH_NAME.exec(name)
+    if (!match) continue
+    let stat
+    try { stat = fs.statSync(path.join(trashDir(), name)) } catch { continue }
+    if (!stat.isDirectory()) continue
+    rows.push({
+      name,
+      id: match[1],
+      at: match[2] + 'T' + match[3] + ':' + match[4] + ':' + match[5] + '.' + match[6] + 'Z',
+    })
+  }
+  return rows.sort((a, b) => (a.at === b.at ? a.name.localeCompare(b.name) : (a.at < b.at ? 1 : -1)))
+}
+
 function listReportMetadata() {
   let names
   try { names = fs.readdirSync(reportsDir()) } catch { return [] }
@@ -1055,7 +1080,7 @@ export function apply(ctx) {
         requestBody: 'buffered',
         fetch: async (request) => {
           const idOrDir = new URL(request.url).searchParams.get('id')
-          if (!idOrDir) return jsonResponse({ error: 'id is required' }, 400)
+          if (!idOrDir) return jsonResponse({ trash: listTrash(), dir: trashDir() })
           const found = findPack(idOrDir)
           return found.next
             ? jsonResponse({ pack: packDetail(found.next) })

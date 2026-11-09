@@ -142,6 +142,8 @@ window.__ModuleLoader__.load({
       packRestore: '恢复',
       packTrash: '回收站',
       packTrashHint: '删除的包会移到本机回收站，可以在这里恢复。',
+      packTrashEmpty: '回收站是空的。',
+      packTrashUnavailable: '回收站暂时无法读取',
       packReadonlyNote: '只读包：不能重命名或删除。',
       packWritableNote: '本机包：可以重命名、复制和删除。',
       packImportPath: '包目录',
@@ -433,6 +435,8 @@ window.__ModuleLoader__.load({
       packRestore: 'Restore',
       packTrash: 'Trash',
       packTrashHint: 'Deleted packs move to the local trash and can be restored here.',
+      packTrashEmpty: 'The trash is empty.',
+      packTrashUnavailable: 'Trash is unavailable',
       packReadonlyNote: 'Read-only pack: rename and delete are unavailable.',
       packWritableNote: 'Local pack: rename, duplicate and delete are available.',
       packImportPath: 'Pack directory',
@@ -1416,12 +1420,13 @@ window.__ModuleLoader__.load({
       const [presetForce, setPresetForce] = React.useState(null)
       const [presetBusy, setPresetBusy] = React.useState('')
       /* Pack lifecycle: the editor draft (create/rename/import), the delete
-         confirmation, and the trash rows carried by delete responses. The
-         host's /pack GET has no trash listing, so restore is only offered for
-         entries the user just deleted in this panel. */
+         confirmation, and the host's trash listing. The listing is read from
+         GET /pack, so a deleted pack stays restorable across reloads. */
       const [packEditing, setPackEditing] = React.useState(null)
       const [packDeleting, setPackDeleting] = React.useState('')
       const [packTrash, setPackTrash] = React.useState([])
+      const [packTrashError, setPackTrashError] = React.useState('')
+      const [packTrashReload, setPackTrashReload] = React.useState(0)
       const [revisions, setRevisions] = React.useState([])
       const [revisionsError, setRevisionsError] = React.useState('')
       const [revisionsReload, setRevisionsReload] = React.useState(0)
@@ -1546,6 +1551,35 @@ window.__ModuleLoader__.load({
         }).finally(() => { if (!cancelled) setPackLoading(false) })
         return () => { cancelled = true }
       }, [route.page, route.packId, packReload])
+
+      /* The preset editor and the force card are page-scoped drafts: leaving
+         the pages that host them drops both, so navigating back never revives
+         an editor for a preset a refresh removed. */
+      React.useEffect(() => {
+        if (route.page === 'presets' || (route.page === 'pack' && !!route.packId)) return
+        setPresetEditing(null)
+        setPresetForce(null)
+      }, [route.page, route.packId])
+
+      /* The trash listing belongs to the pack list page. Reading it from the
+         host (not from delete responses) means a reload still offers 恢复 for
+         every pack the host moved into trash/<id>-<stamp>. Re-entering the
+         page re-reads it, so another tab's delete shows up here too. */
+      React.useEffect(() => {
+        if (route.page !== 'pack' || route.packId) return undefined
+        let cancelled = false
+        setPackTrashError('')
+        getJson('pack').then((result) => {
+          if (cancelled) return
+          if (!result.ok || !result.data || !Array.isArray(result.data.trash)) {
+            setPackTrash([])
+            setPackTrashError(result.error || (result.data && result.data.error) || 'trash unavailable')
+            return
+          }
+          setPackTrash(result.data.trash)
+        })
+        return () => { cancelled = true }
+      }, [route, packTrashReload])
 
       /* Revision history is local state only: it is read from the host when the
          distribution page is open, and re-read after a rollback so the rows
@@ -1842,12 +1876,9 @@ window.__ModuleLoader__.load({
               })
             }
             const packId = (data && data.packId) || body.pack || body.id || body.from || ''
-            /* The host's GET /pack has no trash listing, so a deleted pack is
-               only restorable from the response that moved it to the trash. */
-            if (body.action === 'delete' && data && data.trash) {
-              setPackTrash((prev) => [{ id: packId, entry: data.trash }, ...prev].slice(0, 8))
-            }
-            if (body.action === 'restore') setPackTrash((prev) => prev.filter((row) => row.id !== packId))
+            /* The pack list re-reads the host's trash listing after every
+               lifecycle action, so the rows always mirror what is on disk. */
+            setPackTrashReload((value) => value + 1)
             setNotice(message + (packId ? '：' + packId : ''))
             setPackReload((value) => value + 1)
             return loadEnv().then(() => true)
@@ -2072,6 +2103,9 @@ window.__ModuleLoader__.load({
       const onUsePreset = (id) => {
         if (!requireCurrentContext()) return
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
+        /* Switching presets changes which cards are current: a pending
+           delete confirmation for the previous one must not survive. */
+        setPresetForce(null)
         setBusy('preset'); setError(''); setNotice('')
         postJson('preset', { action: 'use', preset: id, cwd })
           .then(({ ok, data }) => {
@@ -2104,6 +2138,15 @@ window.__ModuleLoader__.load({
         setError('')
         setNotice('')
         setPresetEditing(presetDraft(preset))
+      }
+
+      /* Closing the draft also drops any pending force confirmation: both
+         describe one preset, and neither may outlive the view that showed
+         it. */
+      const closePresetEditor = () => {
+        setPresetEditing(null)
+        setPresetForce(null)
+        setError('')
       }
 
       const togglePresetRule = (ruleId) => {
@@ -2141,6 +2184,7 @@ window.__ModuleLoader__.load({
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'preset save failed')
             setPresetEditing(null)
+            setPresetForce(null)
             return refreshEnvironment(id, t('presetSaved'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
@@ -2168,6 +2212,9 @@ window.__ModuleLoader__.load({
         const body = action === 'duplicate'
           ? { action, preset: preset.id, packId, newId: opts.newId || (preset.id + '-copy') }
           : { action, preset: preset.id, packId, ...(opts.force ? { force: true } : {}) }
+        /* A new action supersedes any earlier refusal: the card describes one
+           preset, and a click on another one must not leave it behind. */
+        if (!opts.force) setPresetForce(null)
         setPresetBusy(action); setError(''); setNotice('')
         return postJson('preset', body)
           .then(({ ok, data }) => {
@@ -2176,22 +2223,25 @@ window.__ModuleLoader__.load({
                  (`preset is in use` in this very context, a duplicate id, a
                  read-only pack) is final and stays an error. */
               if (!opts.force && action !== 'duplicate' && data && Array.isArray(data.sessions) && data.sessions.length) {
-                setPresetForce({ action, preset: preset.id, sessions: data.sessions.slice() })
+                setPresetForce({ id: preset.id, sessions: data.sessions.slice() })
                 return null
               }
-              if (opts.force) setPresetForce(null)
+              setPresetForce(null)
               throw new Error(data && data.error ? data.error : 'preset ' + action + ' failed')
             }
             setPresetForce(null)
+            setPresetEditing(null)
             return refreshEnvironment(preset.id, presetNotice(action, data))
           })
-          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .catch((err) => { setPresetForce(null); setError(String(err && err.message ? err.message : err)) })
           .finally(() => setPresetBusy(''))
       }
 
       const onConfirmForce = () => {
-        if (!presetForce) return
-        return onPresetAction(presetForce.action || 'delete', { id: presetForce.preset }, { force: true })
+        if (!presetForce || !presetForce.id) return Promise.resolve()
+        /* The confirmation carries the id it was opened for; the button never
+           captures the preset card it happened to render under. */
+        return onPresetAction('delete', { id: presetForce.id }, { force: true })
       }
 
       const toggleSelected = (id) => {
@@ -2745,6 +2795,27 @@ window.__ModuleLoader__.load({
           : h('div', { style: S.empty }, h('div', { style: S.hint }, t('reviewEmpty'))))
 
       /* ③ presets, then what a preset is made of */
+      /* A refusal names the sessions that pin the preset and asks before
+         overriding. The card belongs to that preset only: tying it to the id
+         (not a bare flag) keeps a switch, an editor or another error from
+         leaving a confirmation that would delete the wrong preset. */
+      const presetForcePanel = (presetId) => (!presetForce || presetForce.id !== presetId
+        ? null
+        : h('div', { style: { ...S.card, marginTop: 10, padding: 10 }, 'data-testid': 'dsw-preset-force' },
+          h('div', { style: S.sectionLabel }, t('presetForceTitle') + '：' + presetForce.id),
+          h('div', { style: { ...S.hint, paddingTop: 6 } }, t('presetForceBody') + '：' + presetForce.sessions.join(', ')),
+          h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', paddingTop: 10 } },
+            h('button', {
+              type: 'button', style: S.button,
+              onClick: () => { setPresetForce(null); setError('') },
+            }, t('cancel')),
+            h('button', {
+              type: 'button',
+              style: presetBusy ? { ...S.button, ...S.disabled } : S.button,
+              disabled: !!presetBusy,
+              onClick: onConfirmForce,
+            }, t('deletePreset')))))
+
       /* A preset card is a `div`, not a `button`: the per-preset actions
          (编辑 / 复制 / 删除) cannot nest inside a button. The body stays
          clickable so picking a preset still only takes one click. */
@@ -2774,7 +2845,8 @@ window.__ModuleLoader__.load({
         h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', paddingTop: 4 } },
           h('button', { type: 'button', style: S.linkButton, disabled: !!presetBusy, onClick: () => openPresetEditor(preset) }, t('editPreset')),
           h('button', { type: 'button', style: S.linkButton, disabled: !!presetBusy, onClick: () => onPresetAction('duplicate', preset) }, t('duplicatePreset')),
-          h('button', { type: 'button', style: S.linkButton, disabled: !!presetBusy, onClick: () => onPresetAction('delete', preset) }, t('deletePreset')))))
+          h('button', { type: 'button', style: S.linkButton, disabled: !!presetBusy, onClick: () => onPresetAction('delete', preset) }, t('deletePreset'))),
+        presetForcePanel(preset.id)))
 
       /* A preset is a whitelist, so the editor explains that ticking is what
          injects — unticked rules are not "off", they are outside the preset. */
@@ -2828,7 +2900,7 @@ window.__ModuleLoader__.load({
             ? h('div', { style: { ...S.hint, paddingTop: 6 } }, t('presetDanglingRules') + '：' + dangling.join(', '))
             : null,
           h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', paddingTop: 10 } },
-            h('button', { type: 'button', style: S.button, disabled: !!presetBusy, onClick: () => setPresetEditing(null) }, t('cancel')),
+            h('button', { type: 'button', style: S.button, disabled: !!presetBusy, onClick: closePresetEditor }, t('cancel')),
             h('button', {
               type: 'button',
               style: presetBusy ? { ...S.button, ...S.disabled } : S.button,
@@ -2836,25 +2908,6 @@ window.__ModuleLoader__.load({
               onClick: () => onSavePreset(draft),
             }, t('savePreset'))))
       })()
-
-      /* Deleting a preset another session still pins is a deliberate choice,
-         never automatic: name the sessions, then let the user confirm. */
-      const presetForcePanel = presetForce
-        ? h('div', { style: { ...S.card, marginTop: 12 }, 'data-testid': 'dsw-preset-force' },
-          h('div', { style: S.sectionLabel }, t('presetForceTitle')),
-          h('div', { style: { ...S.hint, paddingTop: 6 } }, t('presetForceBody') + '：' + presetForce.sessions.join(', ')),
-          h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', paddingTop: 10 } },
-            h('button', {
-              type: 'button', style: S.button,
-              onClick: () => { setPresetForce(null); setError('') },
-            }, t('cancel')),
-            h('button', {
-              type: 'button',
-              style: presetBusy ? { ...S.button, ...S.disabled } : S.button,
-              disabled: !!presetBusy,
-              onClick: onConfirmForce,
-            }, t('deletePreset'))))
-        : null
 
       /* Blocked presets are hidden from composition, so their rules no longer
          inject; the card is the only place to bring one back. */
@@ -2974,7 +3027,6 @@ window.__ModuleLoader__.load({
       const presetsBody = h('div', { style: { display: 'flex', flexDirection: 'column' } },
         h('div', { style: { ...S.hint, paddingTop: 8 } }, t('presetsHint')),
         presetEditor,
-        presetForcePanel,
         presetBlockedCard,
         presetGridBlock,
         presetTabsBlock,
@@ -3135,19 +3187,22 @@ window.__ModuleLoader__.load({
             h('span', { style: S.mono }, pack.id + ' · v' + pack.version),
             h('span', { style: S.ruleSideText }, t('sourcePrefix') + (pack.source || t('sourceBuiltin')) + ' · ' + (pack.ruleCount || 0) + ' ' + t('rulesUnit') + ' · ' + (pack.skillCount || 0) + ' ' + t('skillsUnit')),
             pack.id === active.id ? h('span', { style: S.hint }, t('packActiveNow')) : h('span', { style: S.hint }, t('packViewable'))))),
-        /* The host has no trash listing route: these rows are the entries the
-           delete responses returned in this panel session. */
-        packTrash.length
-          ? h('div', { 'data-testid': 'dsw-pack-trash' },
-            h(Section, { id: 'dsw-pack-trash-section', label: t('packTrash'), count: packTrash.length },
-              h('div', { style: S.hint }, t('packTrashHint')),
-              h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } },
-                packTrash.map((row) => h('div', { key: row.id, style: S.ruleRowV5 },
-                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
-                    h('span', { style: S.ruleTitle }, row.id),
-                    h('span', { style: S.mono }, typeof row.entry === 'string' ? row.entry : '')),
-                  h('button', { style: S.linkButton, disabled: busy === 'pack', onClick: () => onRestorePack(row.id) }, t('packRestore')))))))
-          : null)
+        /* Trash is a host listing, not this session's memory: the pack list
+           page shows it whenever the route is open, including an empty state,
+           so a reload still offers 恢复 for everything on disk. */
+        h('div', { 'data-testid': 'dsw-pack-trash' },
+          h(Section, { id: 'dsw-pack-trash-section', label: t('packTrash'), count: packTrash.length },
+            h('div', { style: S.hint }, t('packTrashHint')),
+            packTrashError
+              ? h('div', { style: { ...S.hint, paddingTop: 8 } }, t('packTrashUnavailable') + '：' + packTrashError)
+              : packTrash.length
+                ? h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } },
+                  packTrash.map((row) => h('div', { key: row.name || row.id, style: S.ruleRowV5 },
+                    h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                      h('span', { style: S.ruleTitle }, row.id),
+                      h('span', { style: S.mono }, row.at || row.name || '')),
+                    h('button', { style: S.linkButton, disabled: busy === 'pack', onClick: () => onRestorePack(row.id) }, t('packRestore')))))
+                : h('div', { style: { ...S.hint, paddingTop: 8 } }, t('packTrashEmpty')))))
 
       const routePackDetail = packDetail && packDetail.id === route.packId ? packDetail : null
       const selectedPack = routePackDetail || packs.find((pack) => pack.id === route.packId) || null

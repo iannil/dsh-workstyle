@@ -1237,6 +1237,30 @@ ok(fs.existsSync(trashPath) && fs.readdirSync(trashPath).some((name) => name.sta
   'the deleted pack directory is kept under trash/')
 ok(!fs.existsSync(path.join(packsDir, 'smoke-created-copy')), 'the deleted pack directory left packs/')
 
+/* ---- trash listing (GET /pack without an id) ---- */
+
+const packDetailWithId = await callRoute('/api/dsh-workstyle/pack?id=fde-engineering')
+ok(packDetailWithId.status === 200 && !!packDetailWithId.data.pack && !('trash' in packDetailWithId.data),
+  'GET /pack?id= keeps the pack-detail contract unchanged')
+
+const olderTrash = path.join(trashPath, 'smoke-older-2026-11-08T00-00-00-000Z')
+fs.mkdirSync(olderTrash, { recursive: true })
+const trashListing = await callRoute('/api/dsh-workstyle/pack')
+ok(trashListing.status === 200 && Array.isArray(trashListing.data.trash) && trashListing.data.dir === trashPath,
+  'GET /pack without an id lists the trash instead of demanding an id')
+const listedDeleted = trashListing.data.trash.find((row) => row.id === 'smoke-created-copy')
+ok(!!listedDeleted && listedDeleted.name.startsWith('smoke-created-copy-')
+  && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(listedDeleted.at || ''),
+  'a trashed pack is listed with its directory name and the delete timestamp')
+const listedOlder = trashListing.data.trash.find((row) => row.id === 'smoke-older')
+ok(!!listedOlder && listedOlder.name === 'smoke-older-2026-11-08T00-00-00-000Z'
+  && listedOlder.at === '2026-11-08T00:00:00.000Z',
+  'the trash id is the name up to its ISO stamp')
+ok(trashListing.data.trash[0].id === 'smoke-created-copy'
+  && trashListing.data.trash.findIndex((row) => row.id === 'smoke-older') > 0,
+  'the newest trash entry is listed first')
+fs.rmSync(olderTrash, { recursive: true, force: true })
+
 const deleteBundled = await postPack({ action: 'delete', id: 'fde-engineering' })
 ok(deleteBundled.status === 400 && /read-only/.test(deleteBundled.data.error || ''),
   'deleting a bundled pack is refused as read-only')
@@ -1263,6 +1287,10 @@ const restoreUnknown = await postPack({ action: 'restore', id: 'ghost-pack' })
 ok(restoreUnknown.status === 404 && restoreUnknown.data.error === 'no trashed pack: ghost-pack',
   'restoring an id with no trash entry is a 404')
 fs.rmSync(trashPath, { recursive: true, force: true })
+const emptyTrashListing = await callRoute('/api/dsh-workstyle/pack')
+ok(emptyTrashListing.status === 200 && Array.isArray(emptyTrashListing.data.trash)
+  && emptyTrashListing.data.trash.length === 0 && emptyTrashListing.data.dir === trashPath,
+  'GET /pack lists an empty trash as [] rather than a 404')
 const restoreEmptyTrash = await postPack({ action: 'restore', id: 'ghost-pack' })
 ok(restoreEmptyTrash.status === 404 && restoreEmptyTrash.data.error === 'trash is empty',
   'restoring with no trash directory is a 404')

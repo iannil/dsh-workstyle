@@ -250,7 +250,7 @@ const presetControl = { sessions: [], blockedIds: [], duplicateExists: false }
 /* Pack lifecycle answers like the host `/pack` route: bundled ids refuse
    rename/delete with a 400, and a delete returns the trash entry the panel
    may restore. `failRevisions` simulates an unreadable revision index. */
-const packControl = { failDelete: false, failRevisions: false, revisions: [] }
+const packControl = { failDelete: false, failRestore: false, failRevisions: false, revisions: [], trash: [] }
 
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
@@ -462,6 +462,10 @@ globalThis.fetch = async (url, options = {}) => {
     return json({ saved: body.preset && body.preset.id, presets: [] })
   }
   if (target.endsWith('/api/dsh-workstyle/pack')) {
+    /* A GET without an id lists the trash, so restore survives a reload. */
+    if (options.method !== 'POST') {
+      return json({ trash: (packControl.trash || []).slice(), dir: '/tmp/home/.dsh/workstyle/trash' })
+    }
     const body = JSON.parse(options.body || '{}')
     mutationCalls.push({ path: 'pack', body })
     const bundled = new Set(['fde-engineering'])
@@ -515,13 +519,20 @@ globalThis.fetch = async (url, options = {}) => {
           dir: '/tmp/dsh-workstyle/pack',
         }
       }
+      const at = '2026-11-09T07:00:00.000Z'
+      const name = body.id + '-' + at.replace(/[:.]/g, '-')
+      packControl.trash = [{ name, id: body.id, at }, ...(packControl.trash || [])]
       return json({
         action: 'delete', packId: body.id,
-        trash: '/tmp/home/.dsh/workstyle/trash/' + body.id + '-2026-11-09T07-00-00-000Z',
+        trash: '/tmp/home/.dsh/workstyle/trash/' + name,
         ...lifecycle(),
       })
     }
     if (body.action === 'restore') {
+      if (packControl.failRestore) {
+        return { ok: false, json: async () => ({ error: 'no trashed pack: ' + body.id }) }
+      }
+      packControl.trash = (packControl.trash || []).filter((row) => row.id !== body.id)
       if (!(currentStatus.packs || []).some((pack) => pack.id === body.id)) {
         currentStatus.packs = [...(currentStatus.packs || []), {
           id: body.id, displayName: '本机包', version: '0.1.0',
@@ -1365,6 +1376,61 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
       'the override re-posts the delete with force=true')
     presetControl.sessions = []
 
+    /* The override belongs to one preset: it renders inside that card, names
+       the id it will delete, and never survives a switch or another editor. */
+    presetControl.sessions = ['sess-a']
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'writing'), '删除').props.onClick())
+    const scopedForce = findHost(cardOf(view, 'writing'), (node) => node.props && node.props['data-testid'] === 'dsw-preset-force')
+    ok(!!scopedForce && textOf(scopedForce).includes('writing'),
+      'the force card renders inside the refused preset and names its id')
+    ok(!findHost(cardOf(view, 'rc'), (node) => node.props && node.props['data-testid'] === 'dsw-preset-force'),
+      'no other preset card carries the force card')
+    presetControl.sessions = []
+    const switchButton = findHost(cardOf(view, 'writing'), (node) => node.type === 'button' && textOf(node).includes('写书'))
+    view = await act(() => switchButton.props.onClick())
+    ok(!testId(view, 'dsw-preset-force'), 'switching the preset clears the force card')
+
+    presetControl.sessions = ['sess-a']
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'writing'), '删除').props.onClick())
+    view = await act(() => button(cardOf(view, 'rc'), '编辑').props.onClick())
+    ok(!testId(view, 'dsw-preset-force'), 'opening another preset editor clears the force card')
+    const openEditorCancel = button(view, '取消')
+    view = await act(() => openEditorCancel.props.onClick())
+    presetControl.sessions = []
+
+    presetControl.sessions = ['sess-a']
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'writing'), '删除').props.onClick())
+    presetControl.duplicateExists = true
+    view = await act(() => button(cardOf(view, 'rc'), '复制').props.onClick())
+    ok(!testId(view, 'dsw-preset-force'), 'an unrelated preset error clears the force card')
+    presetControl.duplicateExists = false
+    presetControl.sessions = []
+
+    /* A deleted preset's editor must not reopen and recreate it on the next
+       visit, and leaving the page drops any open draft. */
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'writing'), '编辑').props.onClick())
+    ok(!!testId(view, 'dsw-preset-editor'), 'the editor opens on the edited preset')
+    view = await act(() => button(cardOf(view, 'writing'), '删除').props.onClick())
+    ok(!testId(view, 'dsw-preset-editor'), 'deleting the edited preset closes its editor')
+    route.hash = '#/presets'
+    if (hashChange) hashChange()
+    view = await settle(12)
+    ok(!testId(view, 'dsw-preset-editor'), 'the deleted preset editor does not reopen after a reload of the list')
+
+    view = await resetPresets()
+    view = await act(() => button(cardOf(view, 'rc'), '编辑').props.onClick())
+    route.hash = '#/rules'
+    if (hashChange) hashChange()
+    view = await settle(12)
+    route.hash = '#/presets'
+    if (hashChange) hashChange()
+    view = await settle(12)
+    ok(!testId(view, 'dsw-preset-editor'), 'leaving the presets page drops the open preset editor')
+
     /* A bundled preset cannot be deleted: the host blocks it instead. */
     presetControl.blockedIds = ['writing']
     view = await resetPresets()
@@ -1446,8 +1512,10 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
   const actionsOf = (v) => testId(v, 'dsw-pack-actions')
   try {
     packControl.failDelete = false
+    packControl.failRestore = false
     packControl.failRevisions = false
     packControl.revisions = []
+    packControl.trash = []
 
     /* The list page owns create/import; neither opens a write by itself. */
     view = await goPack()
@@ -1506,7 +1574,26 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     ok(calls.length === 1 && calls[0].body.action === 'rename' && calls[0].body.id === 'local-pack'
       && calls[0].body.displayName === '本机包 v2', 'rename posts the new display name')
 
-    /* Delete asks first; the host response carries the trash entry. */
+    /* GET /pack without an id lists the trash, so a pack deleted in an
+       earlier session is still restorable after the panel reloads. */
+    packControl.trash = [
+      { name: 'old-pack-2026-11-08T00-00-00-000Z', id: 'old-pack', at: '2026-11-08T00:00:00.000Z' },
+    ]
+    view = await goPack()
+    let reloadedTrash = testId(view, 'dsw-pack-trash')
+    ok(!!reloadedTrash && textOf(reloadedTrash).includes('old-pack') && !!button(reloadedTrash, '恢复'),
+      'the pack list renders trash entries left by an earlier session')
+    since = mutationCalls.length
+    view = await act(() => button(reloadedTrash, '恢复').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'restore' && calls[0].body.id === 'old-pack',
+      'restoring a listed trash entry posts its id')
+    view = await goPack()
+    const emptyTrash = testId(view, 'dsw-pack-trash')
+    ok(!!emptyTrash && textOf(emptyTrash).includes('回收站是空的') && !button(emptyTrash, '恢复'),
+      'an empty trash renders its empty state without restore rows')
+
+    /* Delete asks first; the refreshed trash listing carries the entry. */
     view = await goPack('local-pack')
     actions = actionsOf(view)
     since = mutationCalls.length
@@ -1520,12 +1607,22 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
       'confirmed delete posts the pack id')
     const trash = testId(view, 'dsw-pack-trash')
     ok(!!trash && textOf(trash).includes('回收站') && !!button(trash, '恢复'),
-      'the delete response feeds a trash entry with restore')
+      'the refreshed trash listing feeds a restore entry')
     since = mutationCalls.length
     view = await act(() => button(trash, '恢复').props.onClick())
     calls = packCalls(since)
     ok(calls.length === 1 && calls[0].body.action === 'restore' && calls[0].body.id === 'local-pack',
       'restore posts the trashed pack id')
+    ok(!!testId(view, 'dsw-pack-trash') && textOf(testId(view, 'dsw-pack-trash')).includes('回收站是空的'),
+      'a successful restore refreshes the listing to empty')
+
+    packControl.trash = [{ name: 'ghost-2026-11-09T08-00-00-000Z', id: 'ghost', at: '2026-11-09T08:00:00.000Z' }]
+    packControl.failRestore = true
+    view = await goPack()
+    view = await act(() => button(testId(view, 'dsw-pack-trash'), '恢复').props.onClick())
+    ok(textOf(view).includes('no trashed pack: ghost'), 'a refused restore surfaces the host error verbatim')
+    packControl.failRestore = false
+    packControl.trash = []
 
     view = await goPack('local-pack')
     packControl.failDelete = true
@@ -1611,8 +1708,10 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     console.log('  ✓ pack lifecycle / trash / revision rollback flow')
   } finally {
     packControl.failDelete = false
+    packControl.failRestore = false
     packControl.failRevisions = false
     packControl.revisions = []
+    packControl.trash = []
     currentStatus.packs = originalPacks
     currentStatus.activePack = originalActive
     currentScope.rules = originalRulesFix
