@@ -4161,26 +4161,26 @@ window.__ModuleLoader__.load({
                             h('span', null, t('marketLicense') + ' ' + entry.license),
                             h('span', null, t('marketRules') + ' ' + entry.rules),
                             h('span', null, t('marketSkills') + ' ' + entry.skills)))
-                        const previewCard = marketPreview ? h('div', { style: { ...S.card, marginTop: SPACE.sm } },
+                        const previewCard = marketPreview ? h('div', { style: S.card },
                           h('div', { style: S.sectionHead },
                             h('span', { style: S.sectionLabel }, t('marketPreviewTitle')),
                             h('span', { style: S.chip }, marketPreview.pack.id + ' v' + marketPreview.pack.version)),
                           h('div', { style: S.hint },
                             marketPreview.pack.displayName + ' · ' + marketPreview.pack.rules.length + ' ' + t('marketRules') + ' · ' + marketPreview.pack.skills.length + ' ' + t('marketSkills') + ' · ' + marketPreview.pack.license),
-                          marketPreview.conflict && marketPreview.conflict.exists ? h('p', { style: S.hint }, t('marketConflictNote')) : null,
+                          marketPreview.conflict && marketPreview.conflict.exists ? h('div', { style: S.hint }, t('marketConflictNote')) : null,
                           h('div', { style: S.stackSm },
                             h('span', { style: S.sectionLabel }, t('marketRulesTitle')),
                             marketPreview.pack.rules.length
-                              ? marketPreview.pack.rules.slice(0, 20).map((rule) => h('div', { key: rule.id, style: { display: 'flex', gap: 8, fontSize: 12.5 } },
+                              ? h('div', { style: { display: 'flex', flexDirection: 'column', gap: 4 } }, marketPreview.pack.rules.slice(0, 20).map((rule) => h('div', { key: rule.id, style: { display: 'flex', gap: 8, fontSize: 12.5 } },
                                   h('code', { style: S.mono }, rule.id),
-                                  h('span', { style: S.hint }, rule.title)))
+                                  h('span', { style: S.hint }, rule.title))))
                               : h('span', { style: S.hint }, '—')),
                           h('div', { style: S.stackSm },
                             h('span', { style: S.sectionLabel }, t('marketSkillsTitle')),
                             marketPreview.pack.skills.length
                               ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, marketPreview.pack.skills.map((name) => h('span', { key: name, style: S.chip }, name)))
                               : h('span', { style: S.hint }, '—')),
-                          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: SPACE.sm } },
+                          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap' } },
                             h('button', {
                               type: 'button',
                               style: { ...S.buttonPrimary, ...(marketBusy ? S.disabled : null) },
@@ -4195,7 +4195,7 @@ window.__ModuleLoader__.load({
                           h('div', { style: S.sectionHead },
                             h('span', { style: S.sectionLabel }, selected.displayName),
                             h('span', { style: S.chip }, selected.id + ' v' + selected.version)),
-                          h('p', { style: S.ruleText }, selected.description),
+                          h('div', { style: { ...S.ruleText, marginTop: 0 } }, selected.description),
                           h('div', { style: { display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, color: T.ink2, alignItems: 'center' } },
                             h('span', null, t('marketAuthor') + '：' + selected.author),
                             h('span', null, t('marketLicense') + '：' + selected.license),
@@ -4203,7 +4203,7 @@ window.__ModuleLoader__.load({
                             h('span', null, t('marketSkills') + '：' + selected.skills),
                             h('span', { style: S.mono, title: selected.sha256 }, 'sha256 ' + selected.sha256),
                             ...(selected.categories || []).map((category) => h('span', { key: category, style: S.chip }, category))),
-                          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: SPACE.sm } },
+                          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' } },
                             selected.bundled
                               ? h('span', { style: S.hint }, t('marketBuiltinHint'))
                               : selected.installed && !selected.canUpdate
@@ -4219,7 +4219,7 @@ window.__ModuleLoader__.load({
                             selected.installed && !selected.bundled && selected.canUpdate
                               ? h('span', { style: S.hint }, t('marketInstalledHint'))
                               : null),
-                          h('p', { style: S.hint }, t('marketInstallHint')),
+                          h('div', { style: S.hint }, t('marketInstallHint')),
                           marketPreviewError ? h('div', { style: S.banner('error'), role: 'alert' }, marketPreviewError) : null,
                           previewCard) : null
                         return h(Page, { labelledby: 'dsw-market-title' },
@@ -4233,7 +4233,7 @@ window.__ModuleLoader__.load({
                           marketError ? ErrorState({ operation: t('navMarket'), message: marketError, onRetry: refresh }) : null,
                           !market && !marketError ? Loading({ label: t('marketLoading') }) : null,
                           market ? h('div', { style: S.stackMd },
-                            h('div', { style: S.field },
+                            h('div', { style: { ...S.field, flex: '0 0 auto' } },
                               h('input', {
                                 type: 'search', style: S.input, value: marketQuery,
                                 placeholder: t('marketSearch'), 'aria-label': t('marketSearch'),

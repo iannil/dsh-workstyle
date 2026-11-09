@@ -280,6 +280,39 @@ globalThis.fetch = async (url, options = {}) => {
     if (exportControl.delayed) return new Promise((resolve) => exportControl.pending.push(() => resolve(respond())))
     return respond()
   }
+  if (target.endsWith('/api/dsh-workstyle/market')) {
+    return json({
+      schema: 'dsh-workstyle/market@1',
+      source: 'network',
+      stale: false,
+      fetchedAt: '2026-11-09T14:00:00.000Z',
+      url: 'https://example.test/market/registry.json',
+      packs: [
+        {
+          id: 'fde-engineering', version: '0.1.0', displayName: 'FDE 工程工作方式',
+          author: 'dsh-workstyle', license: 'MIT',
+          description: '面向工程交付的默认工作方式：先方案、证据优先、验证后收尾、中文短句、产物化、边界清晰。',
+          categories: [], rules: 7, skills: 40,
+          sha256: 'a'.repeat(64), url: 'https://example.test/fde-engineering-0.1.0.tar.gz',
+          bundled: false, market: true, installed: true, installedVersion: '0.1.0', canUpdate: false,
+        },
+        {
+          id: 'team-review', version: '1.2.0', displayName: '团队评审', author: 'demo',
+          license: 'MIT', description: '评审先行的工作方式，适合多人协作的交付节奏。',
+          categories: ['review'], rules: 3, skills: 2,
+          sha256: 'b'.repeat(64), url: 'https://example.test/team-review-1.2.0.tar.gz',
+          bundled: false, market: false, installed: false, installedVersion: null, canUpdate: false,
+        },
+        {
+          id: 'ops-runbook', version: '0.4.0', displayName: '运维手册', author: 'demo',
+          license: 'Apache-2.0', description: '值守与故障处理的工作方式。',
+          categories: ['ops'], rules: 5, skills: 3,
+          sha256: 'd'.repeat(64), url: 'https://example.test/ops-runbook-0.4.0.tar.gz',
+          bundled: false, market: false, installed: false, installedVersion: null, canUpdate: false,
+        },
+      ],
+    })
+  }
   if (target.endsWith('/api/dsh-workstyle/import')) {
     const body = JSON.parse(options.body || '{}')
     importCalls.push(body)
@@ -1917,8 +1950,8 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
 
 /* --- spacing contract: every page shares one page stack and section rhythm --- */
 {
-  const pageRoutes = ['overview', 'pack', 'pack/fde-engineering', 'rules', 'presets', 'skills', 'distill', 'metrics', 'distribute']
-  const minSections = { overview: 0, rules: 0, presets: 0, skills: 0 }
+  const pageRoutes = ['overview', 'pack', 'pack/fde-engineering', 'rules', 'presets', 'skills', 'distill', 'metrics', 'distribute', 'market']
+  const minSections = { overview: 0, rules: 0, presets: 0, skills: 0, market: 0 }
   const collect = (node, predicate, out = []) => {
     if (node === null || node === undefined || typeof node !== 'object') return out
     if (Array.isArray(node)) {
@@ -1956,6 +1989,27 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
       }
     }
   }
+}
+
+/* --- market page: the search box sits in a column stack, so it must not
+       inherit the side-by-side field flex basis; detail blocks must not rely
+       on browser paragraph margins for spacing. --- */
+{
+  route.hash = '#/market'
+  if (hashChange) hashChange()
+  view = await settle(14)
+  const search = findHost(view, (node) => node.type === 'input' && node.props && node.props.placeholder === '搜索名称、作者或 id')
+  ok(!!search, 'market: search input renders')
+  const stretched = findHost(view, (node) => node.type === 'div' && node.props && node.props.style
+    && node.props.style.flex === '1 1 200px' && !!findHost(node, (child) => child.type === 'input'))
+  ok(!stretched, 'spacing: market search field does not stretch inside the column stack')
+  const firstCard = findHost(view, (node) => node.type === 'button' && textOf(node).includes('FDE 工程工作方式'))
+  ok(!!firstCard, 'market: catalog renders a card')
+  view = await act(() => firstCard.props.onClick())
+  ok(!findHost(view, (node) => node.type === 'p'), 'spacing: market detail uses margin-free blocks, not default-margin paragraphs')
+  const detailHead = findHost(view, (node) => node.type === 'div' && node.props && node.props.style
+    && node.props.style.paddingBottom === 12 && textOf(node).includes('fde-engineering v0.1.0'))
+  ok(!!detailHead, 'market: detail card opens with its head')
 }
 
 console.log('\nPANEL RENDER: ' + checks + ' CHECKS PASSED')

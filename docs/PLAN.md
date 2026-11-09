@@ -94,7 +94,7 @@ distill（读本机会话，出聚合报告与建议规则）
 
 ## 验证方式
 
-- 六套，共 1004 项：`test/smoke.mjs` 502（工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 包生命周期 / 预设白名单 / 修订与回滚 / 导出 tar 往返 / 市场降级 / 市场包删除恢复与更新）、`test/panel-render.mjs` 293（渲染、搜索、筛选、折叠、分发、构建标记、无营销文案、样式作用域）、`test/multipage-render.mjs` 97（多页路由与导航、蒸馏、度量、缺失包恢复）、`test/manage.mjs` 37（快照保留上限、恢复、写盘落点）、`test/market.mjs` 61（注册表校验 / 缓存 TTL / stale 回退 / 构建确定性 / 篡改检测）、`test/bootstrap.mjs` 14（默认包本地快照安装 / 幂等 / 删除后不重装 / 0.2.x 迁移 / 离线）。
+- 六套，共 1013 项：`test/smoke.mjs` 502（工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 包生命周期 / 预设白名单 / 修订与回滚 / 导出 tar 往返 / 市场降级 / 市场包删除恢复与更新）、`test/panel-render.mjs` 302（渲染、搜索、筛选、折叠、分发、构建标记、无营销文案、样式作用域、市场页间距契约）、`test/multipage-render.mjs` 97（多页路由与导航、蒸馏、度量、缺失包恢复）、`test/manage.mjs` 37（快照保留上限、恢复、写盘落点）、`test/market.mjs` 61（注册表校验 / 缓存 TTL / stale 回退 / 构建确定性 / 篡改检测）、`test/bootstrap.mjs` 14（默认包本地快照安装 / 幂等 / 删除后不重装 / 0.2.x 迁移 / 离线）。
 - 隔离实例：`dsh --profile web --patch <patch.yml>` + 临时 `DSH_HOME`，Chrome headless CDP 截图验证面板。
 - 真实环境：重启 DeepSeek Harness 后实测面板与工具（本地 link 安装的插件必须重启才加载）。
 
@@ -125,4 +125,4 @@ distill（读本机会话，出聚合报告与建议规则）
 3. **市场包只读，改动落覆盖层。** 安装来源记在 `state.marketPacks`；规则 / 预设的包内写入、重命名被拒绝，删除 / 恢复保留托管标记；用户要改就写覆盖层，导出时照常带上。
 4. **更新是「检查自动、执行手动」。** `GET /market` 用 semver 比较已安装版本与注册表版本，返回 `canUpdate` / `installedVersion`；面板显示「可更新 vX → vY」，用户确认后走 `POST /import` 的 `replace:true` + `market:true`，旧包移入 `trash/`，没有静默升级。
 
-验收证据（2026-11-09）：`test/smoke.mjs` 502 项、`test/panel-render.mjs` 293 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项、`test/market.mjs` 61 项、`test/bootstrap.mjs` 14 项全过。
+验收证据（2026-11-09）：`test/smoke.mjs` 502 项、`test/panel-render.mjs` 302 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项、`test/market.mjs` 61 项、`test/bootstrap.mjs` 14 项全过。

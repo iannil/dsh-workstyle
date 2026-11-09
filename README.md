@@ -120,7 +120,7 @@ Pack 放在 `$DSH_HOME/workstyle/packs/<id>/`；插件另带 `market/packs/<id>/
 
 ```bash
 node test/smoke.mjs             # 502 项：工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 包生命周期 / 白名单 / 修订 / 导出与导入 tar 往返、sha256 与下载 / 市场降级
-node test/panel-render.mjs      # 293 项：状态 / 搜索 / 筛选 / 启停 / 折叠 / 分发 / 分享与导入预览 / 构建标记、无营销文案
+node test/panel-render.mjs      # 302 项：状态 / 搜索 / 筛选 / 启停 / 折叠 / 分发 / 分享与导入预览 / 市场页间距 / 构建标记、无营销文案
 node test/multipage-render.mjs  #  97 项：多页路由渲染 / 导航 / 蒸馏 / 度量 / 缺失包恢复
 node test/manage.mjs            #  37 项：快照与保留上限 / 恢复 / 写盘落点
 node test/market.mjs            #  61 项：注册表校验 / 缓存 TTL / stale 回退 / 构建确定性 / 篡改检测
