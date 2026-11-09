@@ -1561,6 +1561,15 @@ window.__ModuleLoader__.load({
         setPresetForce(null)
       }, [route.page, route.packId])
 
+      /* The pack editor is page-scoped too: 新建/导入 belong to the list and
+         重命名 to exactly one pack's detail. A draft that outlived its route
+         would rename the pack the user is no longer looking at, so any route
+         change drops the draft and the delete confirmation with it. */
+      React.useEffect(() => {
+        setPackEditing(null)
+        setPackDeleting('')
+      }, [route.page, route.packId])
+
       /* The trash listing belongs to the pack list page. Reading it from the
          host (not from delete responses) means a reload still offers 恢复 for
          every pack the host moved into trash/<id>-<stamp>. Re-entering the
@@ -1583,20 +1592,31 @@ window.__ModuleLoader__.load({
 
       /* Revision history is local state only: it is read from the host when the
          distribution page is open, and re-read after a rollback so the rows
-         always describe the files the host has now. */
+         always describe the files the host has now. A row never outlives the
+         fetch that produced it: leaving the page, refetching or failing clears
+         the list, so an error state can never sit above stale 回滚 buttons. */
       React.useEffect(() => {
-        if (route.page !== 'distribute') return undefined
+        if (route.page !== 'distribute') {
+          setRevisions([])
+          setRevisionsError('')
+          return undefined
+        }
         let cancelled = false
+        setRevisions([])
         setRevisionsError('')
         getJson('revisions').then((result) => {
           if (cancelled) return
           if (!result.ok || !result.data || !Array.isArray(result.data.revisions)) {
+            setRevisions([])
             setRevisionsError(result.error || (result.data && result.data.error) || 'revisions unavailable')
             return
           }
           setRevisions(result.data.revisions)
         })
-        return () => { cancelled = true }
+        return () => {
+          cancelled = true
+          setRevisions([])
+        }
       }, [route.page, revisionsReload])
 
       const loadEnv = React.useCallback(() => {
@@ -1906,6 +1926,17 @@ window.__ModuleLoader__.load({
       const onSavePack = (draft) => {
         if (!packEditing) return Promise.resolve()
         const mode = packEditing.mode
+        /* A save is only valid on the page that owns the draft: create/import
+           on the list, rename on the detail of exactly the pack it names. A
+           click that reaches here after navigation drops the draft instead of
+           posting a rename for the pack the user left. */
+        const onOwnPage = mode === 'rename'
+          ? route.page === 'pack' && route.packId === packEditing.id
+          : route.page === 'pack' && !route.packId
+        if (!onOwnPage) {
+          setPackEditing(null)
+          return Promise.resolve(false)
+        }
         const id = mode === 'rename' ? packEditing.id : String((draft && draft.id) || '').trim()
         const displayName = String((draft && draft.displayName) || '').trim()
         const dir = String((draft && draft.path) || '').trim()
@@ -3129,8 +3160,14 @@ window.__ModuleLoader__.load({
         }, reviewSectionBody) : null)
 
       /* One editor serves create, rename and import: the mode decides which
-         fields appear and what the save posts. */
-      const packEditor = packEditing
+         fields appear and what the save posts. It renders only on the page
+         that owns it — create/import on the list, rename on the detail of the
+         pack it names — so a draft can never edit a different pack than the
+         one on screen. */
+      const packEditorOpen = !!packEditing && (packEditing.mode === 'rename'
+        ? route.page === 'pack' && route.packId === packEditing.id
+        : route.page === 'pack' && !route.packId)
+      const packEditor = packEditorOpen
         ? h('div', { style: S.editorBox },
           h('div', { style: S.fieldRow },
             packEditing.mode === 'import'
@@ -3273,7 +3310,16 @@ window.__ModuleLoader__.load({
 
       const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory, revisions: revisionRows, revisionsError, onRestoreRevision }) => {
         const history = Array.isArray(exportHistory) ? exportHistory : []
-        const revisionsList = Array.isArray(revisionRows) ? revisionRows : []
+        /* Newest 20 only: this is a recent-history list, not a full audit log,
+           and the panel does not trust the host's ordering. */
+        const revisionsList = (Array.isArray(revisionRows) ? revisionRows : [])
+          .slice()
+          .sort((a, b) => {
+            const left = Date.parse(a && a.at)
+            const right = Date.parse(b && b.at)
+            return (Number.isFinite(right) ? right : 0) - (Number.isFinite(left) ? left : 0)
+          })
+          .slice(0, 20)
         const copyInstall = () => copyAction(installCommand, installCommand)
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
         return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
@@ -3326,18 +3372,15 @@ window.__ModuleLoader__.load({
           h(Section, { id: 'dsw-revision-history', label: scopedT('revisionsTitle'), count: revisionsList.length },
             revisionsError
               ? h(ErrorState, { operation: scopedT('revisionsTitle'), message: revisionsError, onRetry: () => setRevisionsReload((n) => n + 1) })
-              : null,
-            revisionsList.length
-              ? h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } }, revisionsList.map((item) =>
-                h('div', { key: item.id, style: S.ruleRowV5 },
-                  h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
-                    h('span', { style: S.mono }, item.file || '—'),
-                    h('span', { style: S.hint }, when(item.at) + ' · ' + nf(item.bytes) + ' B · ' + String(item.reason || '').replace(/^[^:]+:/, ''))),
-                  h('button', { style: S.linkButton, disabled: busy === 'revision', onClick: () => onRestoreRevision(item.id) }, t('revisionRestore'))))
-              )
-              : !revisionsError
-                ? h('div', { style: S.empty }, h('div', { style: S.hint }, scopedT('revisionsEmpty')))
-                : null))
+              : revisionsList.length
+                ? h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } }, revisionsList.map((item) =>
+                  h('div', { key: item.id, style: S.ruleRowV5 },
+                    h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
+                      h('span', { style: S.mono }, item.file || '—'),
+                      h('span', { style: S.hint }, when(item.at) + ' · ' + nf(item.bytes) + ' B · ' + String(item.reason || '').replace(/^[^:]+:/, ''))),
+                    h('button', { style: S.linkButton, disabled: busy === 'revision', onClick: () => onRestoreRevision(item.id) }, t('revisionRestore'))))
+                )
+                : h('div', { style: S.empty }, h('div', { style: S.hint }, scopedT('revisionsEmpty')))))
       }
 
       const DistillPage = ({ onNavigate, onScan, historyError, onRetryHistory }) => {

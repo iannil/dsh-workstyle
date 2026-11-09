@@ -1510,6 +1510,17 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
   const rowOf = (v, title) => findHost(v, (node) => node.type === 'div'
     && node.props && node.props.className === 'dsw-row' && textOf(node).includes(title))
   const actionsOf = (v) => testId(v, 'dsw-pack-actions')
+  const allButtons = (v, label) => {
+    const found = []
+    const walk = (node) => {
+      if (node === null || node === undefined || typeof node !== 'object') return
+      if (Array.isArray(node)) { node.forEach(walk); return }
+      if (node.type === 'button' && node.props && textOf(node) === label) found.push(node)
+      walk(node.props && node.props.children)
+    }
+    walk(v)
+    return found
+  }
   try {
     packControl.failDelete = false
     packControl.failRestore = false
@@ -1573,6 +1584,42 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     calls = packCalls(since)
     ok(calls.length === 1 && calls[0].body.action === 'rename' && calls[0].body.id === 'local-pack'
       && calls[0].body.displayName === '本机包 v2', 'rename posts the new display name')
+
+    /* A pack editor is page-scoped: navigating away drops the draft, and the
+       next rename editor is bound to the pack now on screen, so a save can
+       never rename the pack the user left. */
+    const originalLocalTwoDetail = detailPacks['local-two']
+    view = await goPack('local-pack')
+    view = await act(() => button(actionsOf(view), '重命名').props.onClick())
+    ok(!!input(view, 'my-pack') && input(view, 'my-pack').props.value === 'local-pack',
+      'the rename editor opens on the pack it names')
+    view = await goPack('local-two')
+    ok(!input(view, 'my-pack') && !button(view, '保存'),
+      'navigating to another pack closes the rename editor')
+    since = mutationCalls.length
+    view = await act(() => button(actionsOf(view), '重命名').props.onClick())
+    ok(packCalls(since).length === 0, 'opening the next rename editor still posts nothing')
+    ok(!!input(view, 'my-pack') && input(view, 'my-pack').props.value === 'local-two',
+      'the next rename editor is bound to the pack now on screen')
+    view = await act(() => input(view, '显示名称').props.onChange({ target: { value: '本地二 v2' } }))
+    view = await act(() => button(view, '保存').props.onClick())
+    calls = packCalls(since)
+    ok(calls.length === 1 && calls[0].body.action === 'rename' && calls[0].body.id === 'local-two',
+      'saving after navigation renames the pack on screen, never the old id')
+    detailPacks['local-two'] = originalLocalTwoDetail
+
+    /* The create editor belongs to the pack list, not to a detail page. */
+    view = await goPack()
+    view = await act(() => button(view, '+ 新建包').props.onClick())
+    ok(!!input(view, 'my-pack'), 'the create editor opens on the pack list')
+    view = await goPack('local-pack')
+    ok(!input(view, 'my-pack') && !button(view, '保存'),
+      'navigating to a pack detail closes the create editor')
+    since = mutationCalls.length
+    ok(packCalls(since).length === 0, 'dropping the create editor posts nothing')
+    view = await goPack()
+    ok(!input(view, 'my-pack') && !button(view, '保存'),
+      'the dropped create draft does not reopen on return')
 
     /* GET /pack without an id lists the trash, so a pack deleted in an
        earlier session is still restorable after the panel reloads. */
@@ -1663,6 +1710,46 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     calls = revisionCalls(since)
     ok(calls.length === 1 && calls[0].body.action === 'restore' && calls[0].body.id === 'rev-b',
       'rollback posts the newest revision id')
+
+    /* The section is a recent-history list: 20 rows, newest first, even when
+       the host hands the array over in the opposite order. */
+    const manyRevisions = Array.from({ length: 25 }, (_, index) => ({
+      id: 'rev-' + String(index).padStart(2, '0'),
+      at: new Date(Date.UTC(2026, 10, 1, 0, index, 0)).toISOString(),
+      bytes: 100 + index,
+      reason: 'write',
+      file: '/tmp/revisions/rev-' + String(index).padStart(2, '0') + '.json',
+    }))
+    const reloadDist = async () => {
+      route.hash = '#/run'
+      if (hashChange) hashChange()
+      await settle(12)
+      return goDist()
+    }
+    packControl.revisions = manyRevisions
+    view = await reloadDist()
+    ok(allButtons(view, '回滚').length === 20, 'the revision section caps at the newest 20 rows')
+    const cappedText = textOf(view)
+    ok(cappedText.includes('rev-24.json') && !cappedText.includes('rev-04.json'),
+      'the cap keeps the newest revisions and drops the oldest')
+    ok(cappedText.indexOf('rev-24.json') < cappedText.indexOf('rev-23.json')
+      && cappedText.indexOf('rev-23.json') < cappedText.indexOf('rev-05.json'),
+      'revision rows render newest first regardless of host order')
+
+    /* An unreadable index hides the rows: no 回滚 button may post a dead id. */
+    packControl.revisions = [
+      { id: 'rev-ok', at: '2026-11-09T06:00:00.000Z', bytes: 200, reason: 'write', file: '/tmp/home/.dsh/workstyle/state.json' },
+    ]
+    view = await reloadDist()
+    ok(allButtons(view, '回滚').length === 1, 'a healthy revision index renders its rollback row')
+    packControl.failRevisions = true
+    view = await reloadDist()
+    ok(allButtons(view, '回滚').length === 0, 'a revision fetch error hides every rollback row')
+    ok(textOf(view).includes('修订历史失败'), 'the revision error is reported')
+    packControl.failRevisions = false
+    view = await act(() => button(view, '重试').props.onClick())
+    ok(allButtons(view, '回滚').length === 1, 'retrying the failed revision fetch restores the rows')
+
     packControl.revisions = []
     route.hash = '#/run'
     if (hashChange) hashChange()
