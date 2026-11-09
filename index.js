@@ -647,10 +647,23 @@ export function apply(ctx) {
       if (!found.next) throw new Error('unknown pack: ' + idOrDir + ' (available: ' + found.packsNow.map((p) => p.id).join(', ') + ')')
       target = found.next
     }
-    const rules = mergeRules(target, adoptedRulesFor(target.id))
+    /* One overlay application, shared with the runtime: the archive carries the
+     * rules this machine actually serves, not the immutable pack bytes. */
+    const overlay = packOverlay(target.id)
+    const base = baseRulesFor(target)
+    const rules = applyRuleOverlay(base, overlay)
+    const presets = listPresets(target.presets).filter((preset) => !overlay.blockedPresets.includes(preset.id))
+    const templates = listTemplates(target.templates)
     const out = exportPack({
       pack: { ...target, pluginVersion: VERSION },
       rules,
+      presets,
+      templates,
+      overlay: {
+        patched: Object.keys(overlay.patches).length,
+        added: Math.max(0, base.length - (target.rules || []).length),
+        removed: overlay.removed.length,
+      },
       destDir: exportsDir(),
       ...(projectSnapshot ? { projectSnapshot } : {}),
     })

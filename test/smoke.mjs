@@ -1599,10 +1599,75 @@ const revMissingSnapshot = await callRoute('/api/dsh-workstyle/revisions', { met
 ok(revMissingSnapshot.status === 500 && /revision file is missing/.test(revMissingSnapshot.data.error || ''),
   'a snapshot file that vanished is a 500, not a 404')
 
+/* ---------------- export keeps presets and templates ---------------- */
+
+console.log('export presets/templates:')
+const exportWithPresets = await callRoute('/api/dsh-workstyle/export', { method: 'POST', body: {} })
+ok(exportWithPresets.status === 200, 'export succeeds')
+const exportExtract = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-presets-'))
+execFileSync('tar', ['-xzf', exportWithPresets.data.file, '-C', exportExtract])
+const exportedManifest = JSON.parse(fs.readFileSync(path.join(exportExtract, 'workstyle.json'), 'utf8'))
+ok(Array.isArray(exportedManifest.presets) && exportedManifest.presets.some((preset) => preset.id === 'writing'), 'exported pack keeps its presets')
+ok(['writing', 'fde-delivery', 'rc-discussion'].every((id) => exportedManifest.presets.some((preset) => preset.id === id)),
+  'exported pack ships all three bundled presets')
+ok(Array.isArray(exportedManifest.templates) && exportedManifest.templates.length >= 3, 'exported pack keeps its templates')
+ok(exportedManifest.presets.every((preset) => preset && typeof preset.id === 'string'), 'exported presets are normalized')
+const exportedMeta = JSON.parse(fs.readFileSync(path.join(exportExtract, 'manifest.json'), 'utf8'))
+ok(exportedMeta.overlay && typeof exportedMeta.overlay.patched === 'number', 'manifest records overlay counts')
+
+/* ---------------- export merges the overlay: patched, removed, blocked, local ---------------- */
+
+console.log('export overlay merge:')
+const exportLocalPreset = 'export-local-preset'
+const exportPresetSave = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'save', preset: { id: exportLocalPreset, title: '导出本地预设', rules: ['plan-first'] } },
+})
+ok(exportPresetSave.status === 200, 'a local preset can be added before export')
+const exportBlock = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'block', packId: 'fde-engineering', preset: 'rc-discussion' },
+})
+ok(exportBlock.status === 200 && exportBlock.data.removed === 'blocked', 'a bundled preset can be blocked before export')
+const exportPatch = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'fde-engineering', rule: { id: 'plan-first', title: '导出合并标题', text: '导出合并后的本机正文。' } },
+})
+ok(exportPatch.status === 200, 'a bundled rule can be patched before export')
+const exportRemove = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'fde-engineering', rule: { id: 'scope-guard' }, remove: true },
+})
+ok(exportRemove.status === 200 && exportRemove.data.saved === 'removed', 'a bundled rule can be removed before export')
+
+const mergedExport = await callRoute('/api/dsh-workstyle/export', { method: 'POST', body: {} })
+ok(mergedExport.status === 200, 'overlay-aware export succeeds')
+const mergedExtract = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-overlay-'))
+execFileSync('tar', ['-xzf', mergedExport.data.file, '-C', mergedExtract])
+const mergedManifest = JSON.parse(fs.readFileSync(path.join(mergedExtract, 'workstyle.json'), 'utf8'))
+const mergedPatched = mergedManifest.rules.find((rule) => rule.id === 'plan-first')
+ok(mergedPatched && mergedPatched.text === '导出合并后的本机正文。', 'exported rules carry the overlay-patched text')
+ok(!mergedManifest.rules.some((rule) => rule.id === 'scope-guard'), 'exported rules drop an overlay-removed rule')
+ok(mergedManifest.presets.some((preset) => preset.id === exportLocalPreset), 'exported presets include a locally added preset')
+ok(!mergedManifest.presets.some((preset) => preset.id === 'rc-discussion'), 'exported presets drop a blocked preset')
+const mergedMeta = JSON.parse(fs.readFileSync(path.join(mergedExtract, 'manifest.json'), 'utf8'))
+ok(mergedMeta.overlay.patched === 1, 'manifest overlay.patched counts the patched rule')
+ok(mergedMeta.overlay.removed === 1, 'manifest overlay.removed counts the removed rule')
+
+/* put the fixture back so nothing after this point inherits it */
+await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'fde-engineering', action: 'restore', rule: { id: 'scope-guard' } },
+})
+await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'unblock', packId: 'fde-engineering', preset: 'rc-discussion' } })
+await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'delete', preset: exportLocalPreset } })
+
 /* ------------------------------- cleanup ------------------------------- */
 
 
 fs.rmSync(home, { recursive: true, force: true })
 fs.rmSync(extract, { recursive: true, force: true })
 fs.rmSync(scopedExtract, { recursive: true, force: true })
+fs.rmSync(exportExtract, { recursive: true, force: true })
+fs.rmSync(mergedExtract, { recursive: true, force: true })
 console.log('\nALL ' + checks + ' CHECKS PASSED')
