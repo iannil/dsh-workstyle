@@ -212,7 +212,11 @@ export function snapshot(file, reason = 'write') {
   const dir = path.join(revisionsDir(), key)
   fs.mkdirSync(dir, { recursive: true })
   const at = new Date().toISOString()
-  const ts = at.replace(/[:.]/g, '-')
+  const base = at.replace(/[:.]/g, '-')
+  /* 同一毫秒内的两次写入会撞名：加 -n 后缀直到空闲，否则索引里的 id 重复、恢复会拿到错的字节 */
+  let ts = base
+  let bump = 1
+  while (fs.existsSync(path.join(dir, ts + '.json'))) { ts = base + '-' + bump++ }
   const data = fs.readFileSync(target)
   const tmp = path.join(dir, ts + '.json.tmp')
   fs.writeFileSync(tmp, data)
