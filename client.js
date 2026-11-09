@@ -929,9 +929,9 @@ window.__ModuleLoader__.load({
         display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '14px 0 2px',
       },
       input: {
-        font: 'inherit', fontSize: 13, color: 'var(--dsw-alias-label-primary)',
+        font: 'inherit', fontSize: 13, lineHeight: 1.5, color: 'var(--dsw-alias-label-primary)',
         background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid ' + HAIRLINE,
-        borderRadius: 8, padding: '8px 12px', outline: 'none', flex: '1 1 220px', minWidth: 160,
+        borderRadius: 8, padding: '8px 12px', outline: 'none', width: '100%', minWidth: 0,
       },
       filterRow: { display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'nowrap', marginLeft: 'auto', flexShrink: 0 },
       pill: {
@@ -1173,18 +1173,24 @@ window.__ModuleLoader__.load({
       distPrimaryRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
 
       editorBox: {
-        display: 'flex', flexDirection: 'column', gap: 9, padding: '14px 0 16px',
+        display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 0 12px',
         borderBottom: '1px solid ' + HAIRLINE,
       },
       fieldRow: { display: 'flex', gap: 9, flexWrap: 'wrap' },
       field: { display: 'flex', flexDirection: 'column', gap: 5, flex: '1 1 200px', minWidth: 0 },
+      /* A full-width field stacked under a row of fields: no row flex-basis,
+         or the column container would stretch it to that height. */
+      fieldBlock: { display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0 },
       fieldLabel: { fontSize: 11, fontWeight: 600, color: 'var(--dsw-alias-label-secondary)' },
       textarea: {
         font: 'inherit', fontSize: 13, lineHeight: 1.6, color: 'var(--dsw-alias-label-primary)',
         background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid ' + HAIRLINE,
-        borderRadius: 8, padding: '9px 11px', outline: 'none', resize: 'vertical', minHeight: 62,
+        borderRadius: 8, padding: '9px 11px', outline: 'none', resize: 'vertical', minHeight: 56,
       },
       editorActions: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' },
+      /* Hints sit beside the buttons on one row so a form stays two fields tall. */
+      editorFoot: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+      editorHints: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0, flex: '1 1 240px' },
     }
 
     const CSS = `
@@ -2786,7 +2792,7 @@ window.__ModuleLoader__.load({
                 placeholder: t('ruleTitleLabel'),
                 onChange: (event) => setEditing({ ...editing, title: event.target.value }),
               }))),
-          h('label', { style: S.field },
+          h('label', { style: S.fieldBlock },
             h('span', { style: S.fieldLabel }, t('ruleTextLabel')),
             h('textarea', {
               style: S.textarea,
@@ -2794,27 +2800,31 @@ window.__ModuleLoader__.load({
               placeholder: t('ruleTextLabel'),
               onChange: (event) => setEditing({ ...editing, text: event.target.value }),
             })),
-          editing.target
-            ? h('div', { style: S.hint },
-              t('writeTarget') + '：' + (editing.file === null
-                ? t('targetUnknown')
-                : editing.target === 'pack'
-                  ? t('targetPack')
-                  : editing.target === 'project'
-                    ? t('targetProject')
-                    : t('targetOverlay')))
-            : null,
-          editing.file === null
-            ? h('div', { style: S.hint }, t('writeBlocked'))
-            : null,
-          h('div', { style: S.editorActions },
-            h('button', { style: S.button, onClick: () => setEditing(null) }, t('cancel')),
-            h('button', {
-              style: busy || editing.file === null ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
-              disabled: !!busy || editing.file === null,
-              title: editing.file === null ? t('writeBlocked') : undefined,
-              onClick: () => onSaveRule({ id: editing.id.trim(), title: editing.title.trim(), text: editing.text.trim() }),
-            }, t('saveRule'))))
+          h('div', { style: S.editorFoot },
+            editing.target || editing.file === null
+              ? h('div', { style: S.editorHints },
+                editing.target
+                  ? h('span', { style: S.hint },
+                    t('writeTarget') + '：' + (editing.file === null
+                      ? t('targetUnknown')
+                      : editing.target === 'pack'
+                        ? t('targetPack')
+                        : editing.target === 'project'
+                          ? t('targetProject')
+                          : t('targetOverlay')))
+                  : null,
+                editing.file === null
+                  ? h('span', { style: S.hint }, t('writeBlocked'))
+                  : null)
+              : null,
+            h('div', { style: { ...S.editorActions, marginLeft: 'auto' } },
+              h('button', { style: S.button, onClick: () => setEditing(null) }, t('cancel')),
+              h('button', {
+                style: busy || editing.file === null ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+                disabled: !!busy || editing.file === null,
+                title: editing.file === null ? t('writeBlocked') : undefined,
+                onClick: () => onSaveRule({ id: editing.id.trim(), title: editing.title.trim(), text: editing.text.trim() }),
+              }, t('saveRule')))))
         : null
 
       const rulesBlock = h(Section, {
@@ -2896,8 +2906,17 @@ window.__ModuleLoader__.load({
         const known = new Set(scopedRules.map((rule) => rule.id))
         const dangling = draft.rules.filter((id) => !known.has(id))
         return h('div', { style: { ...S.card, marginTop: 12 }, 'data-testid': 'dsw-preset-editor' },
-          h('div', { style: S.sectionLabel }, draft.existing ? t('presetEditorTitle') : t('presetNew')),
-          h('div', { style: { display: 'flex', gap: 9, flexWrap: 'wrap', paddingTop: 8 } },
+          h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
+            h('span', { style: S.sectionLabel }, draft.existing ? t('presetEditorTitle') : t('presetNew')),
+            h('div', { style: { ...S.editorActions, marginLeft: 'auto' } },
+              h('button', { type: 'button', style: S.button, disabled: !!presetBusy, onClick: closePresetEditor }, t('cancel')),
+              h('button', {
+                type: 'button',
+                style: presetBusy ? { ...S.button, ...S.disabled } : S.button,
+                disabled: !!presetBusy,
+                onClick: () => onSavePreset(draft),
+              }, t('savePreset')))),
+          h('div', { style: { ...S.fieldRow, paddingTop: 8 } },
             h('label', { style: S.field },
               h('span', { style: S.hint }, t('presetIdLabel')),
               h('input', {
@@ -2914,17 +2933,22 @@ window.__ModuleLoader__.load({
                 value: draft.title,
                 placeholder: t('ruleTitleLabel'),
                 onChange: (event) => setPresetEditing({ ...draft, title: event.target.value }),
+              })),
+            h('label', { style: { ...S.field, flex: '2 1 280px' } },
+              h('span', { style: S.hint }, t('presetDescLabel')),
+              h('input', {
+                style: S.input,
+                value: draft.description,
+                placeholder: t('presetDescLabel'),
+                onChange: (event) => setPresetEditing({ ...draft, description: event.target.value }),
               }))),
-          h('label', { style: { ...S.field, paddingTop: 8 } },
-            h('span', { style: S.hint }, t('presetDescLabel')),
-            h('input', {
-              style: S.input,
-              value: draft.description,
-              placeholder: t('presetDescLabel'),
-              onChange: (event) => setPresetEditing({ ...draft, description: event.target.value }),
-            })),
-          h('div', { style: { ...S.hint, paddingTop: 10 } }, t('presetWhitelistHint')),
-          h('div', { style: { display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto', paddingTop: 6 } },
+          h('div', { style: { ...S.hint, paddingTop: 8 } }, t('presetWhitelistHint')),
+          h('div', {
+            style: {
+              display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+              columnGap: 18, rowGap: 3, maxHeight: 148, overflowY: 'auto', paddingTop: 6,
+            },
+          },
             scopedRules.map((rule) => h('label', {
               key: rule.id,
               style: { display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 },
@@ -2934,19 +2958,11 @@ window.__ModuleLoader__.load({
                 checked: draft.rules.includes(rule.id),
                 onChange: () => togglePresetRule(rule.id),
               }),
-              h('span', { style: S.ruleTitle }, rule.title || rule.id),
-              h('span', { style: S.hint }, rule.id)))),
+              h('span', { style: { ...S.ruleTitle, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, rule.title || rule.id),
+              h('span', { style: { ...S.hint, flex: 'none', maxWidth: '55%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } }, rule.id)))),
           dangling.length
             ? h('div', { style: { ...S.hint, paddingTop: 6 } }, t('presetDanglingRules') + '：' + dangling.join(', '))
-            : null,
-          h('div', { style: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap', paddingTop: 10 } },
-            h('button', { type: 'button', style: S.button, disabled: !!presetBusy, onClick: closePresetEditor }, t('cancel')),
-            h('button', {
-              type: 'button',
-              style: presetBusy ? { ...S.button, ...S.disabled } : S.button,
-              disabled: !!presetBusy,
-              onClick: () => onSavePreset(draft),
-            }, t('savePreset'))))
+            : null)
       })()
 
       /* Blocked presets are hidden from composition, so their rules no longer

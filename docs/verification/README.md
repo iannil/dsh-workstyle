@@ -129,3 +129,34 @@ bun test/multipage-render.mjs # 97 CHECKS PASSED
 - `panel-opt-narrow-rules.png`：780px 宽，导航折叠为横排 tab；右下页脚被 DSH 小鲸鱼浮窗遮挡，属外部固定浮层。
 
 回归：`bun test/smoke.mjs` 146、`bun test/panel-render.mjs` 116、`bun test/multipage-render.mjs` 97 全过。
+
+## panel-forms（2026-11-09）
+
+用户反馈「新建预设 和 新建规则 的表单的高度都太大了」。
+
+**根因**：`S.input` 带 `flex: '1 1 220px'`。字段容器是 `flexDirection: 'column'`，flex-basis
+落在主轴（高度）上，每个输入框被拉成 220px 高；规则表单的「正文」字段直接用了带
+`flex: '1 1 200px'` 的 `S.field`，同样被拉成 200px 高。规则表单因此约 490px 高，预设表单约 860px。
+
+**修复**（只改 `client.js` 的样式与表单行结构，不动 i18n、ARIA 与测试契约）：
+
+- `S.input` 去掉行内 flex，改为 `width: 100%; minWidth: 0`；新增 `S.fieldBlock` 供纵向堆叠字段「正文」使用，
+  `S.editorFoot` / `S.editorHints` 让「写入目标」提示与取消/保存同处一行。
+- 预设编辑器：取消/保存移到标题行右侧；预设 id / 标题 / 说明三列一行；规则勾选从 220px 单列滚动区
+  改为 `repeat(auto-fill, minmax(240px, 1fr))` 网格（`maxHeight: 148`）。
+- 规则编辑器：`editorBox` 内边距/间距 14+9 → 10+8，textarea 最小高 62 → 56。
+
+**结果**（1440 下内容列宽约 856px）：新建规则 ~490px → ~205px；新建预设 ~860px → ~260px。
+800px 窄宽度下字段自动换行、勾选两列，无横向溢出。
+
+截图（React shim 元素树 + 无头 Chrome 静态渲染，数据为测试夹具，非真机 CDP）：
+
+- `panel-forms-before-rules.png` / `panel-forms-after-rules.png`
+- `panel-forms-before-presets.png` / `panel-forms-after-presets.png`
+
+真机补充（1440 宽，`127.0.0.1:65241`，cookie 取自桌面端 Cookies sqlite，Chrome `--no-sandbox` + CDP）：
+
+- `panel-forms-real-rules.png`：真机规则页，新建规则表单约 205px。
+- `panel-forms-real-presets.png`：真机预设页，新建预设卡片约 265px，三列字段 + 三列勾选。
+
+回归：`bun test/smoke.mjs` 456、`bun test/panel-render.mjs` 221、`bun test/multipage-render.mjs` 97 全过。
