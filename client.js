@@ -677,6 +677,10 @@ window.__ModuleLoader__.load({
 
     /* -------------------------------- styles ------------------------------- */
 
+    /* One 4px spacing grid for every page, section, list and card. Page rhythm
+       is 16, section body rhythm is 12, cards and grids are 12/16. */
+    const SPACE = { xs: 8, sm: 12, md: 16, lg: 24, xl: 32 }
+
     const S = {
       page: {
         minHeight: '100%', overflowY: 'auto',
@@ -686,7 +690,7 @@ window.__ModuleLoader__.load({
 
       /* Layout lives in the scoped stylesheet (dsw-frame / dsw-body / dsw-rail)
          so the narrow-window breakpoint can collapse the rail. */
-      footWrap: { marginTop: 34 },
+      footWrap: { marginTop: SPACE.xl },
 
       header: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18, flexWrap: 'wrap', width: '100%' },
       brandRow: { display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 6, minWidth: 0 },
@@ -752,18 +756,18 @@ window.__ModuleLoader__.load({
         border: '1px solid ' + (on ? T.sel : T.border),
       }),
       card: {
-        display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0,
-        border: '1px solid ' + T.border, borderRadius: 10, padding: '14px 16px',
+        display: 'flex', flexDirection: 'column', gap: SPACE.xs, minWidth: 0,
+        border: '1px solid ' + T.border, borderRadius: 10, padding: SPACE.md,
         background: 'var(--dsw-alias-bg-layer-2)',
       },
       statCardLink: {
-        display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0,
-        border: '1px solid ' + T.border, borderRadius: 10, padding: '14px 16px',
+        display: 'flex', flexDirection: 'column', gap: SPACE.xs, minWidth: 0,
+        border: '1px solid ' + T.border, borderRadius: 10, padding: SPACE.md,
         background: 'var(--dsw-alias-bg-layer-2)',
         color: 'inherit', textDecoration: 'none', cursor: 'pointer',
       },
       statGrid: {
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: SPACE.sm,
       },
       fpChip: {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 10.5,
@@ -793,9 +797,17 @@ window.__ModuleLoader__.load({
       },
 
       section: { display: 'flex', flexDirection: 'column' },
+      /* A route is one vertical stack: PageHead then page bodies, all 16 apart. */
+      pageStack: { display: 'flex', flexDirection: 'column', gap: SPACE.md },
+      stackSm: { display: 'flex', flexDirection: 'column', gap: SPACE.sm },
+      stackMd: { display: 'flex', flexDirection: 'column', gap: SPACE.md },
       sectionHead: {
         display: 'flex', alignItems: 'baseline', gap: 8,
         paddingBottom: 12, borderBottom: '1px solid ' + HAIRLINE,
+      },
+      /* One body rhythm for every Section: 12 below the rule, 12 between rows. */
+      sectionBody: {
+        display: 'flex', flexDirection: 'column', gap: SPACE.sm, paddingTop: SPACE.sm,
       },
       sectionLabel: {
         fontSize: 14, letterSpacing: '-0.006em', fontWeight: 650,
@@ -811,10 +823,10 @@ window.__ModuleLoader__.load({
       },
       ruleHead: {
         display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto auto 16px', gap: 12,
-        alignItems: 'center', padding: '14px 0', cursor: 'pointer', outline: 'none',
+        alignItems: 'center', padding: '12px 0', cursor: 'pointer', outline: 'none',
         borderRadius: 8,
       },
-      ruleBody: { padding: '0 0 18px 0', display: 'flex', flexDirection: 'column' },
+      ruleBody: { padding: '0 0 12px 0', display: 'flex', flexDirection: 'column' },
       chevron: {
         fontSize: 10.5, color: 'var(--dsw-alias-label-secondary)', opacity: 0.6, marginLeft: 2, flex: 'none',
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -849,10 +861,10 @@ window.__ModuleLoader__.load({
       hint: { fontSize: 12, lineHeight: 1.65, color: 'var(--dsw-alias-label-secondary)' },
       empty: { padding: '24px 0', display: 'flex', flexDirection: 'column', gap: 8 },
 
-      handledRow: { display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 10, flexWrap: 'wrap', paddingTop: 12 },
+      handledRow: { display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 10, flexWrap: 'wrap' },
       reviewRow: {
         display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) auto 16px', gap: 12,
-        padding: '16px 0', borderBottom: '1px solid ' + HAIRLINE, alignItems: 'center',
+        padding: '12px 0', borderBottom: '1px solid ' + HAIRLINE, alignItems: 'center',
       },
       checkbox: { margin: 0, flex: 'none' },
       lockMark: {
@@ -866,15 +878,15 @@ window.__ModuleLoader__.load({
       },
       reviewTitle: { fontSize: 13, fontWeight: 600 },
       reviewState: { fontSize: 11, color: 'var(--dsw-alias-label-secondary)' },
-      actions: { display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-end', flexWrap: 'wrap' },
+      actions: { display: 'flex', gap: 8, justifyContent: 'flex-end', flexWrap: 'wrap' },
 
       aboutHead: {
         display: 'flex', alignItems: 'baseline', gap: 10, width: '100%',
-        padding: '0 0 9px', border: 'none', borderBottom: '1px solid ' + HAIRLINE,
+        padding: '0 0 12px', border: 'none', borderBottom: '1px solid ' + HAIRLINE,
         background: 'transparent', color: 'inherit', font: 'inherit', cursor: 'pointer', textAlign: 'left',
       },
 
-      evidenceGrid: { display: 'flex', flexWrap: 'wrap', gap: '18px 38px', padding: '16px 0 18px' },
+      evidenceGrid: { display: 'flex', flexWrap: 'wrap', gap: '16px 32px' },
       stat: { minWidth: 140, display: 'flex', flexDirection: 'column', gap: 2 },
       statLabel: {
         fontSize: 9.5, letterSpacing: '0.14em', textTransform: 'uppercase', fontWeight: 700,
@@ -884,7 +896,7 @@ window.__ModuleLoader__.load({
       statUnit: { fontSize: 11, fontWeight: 400, color: 'var(--dsw-alias-label-secondary)', marginLeft: 4, letterSpacing: 0 },
       statSub: { fontSize: 10.5, color: 'var(--dsw-alias-label-secondary)' },
 
-      sourceList: { display: 'flex', flexDirection: 'column', gap: 5, padding: '14px 0 4px' },
+      sourceList: { display: 'flex', flexDirection: 'column', gap: SPACE.xs },
       sourceRow: { display: 'grid', gridTemplateColumns: '150px minmax(0, 1fr)', gap: 12, alignItems: 'baseline' },
       sourceName: { fontSize: 11, fontWeight: 600 },
       sourcePath: {
@@ -926,7 +938,7 @@ window.__ModuleLoader__.load({
       actionsNote: { marginLeft: 'auto', fontSize: 10.5, color: 'var(--dsw-alias-label-secondary)' },
 
       searchRow: {
-        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '14px 0 2px',
+        display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', padding: '12px 0 0',
       },
       input: {
         font: 'inherit', fontSize: 13, lineHeight: 1.5, color: 'var(--dsw-alias-label-primary)',
@@ -953,7 +965,7 @@ window.__ModuleLoader__.load({
       skillRow: { borderBottom: '1px solid ' + HAIRLINE },
       skillHead: {
         display: 'grid', gridTemplateColumns: 'minmax(180px, 268px) minmax(0, 1fr) auto 16px',
-        gap: 12, alignItems: 'center', padding: '14px 0', cursor: 'pointer', outline: 'none',
+        gap: 12, alignItems: 'center', padding: '12px 0', cursor: 'pointer', outline: 'none',
         borderRadius: 8,
       },
       skillNameCell: { display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 },
@@ -965,15 +977,15 @@ window.__ModuleLoader__.load({
         fontSize: 12, color: T.ink2, lineHeight: 1.55,
         display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden',
       },
-      skillBody: { padding: '0 0 14px 0', display: 'flex', flexDirection: 'column' },
+      skillBody: { padding: '0 0 12px 0', display: 'flex', flexDirection: 'column' },
 
       distRow: {
         display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 18,
-        padding: '12px 0 6px', flexWrap: 'wrap',
+        padding: '12px 0', flexWrap: 'wrap',
       },
       distTitle: { fontSize: 13, fontWeight: 650, letterSpacing: '-0.005em' },
       distActions: { display: 'flex', gap: 8, flexWrap: 'wrap' },
-      installRow: { display: 'flex', alignItems: 'center', gap: 10, paddingTop: 9, flexWrap: 'wrap' },
+      installRow: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
       code: {
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 11,
         background: 'var(--dsw-alias-bg-layer-2)', border: '1px solid ' + HAIRLINE,
@@ -1026,14 +1038,14 @@ window.__ModuleLoader__.load({
 
       tabs: {
         display: 'flex', alignItems: 'stretch', gap: 2, flexWrap: 'wrap',
-        borderBottom: '1px solid ' + HAIRLINE, marginBottom: 4,
+        borderBottom: '1px solid ' + HAIRLINE,
       },
       tab: {
         font: 'inherit', fontSize: 13, fontWeight: 600, cursor: 'pointer',
         display: 'inline-flex', alignItems: 'center', gap: 7,
         color: 'var(--dsw-alias-label-secondary)', background: 'transparent',
         border: 'none', borderBottom: '2px solid transparent',
-        padding: '9px 14px 10px', marginBottom: -1,
+        padding: '8px 14px', marginBottom: -1,
       },
       tabOn: { color: ACCENT, borderBottom: '2px solid ' + ACCENT },
       navGroupTitle: {
@@ -1069,7 +1081,7 @@ window.__ModuleLoader__.load({
       anchorCount: { fontSize: 11, marginLeft: 4, fontVariantNumeric: 'tabular-nums', opacity: 0.8 },
 
       injectBox: {
-        marginTop: 14, border: '1px solid ' + HAIRLINE, borderRadius: 10, overflow: 'hidden',
+        border: '1px solid ' + HAIRLINE, borderRadius: 10, overflow: 'hidden',
         background: 'var(--dsw-alias-bg-layer-2)',
       },
       injectHead: {
@@ -1114,7 +1126,7 @@ window.__ModuleLoader__.load({
       }),
       ruleRowV5: {
         display: 'grid', gridTemplateColumns: 'auto minmax(0, 1fr) auto auto', gap: 11,
-        alignItems: 'center', padding: '10px 0', borderBottom: '1px solid ' + HAIRLINE,
+        alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + HAIRLINE,
       },
       ruleRowOff: { opacity: 0.55 },
       overridden: {
@@ -1122,13 +1134,13 @@ window.__ModuleLoader__.load({
       },
 
       presetGrid: {
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(206px, 1fr))', gap: 10, paddingTop: 14,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(206px, 1fr))', gap: SPACE.sm,
       },
       presetCard: (current) => ({
-        display: 'flex', flexDirection: 'column', gap: 7, textAlign: 'left',
+        display: 'flex', flexDirection: 'column', gap: SPACE.xs, textAlign: 'left',
         font: 'inherit', cursor: 'pointer', minWidth: 0,
         border: '1px solid ' + (current ? ACCENT_LINE : HAIRLINE), borderRadius: 10,
-        background: current ? ACCENT_SOFT : 'var(--dsw-alias-bg-layer-2)', padding: '13px 15px',
+        background: current ? ACCENT_SOFT : 'var(--dsw-alias-bg-layer-2)', padding: SPACE.md,
       }),
       presetTitleRow: { display: 'flex', alignItems: 'baseline', gap: 8 },
       presetTitle: { fontSize: 13.5, fontWeight: 650, letterSpacing: '-0.006em' },
@@ -1143,12 +1155,12 @@ window.__ModuleLoader__.load({
       presetCountEm: { fontWeight: 650, color: 'var(--dsw-alias-label-primary)' },
 
       metricGrid: {
-        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(168px, 1fr))', gap: 10, paddingTop: 14,
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(168px, 1fr))', gap: SPACE.sm,
       },
       metricCard: {
         display: 'flex', flexDirection: 'column', gap: 5, minWidth: 0,
         border: '1px solid ' + HAIRLINE, borderRadius: 10,
-        background: 'var(--dsw-alias-bg-layer-2)', padding: '14px 16px',
+        background: 'var(--dsw-alias-bg-layer-2)', padding: SPACE.md,
       },
       metricValueRow: { display: 'flex', alignItems: 'baseline', gap: 1 },
       metricValue: {
@@ -1166,14 +1178,14 @@ window.__ModuleLoader__.load({
       deltaDown: { fontSize: 10.5, fontWeight: 650, color: 'var(--dsw-alias-label-secondary)', fontVariantNumeric: 'tabular-nums' },
       caveat: {
         fontSize: 11, lineHeight: 1.6, color: 'var(--dsw-alias-label-secondary)',
-        marginTop: 12, paddingLeft: 11, borderLeft: '2px solid ' + HAIRLINE,
+        paddingLeft: 11, borderLeft: '2px solid ' + HAIRLINE,
       },
 
       distHeadRow: { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap', paddingTop: 14 },
       distPrimaryRow: { display: 'flex', gap: 8, flexWrap: 'wrap' },
 
       editorBox: {
-        display: 'flex', flexDirection: 'column', gap: 8, padding: '10px 0 12px',
+        display: 'flex', flexDirection: 'column', gap: 8, padding: '0 0 12px',
         borderBottom: '1px solid ' + HAIRLINE,
       },
       fieldRow: { display: 'flex', gap: 9, flexWrap: 'wrap' },
@@ -1206,28 +1218,28 @@ window.__ModuleLoader__.load({
       #dsw-root [role="tab"]:focus-visible { outline-offset: -2px; }
       /* Two-column shell: sticky route rail + reading column. */
       #dsw-root .dsw-frame {
-        max-width: 1180px; margin: 0 auto; padding: 30px 40px 64px;
+        max-width: 1180px; margin: 0 auto; padding: 32px 40px 64px;
         display: flex; flex-direction: column; container-type: inline-size;
       }
       #dsw-root .dsw-masthead { padding-bottom: 20px; border-bottom: 1px solid ${HAIRLINE}; }
       #dsw-root .dsw-body {
-        display: flex; align-items: flex-start; gap: 44px; padding-top: 26px;
+        display: flex; align-items: flex-start; gap: 40px; padding-top: 24px;
       }
       #dsw-root .dsw-rail {
         flex: 0 0 200px; width: 200px; position: sticky; top: 24px; align-self: flex-start;
       }
       #dsw-root .dsw-content {
         flex: 1 1 auto; min-width: 0;
-        display: flex; flex-direction: column; gap: 22px;
+        display: flex; flex-direction: column; gap: 24px;
       }
-      #dsw-root .dsw-nav { display: flex; flex-direction: column; gap: 18px; }
+      #dsw-root .dsw-nav { display: flex; flex-direction: column; gap: 16px; }
       #dsw-root .dsw-nav-group { display: flex; flex-direction: column; gap: 1px; }
       #dsw-root .dsw-nav-item { transition: background-color .12s ease, color .12s ease; }
       #dsw-root .dsw-nav-item:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); }
       #dsw-root .dsw-nav-item-on:hover { background: ${T.sel}; }
       @media (max-width: 920px) {
         #dsw-root .dsw-frame { padding: 20px 20px 48px; }
-        #dsw-root .dsw-body { flex-direction: column; gap: 18px; padding-top: 18px; }
+        #dsw-root .dsw-body { flex-direction: column; gap: 16px; padding-top: 16px; }
         #dsw-root .dsw-rail { position: static; width: 100%; flex: 0 0 auto; }
         #dsw-root .dsw-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
         #dsw-root .dsw-nav-group { display: contents; }
@@ -1236,7 +1248,7 @@ window.__ModuleLoader__.load({
       /* The panel can be narrower than the window (slot beside the chat rail),
          so collapse on the frame's own width too. */
       @container (max-width: 760px) {
-        #dsw-root .dsw-body { flex-direction: column; gap: 18px; padding-top: 18px; }
+        #dsw-root .dsw-body { flex-direction: column; gap: 16px; padding-top: 16px; }
         #dsw-root .dsw-rail { position: static; width: 100%; flex: 0 0 auto; }
         #dsw-root .dsw-nav { flex-direction: row; flex-wrap: wrap; gap: 4px; }
         #dsw-root .dsw-nav-group { display: contents; }
@@ -1275,12 +1287,14 @@ window.__ModuleLoader__.load({
 
     function Section(props) {
       const { id, label, count, right, children } = props
-      return h('section', { id, style: S.section },
-        h('div', { style: S.sectionHead },
+      const empty = children === null || children === undefined || children === false
+        || (Array.isArray(children) && children.every((child) => child === null || child === undefined || child === false))
+      return h('section', { id, 'data-dsw-section': 'true', style: S.section },
+        h('div', { 'data-dsw-section-head': 'true', style: S.sectionHead },
           h('span', { style: S.sectionLabel }, label),
           count === undefined || count === null ? null : h('span', { style: S.sectionCount }, String(count)),
           right ? h('span', { style: S.sectionRight }, right) : null),
-        children)
+        empty ? null : h('div', { 'data-dsw-section-body': 'true', style: S.sectionBody }, children))
     }
 
     function Card(props) {
@@ -2706,10 +2720,10 @@ window.__ModuleLoader__.load({
           h('button', { type: 'button', style: S.button, onClick: dismissOnboarding }, t('onboardingDismiss'))),
       ) : null
 
-      /* ① loaded text — the real bytes, with their fingerprint */
+      /* loaded text — the real bytes, with their fingerprint */
       const injectBlock = h(Section, {
         id: 'dsw-inject',
-        label: '① ' + t('injectTitle'),
+        label: t('injectTitle'),
         right: h('span', { style: { display: 'inline-flex', gap: 12, alignItems: 'center' } },
           h('button', { style: S.linkAccent, onClick: () => onCopy(inj ? inj.text : '', 'injected text') }, t('injectCopy')),
           h('button', {
@@ -2717,7 +2731,7 @@ window.__ModuleLoader__.load({
             onClick: () => setInjectOpen((prev) => !prev),
           }, injectOpen ? t('injectCollapse') : t('injectExpand'))),
       },
-        h('div', { style: { ...S.hint, paddingTop: 8 } }, t('injectHint')),
+        h('div', { style: S.hint }, t('injectHint')),
         inj
           ? h('div', { style: S.injectBox },
             h('div', { style: S.injectHead },
@@ -2740,7 +2754,7 @@ window.__ModuleLoader__.load({
               h('span', { style: S.mono }, t('injectRender'))))
           : h('div', { style: S.empty }, h('div', { style: S.hint }, t('envUnavailable') + (envError || t('refresh')))))
 
-      /* ② effective rules — every layer visible, overrides named */
+      /* effective rules — every layer visible, overrides named */
       const scopedRuleRows = scopedRules.map((rule) => h('div', {
         key: rule.id,
         className: 'dsw-row',
@@ -2829,7 +2843,7 @@ window.__ModuleLoader__.load({
 
       const rulesBlock = h(Section, {
         id: 'dsw-rules',
-        label: '② ' + t('effectiveTitle'),
+        label: t('effectiveTitle'),
         count: scopedRules.length,
         right: h('span', { style: { display: 'inline-flex', gap: 12, alignItems: 'center' } },
           counts.disabled ? h('span', null, counts.disabled + ' ' + t('disabled')) : null,
@@ -2838,13 +2852,13 @@ window.__ModuleLoader__.load({
             onClick: () => setEditing({ id: '', title: '', text: '' }),
           }, t('newRule'))),
       },
-        h('div', { style: { ...S.hint, paddingTop: 8 } }, t('effectiveHint')),
+        h('div', { style: S.hint }, t('effectiveHint')),
         editor,
         scopedRuleRows.length
           ? h('div', null, scopedRuleRows)
           : h('div', { style: S.empty }, h('div', { style: S.hint }, t('reviewEmpty'))))
 
-      /* ③ presets, then what a preset is made of */
+      /* presets, then what a preset is made of */
       /* A refusal names the sessions that pin the preset and asks before
          overriding. The card belongs to that preset only: tying it to the id
          (not a bare flag) keeps a switch, an editor or another error from
@@ -2905,7 +2919,7 @@ window.__ModuleLoader__.load({
         const draft = presetEditing
         const known = new Set(scopedRules.map((rule) => rule.id))
         const dangling = draft.rules.filter((id) => !known.has(id))
-        return h('div', { style: { ...S.card, marginTop: 12 }, 'data-testid': 'dsw-preset-editor' },
+        return h('div', { style: S.card, 'data-testid': 'dsw-preset-editor' },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
             h('span', { style: S.sectionLabel }, draft.existing ? t('presetEditorTitle') : t('presetNew')),
             h('div', { style: { ...S.editorActions, marginLeft: 'auto' } },
@@ -2968,7 +2982,7 @@ window.__ModuleLoader__.load({
       /* Blocked presets are hidden from composition, so their rules no longer
          inject; the card is the only place to bring one back. */
       const presetBlockedCard = blockedPresets.length
-        ? h('div', { style: { ...S.card, marginTop: 12 }, 'data-testid': 'dsw-preset-blocked' },
+        ? h('div', { style: S.card, 'data-testid': 'dsw-preset-blocked' },
           h('div', { style: S.presetTitleRow },
             h('span', { style: S.presetTitle }, t('presetBlockedTitle')),
             h('span', { style: S.badge }, String(blockedPresets.length))),
@@ -2991,7 +3005,7 @@ window.__ModuleLoader__.load({
          is active and offers only the next useful actions. */
       const RunPage = ({ environment: runEnvironment, onNavigate, onRefresh, onUsePreset: usePreset }) => h(
         'div',
-        null,
+        { style: S.stackMd },
         statusRail,
         todoBar,
         onboardingTip,
@@ -3000,7 +3014,7 @@ window.__ModuleLoader__.load({
             t('envUnavailable') + runEnvironment.error,
             h('button', { style: S.linkAccent, type: 'button', onClick: onRefresh }, t('refresh')))
           : null,
-        h('section', { 'aria-labelledby': 'dsw-quick-presets-title', style: { paddingTop: 14 } },
+        h('section', { 'aria-labelledby': 'dsw-quick-presets-title' },
           h('div', { style: S.sectionHead },
             h('span', { id: 'dsw-quick-presets-title', style: S.sectionLabel }, t('presetsTitle')),
             h('a', {
@@ -3011,7 +3025,7 @@ window.__ModuleLoader__.load({
               },
             }, t('navPresets')),
           ),
-          h('div', { style: { ...S.presetGrid, paddingTop: 10 } },
+          h('div', { style: { ...S.presetGrid, paddingTop: SPACE.sm } },
             presets.slice(0, 3).map((preset) => h('button', {
               key: preset.id,
               type: 'button',
@@ -3033,7 +3047,7 @@ window.__ModuleLoader__.load({
       const presetDetail = presetTab === 'rules'
         ? h('div', null, scopedRules.slice(0, 8).map((rule) => h('div', {
           key: rule.id,
-          style: { display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + HAIRLINE },
+          style: { display: 'grid', gridTemplateColumns: 'auto minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + HAIRLINE },
         },
           h('input', {
             type: 'checkbox',
@@ -3049,7 +3063,7 @@ window.__ModuleLoader__.load({
           ? h('div', null, scopedSkills.slice(0, 10).map((skill) => h('div', {
             key: skill.name,
             className: 'dsw-row',
-            style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + HAIRLINE },
+            style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + HAIRLINE },
           },
             h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
               h('span', { style: S.skillName }, skill.name),
@@ -3059,7 +3073,7 @@ window.__ModuleLoader__.load({
           : (templates.length
             ? h('div', null, templates.map((tpl) => h('div', {
               key: tpl.id,
-              style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + HAIRLINE },
+              style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + HAIRLINE },
             },
               h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
                 h('span', { style: S.ruleTitle }, tpl.title || tpl.id),
@@ -3068,7 +3082,7 @@ window.__ModuleLoader__.load({
             : h('div', { style: S.empty }, h('div', { style: S.hint }, t('envUnavailable') + t('presetTemplates'))))
 
       const presetGridBlock = h('div', { style: S.presetGrid }, presetCards)
-      const presetTabsBlock = h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 16, gap: 2 } },
+      const presetTabsBlock = h('div', { style: { ...S.filterRow, marginLeft: 0, gap: 2 } },
         presetTabs.map(([key, label, count]) => h('button', {
           key,
           style: presetTab === key ? { ...S.pill, ...S.pillActive } : S.pill,
@@ -3080,8 +3094,8 @@ window.__ModuleLoader__.load({
          presets page wraps them in a page header. Creation moved to the
          header-right primary action of whichever page is showing them, and
          both now open the preset editor instead of the rule editor. */
-      const presetsBody = h('div', { style: { display: 'flex', flexDirection: 'column' } },
-        h('div', { style: { ...S.hint, paddingTop: 8 } }, t('presetsHint')),
+      const presetsBody = h('div', { style: S.stackMd },
+        h('div', { style: S.hint }, t('presetsHint')),
         presetEditor,
         presetBlockedCard,
         presetGridBlock,
@@ -3090,7 +3104,7 @@ window.__ModuleLoader__.load({
 
       const presetsBlock = h(Section, {
         id: 'dsw-presets',
-        label: '③ ' + t('presetsTitle'),
+        label: t('presetsTitle'),
         right: h('button', { style: S.linkButton, onClick: () => openPresetEditor(null) }, '+ ' + t('presetNew')),
       }, presetsBody)
 
@@ -3117,8 +3131,8 @@ window.__ModuleLoader__.load({
                 ? (showHandled ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, reviewRows(handledSuggestions)) : null)
                 : [
                   pendingSuggestions.length
-                    ? h('div', { key: 'pending' },
-                      h('div', { style: { ...S.hint, paddingTop: 10 } }, t('reviewHint')),
+                    ? h('div', { key: 'pending', style: S.stackSm },
+                      h('div', { style: S.hint }, t('reviewHint')),
                       h('div', { style: { display: 'flex', flexDirection: 'column' } }, reviewRows(pendingSuggestions)),
                       h('div', { style: S.actions },
                         h('button', {
@@ -3131,8 +3145,8 @@ window.__ModuleLoader__.load({
                         }, busy === 'adopt' ? t('adopting') : t('adoptSelected') + (selected.length ? ' (' + selected.length + ')' : ''))))
                     : null,
                   handledSuggestions.length
-                    ? h('div', { key: 'handled' },
-                      h('div', { style: S.handledRow, paddingTop: pendingSuggestions.length ? 12 : 10 },
+                    ? h('div', { key: 'handled', style: S.stackSm },
+                      h('div', { style: S.handledRow },
                         h('span', { style: { ...S.sectionLabel, fontSize: 12.5, fontWeight: 600 } }, t('handled') + ' · ' + handledSuggestions.length),
                         h('button', {
                           style: S.linkAccent,
@@ -3149,13 +3163,13 @@ window.__ModuleLoader__.load({
         label: t('about'),
         right: h('span', { style: S.sectionRight }, latest ? t('generated') + ' ' + when(latest.generatedAt) : t('never')),
       },
-        h('div', { style: { paddingTop: 10 } },
+        h('div', { style: S.stackSm },
           evidenceBody,
           h('div', { style: S.sourceList },
             [['Claude Code', 'claude'], ['Codex', 'codex'], ['DeepSeek Harness', 'dsh'], ['Pi', 'pi']].map(([label, key]) => h('div', { key, style: S.sourceRow },
               h('span', { style: S.sourceName }, label),
               h('span', { style: S.sourcePath, title: (status.sources || {})[key] || '' }, (status.sources || {})[key] || '-')))),
-          h('div', { style: { ...S.hint, paddingTop: 8 } }, t('aboutHint'))))
+          h('div', { style: S.hint }, t('aboutHint'))))
 
       const runBody = h(RunPage, {
         environment,
@@ -3174,7 +3188,7 @@ window.__ModuleLoader__.load({
             showHandled ? t('hideHandled') : t('viewHandled')))
         : (adoptions.length ? adoptedCount + ' ' + t('adoptedUnit') : null)
 
-      const packDetailBody = h('div', null,
+      const packDetailBody = h('div', { style: S.stackMd },
         rulesBlock,
         presetsBlock,
         (pendingCount > 0 || allHandled) ? h(Section, {
@@ -3232,13 +3246,13 @@ window.__ModuleLoader__.load({
             }, t('packSave'))))
         : null
 
-      const packListBody = h('div', null,
-        h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', paddingTop: 4 } },
+      const packListBody = h('div', { style: S.stackMd },
+        h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' } },
           h('span', { style: S.hint }, t('packHint')),
           h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing({ mode: 'create', id: '', displayName: '' }) }, '+ ' + t('packNew')),
           h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing({ mode: 'import', path: '' }) }, t('packImport'))),
         packEditor,
-        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 10, paddingTop: 14 } },
+        h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: SPACE.sm } },
           packs.map((pack) => h('a', {
             key: pack.id, href: routeHash('pack', pack.id), style: { ...S.card, textDecoration: 'none' },
             onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'pack', packId: pack.id }) },
@@ -3256,15 +3270,15 @@ window.__ModuleLoader__.load({
           h(Section, { id: 'dsw-pack-trash-section', label: t('packTrash'), count: packTrash.length },
             h('div', { style: S.hint }, t('packTrashHint')),
             packTrashError
-              ? h('div', { style: { ...S.hint, paddingTop: 8 } }, t('packTrashUnavailable') + '：' + packTrashError)
+              ? h('div', { style: S.hint }, t('packTrashUnavailable') + '：' + packTrashError)
               : packTrash.length
-                ? h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } },
+                ? h('div', { style: { display: 'flex', flexDirection: 'column' } },
                   packTrash.map((row) => h('div', { key: row.name || row.id, style: S.ruleRowV5 },
                     h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
                       h('span', { style: S.ruleTitle }, row.id),
                       h('span', { style: S.mono }, row.at || row.name || '')),
                     h('button', { style: S.linkButton, disabled: busy === 'pack', onClick: () => onRestorePack(row.id) }, t('packRestore')))))
-                : h('div', { style: { ...S.hint, paddingTop: 8 } }, t('packTrashEmpty')))))
+                : h('div', { style: S.hint }, t('packTrashEmpty')))))
 
       const routePackDetail = packDetail && packDetail.id === route.packId ? packDetail : null
       const selectedPack = routePackDetail || packs.find((pack) => pack.id === route.packId) || null
@@ -3275,9 +3289,9 @@ window.__ModuleLoader__.load({
         ['presets', t('presetsLabel'), selectedPack ? (selectedIsActive ? presets.length : (selectedPack.presets || []).length) : 0],
         ['templates', t('templatesLabel'), selectedPack ? (selectedIsActive ? templates.length : (selectedPack.templates || []).length) : 0],
       ]
-      const readOnlyResource = (label, items, render) => h('section', { style: S.section },
-        h('div', { style: S.sectionHead }, h('span', { style: S.sectionLabel }, label), h('span', { style: S.sectionCount }, String(items.length)),
-          h('span', { style: S.sectionRight }, t('readonly'))),
+      const readOnlyResource = (label, items, render) => h(Section, {
+        label, count: items.length, right: t('readonly'),
+      },
         items.length ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, items.map(render))
           : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + label)))
       const nonActiveDetail = selectedPack
@@ -3299,7 +3313,7 @@ window.__ModuleLoader__.load({
             ? h('div', { style: S.empty },
               h(ErrorState, { operation: t('opLoadPack'), message: t('packNotFound') + (route.packId || '') + (packError ? '（' + packError + '）' : ''), onRetry: () => setPackReload((n) => n + 1) }),
               h('a', { href: '#/overview', style: S.linkAccent, onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'overview' }) } }, t('backToPacks')))
-            : h('div', null,
+            : h('div', { style: S.stackMd },
               h('div', { style: S.sectionHead },
                 h('span', { style: S.ruleTitleRow },
                   h('span', { style: S.sectionLabel }, selectedPack.displayName || selectedPack.name || selectedPack.id),
@@ -3310,7 +3324,7 @@ window.__ModuleLoader__.load({
               (() => {
                 const summary = packSummaryOf(selectedPack.id) || selectedPack
                 const writable = packWritable(summary)
-                return h('div', { 'data-testid': 'dsw-pack-actions', style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', paddingBottom: 10 } },
+                return h('div', { 'data-testid': 'dsw-pack-actions', style: { display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' } },
                   h('span', { style: S.hint }, writable ? t('packWritableNote') : t('packReadonlyNote')),
                   writable && summary.dir ? h('span', { style: S.mono }, summary.dir) : null,
                   selectedIsActive
@@ -3330,8 +3344,9 @@ window.__ModuleLoader__.load({
                     : null)
               })(),
               packEditor,
-              h('div', { role: 'tablist', 'aria-label': scopedT('packResourcesAria'), style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
-              h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail))
+              h('div', { style: S.stackSm },
+                h('div', { role: 'tablist', 'aria-label': scopedT('packResourcesAria'), style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
+                h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail)))
 
       const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory, revisions: revisionRows, revisionsError, onRestoreRevision }) => {
         const history = Array.isArray(exportHistory) ? exportHistory : []
@@ -3347,10 +3362,10 @@ window.__ModuleLoader__.load({
           .slice(0, 20)
         const copyInstall = () => copyAction(installCommand, installCommand)
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
-        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
-          h('section', { style: S.section },
-            h('div', { style: { ...S.hint, paddingTop: 8 } }, t('exportScopeHint')),
-            h('div', { style: { ...S.distPrimaryRow, paddingTop: 14 } },
+        return h('div', { style: S.stackMd },
+          h('section', { style: S.stackSm },
+            h('div', { style: S.hint }, t('exportScopeHint')),
+            h('div', { style: S.distPrimaryRow },
               h('button', {
                 style: exportDisabled ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
                 onClick: () => exportAction(true), disabled: exportDisabled,
@@ -3363,14 +3378,14 @@ window.__ModuleLoader__.load({
               h('span', { style: S.hint }, t('installCommandLabel')),
               h('code', { style: S.code }, installCommand),
               h('button', { style: S.linkAccent, onClick: copyInstall }, t('copyCommand'))),
-            cwd ? h('div', { style: { ...S.hint, paddingTop: 8 } }, t('currentProject'), h('span', { style: S.mono }, cwd)) : null,
+            cwd ? h('div', { style: S.hint }, t('currentProject'), h('span', { style: S.mono }, cwd)) : null,
             result
-              ? h('div', { style: { ...S.banner('info'), marginTop: 12 } },
+              ? h('div', { style: S.banner('info') },
                 h('div', null, t('exported') + '：', h('span', { style: S.mono }, result.file)),
                 h('div', { style: S.hint }, nf(result.files) + ' ' + t('filesUnit') + ' · ' + nf(result.bytes) + ' bytes'),
                 copyArchive ? h('button', { style: { ...S.linkAccent, marginTop: 6 }, onClick: copyArchive }, t('copyPath')) : null)
               : null,
-            exportError ? h('div', { style: { marginTop: 12 } },
+            exportError ? h('div', null,
               h(ErrorState, {
                 operation: scopedT('opExport'),
                 message: exportError,
@@ -3378,8 +3393,7 @@ window.__ModuleLoader__.load({
               })) : null),
           h(Section, { id: 'dsw-distribution-history', label: scopedT('recentExports'), count: history.length },
             historyError
-              ? h('div', { style: { paddingBottom: history.length ? 12 : 0 } },
-                h(ErrorState, { operation: scopedT('opLoadExportHistory'), message: historyError, onRetry: onRetryHistory }))
+              ? h(ErrorState, { operation: scopedT('opLoadExportHistory'), message: historyError, onRetry: onRetryHistory })
               : null,
             history.length
               ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, history.map((item) =>
@@ -3398,7 +3412,7 @@ window.__ModuleLoader__.load({
             revisionsError
               ? h(ErrorState, { operation: scopedT('revisionsTitle'), message: revisionsError, onRetry: () => setRevisionsReload((n) => n + 1) })
               : revisionsList.length
-                ? h('div', { style: { display: 'flex', flexDirection: 'column', paddingTop: 8 } }, revisionsList.map((item) =>
+                ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, revisionsList.map((item) =>
                   h('div', { key: item.id, style: S.ruleRowV5 },
                     h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
                       h('span', { style: S.mono }, item.file || '—'),
@@ -3412,12 +3426,12 @@ window.__ModuleLoader__.load({
         const sourceEntries = Object.entries((report && report.sources) || {})
           .filter(([, source]) => source && typeof source === 'object')
         const sourceLabels = { claude: 'Claude Code', codex: 'Codex', dsh: 'DeepSeek Harness', pi: 'Pi' }
-        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
-          h('section', { style: S.section },
-            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 8 } },
+        return h('div', { style: S.stackMd },
+          h('section', { style: S.stackSm },
+            h('div', { style: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' } },
               h('span', { style: S.hint }, t('scanHint')),
               h('span', { style: S.chip }, t('localData'))),
-            h('div', { style: { ...S.actionsBar, paddingTop: 12 } },
+            h('div', { style: S.actionsBar },
               h('button', { style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary, disabled: !!busy, onClick: onScan },
                 busy === 'distill' ? t('distilling') : t('distill')),
               h('span', { style: S.actionsNote }, latest ? t('lastGenerated') + when(latest.generatedAt) : t('neverScanned'))),
@@ -3431,8 +3445,7 @@ window.__ModuleLoader__.load({
             reviewSectionBody),
           h(Section, { id: 'dsw-distill-history', label: t('reportHistory'), count: reports.length },
             historyError
-              ? h('div', { style: { paddingBottom: reports.length ? 12 : 0 } },
-                h(ErrorState, { operation: t('opLoadHistory'), message: historyError, onRetry: onRetryHistory }))
+              ? h(ErrorState, { operation: t('opLoadHistory'), message: historyError, onRetry: onRetryHistory })
               : null,
             reports.length
               ? h('div', { style: { display: 'flex', flexDirection: 'column' } }, reports.map((item) =>
@@ -3466,16 +3479,16 @@ window.__ModuleLoader__.load({
           h('div', { style: S.metricFormula }, h('strong', null, t('denominator')), metric.denominator || '—'),
           metric.window ? h('div', { style: S.hint }, t('window') + metric.window) : null)
         })
-        return h('div', { style: { display: 'flex', flexDirection: 'column', gap: 18 } },
-          h('section', { style: S.section },
-            h('div', { style: S.sectionHead },
-              h('span', { style: S.sectionLabel }, t('agentMetrics')),
-              h('span', { style: S.chip }, t('recomputable'))),
-            h('div', { style: { ...S.hint, paddingTop: 8 } }, t('metricsCaveat')),
-            metricWindow ? h('div', { style: { ...S.hint, paddingTop: 8 } }, t('window') + metricWindow) : null),
+        return h('div', { style: S.stackMd },
+          h(Section, {
+            label: t('agentMetrics'),
+            right: h('span', { style: S.chip }, t('recomputable')),
+          },
+            h('div', { style: S.hint }, t('metricsCaveat')),
+            metricWindow ? h('div', { style: S.hint }, t('window') + metricWindow) : null),
           available
-            ? h('div', null,
-              h('div', { style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
+            ? h('div', { style: S.stackSm },
+              h('div', { style: { ...S.filterRow, marginLeft: 0, gap: 2 } },
                 h('button', {
                   style: metricTab === 'metrics' ? { ...S.pill, ...S.pillActive } : S.pill,
                   'aria-pressed': metricTab === 'metrics' ? 'true' : 'false',
@@ -3487,17 +3500,17 @@ window.__ModuleLoader__.load({
                   onClick: () => setMetricTab('sources'),
                 }, t('tabSources'))),
               metricTab === 'metrics'
-                ? h('div', null, h('div', { style: S.metricGrid }, metricCardsPage), h('div', { style: S.caveat }, metrics.caveat || t('defaultCaveat')))
+                ? h('div', { style: S.stackSm }, h('div', { style: S.metricGrid }, metricCardsPage), h('div', { style: S.caveat }, metrics.caveat || t('defaultCaveat')))
                 : h('div', { style: S.evidenceGrid }, (metrics.sources || []).map((item) => h('div', { key: item.key, style: S.stat },
                   h('span', { style: S.statLabel }, item.label), h('span', { style: S.statValue }, item.available ? '✓' : '✗'),
                   h('span', { style: S.statSub }, item.available ? t('sourceAvailable') : t('sourceMissing'))))))
-            : h('div', null,
-              h(EmptyState, {
+            : h('div', { style: S.stackSm },
+              EmptyState({
                 noun: t('metricsEmptyNoun'),
                 primary: t('metricsEmptyPrimary'), onPrimary: () => onNavigate({ page: 'distill' }),
                 source: t('tabSources'), onSource: () => setMetricTab('sources'),
               }),
-              h('div', { style: { ...S.hint, paddingTop: 10, textAlign: 'center' } }, t('metricsUnavailable'))))
+              h('div', { style: { ...S.hint, textAlign: 'center' } }, t('metricsUnavailable'))))
       }
 
       /* Skills own their inventory page: a doc-style list (mono 600 name,
@@ -3506,7 +3519,7 @@ window.__ModuleLoader__.load({
         ? h('div', null, scopedSkills.map((skill) => h('div', {
           key: skill.name,
           className: 'dsw-row',
-          style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid ' + HAIRLINE },
+          style: { display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center', padding: '12px 0', borderBottom: '1px solid ' + HAIRLINE },
         },
           h('span', { style: { display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 } },
             h('span', { style: S.skillName }, skill.name),
@@ -3514,6 +3527,11 @@ window.__ModuleLoader__.load({
           h('span', { style: skill.enabled === false ? S.mutedBadge : S.scopeBadge('workspace') },
             skill.enabled === false ? t('disabled') : (skill.inPreset ? t('presetCurrent') : t('enabled'))))))
         : h('div', { style: S.empty }, h('div', { style: S.hint }, t('emptyNone') + t('skillsLabel')))
+
+      /* One route shell for every page: header and page body share one stack. */
+      const Page = ({ labelledby, children }) => h('section', {
+        'aria-labelledby': labelledby, 'data-dsw-page': 'true', style: S.pageStack,
+      }, children)
 
       /* Shared route header: title + optional count/fingerprint chip, one action. */
       const PageHead = ({ id, title, count, chip, action }) => h('div', { style: S.pageHead },
@@ -3524,7 +3542,7 @@ window.__ModuleLoader__.load({
         action || null)
 
       const pageBody = route.page === 'overview'
-        ? h('section', { 'aria-labelledby': 'dsw-overview-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+        ? h(Page, { labelledby: 'dsw-overview-title' },
           PageHead({
             id: 'dsw-overview-title',
             title: t('navOverview'),
@@ -3535,14 +3553,15 @@ window.__ModuleLoader__.load({
             Card({ value: rules.length, label: t('statRules'), href: routeHash('rules'), onClick: () => navigate({ page: 'rules' }) }),
             Card({ value: pendingCount, label: t('statSuggestions'), tone: pendingCount > 0 ? 'danger' : undefined, href: routeHash('distill'), onClick: () => navigate({ page: 'distill' }) }),
             Card({ value: scopedSkills.length, label: t('statSkills'), href: routeHash('skills'), onClick: () => navigate({ page: 'skills' }) })),
-          h('div', { role: 'group', 'aria-label': t('quickActions'), style: { display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' } },
+          h('div', { role: 'group', 'aria-label': t('quickActions'), style: { display: 'flex', flexWrap: 'wrap', gap: SPACE.sm, alignItems: 'center' } },
             h('span', { style: S.sectionLabel }, t('quickActions')),
             h('button', { type: 'button', style: S.linkButton, onClick: () => navigate({ page: 'rules' }) }, t('quickEditRules')),
             h('button', { type: 'button', style: S.linkButton, onClick: () => navigate({ page: 'pack', packId: active.id }) }, t('quickLoadPreview')),
             h('button', { type: 'button', style: S.linkButton, onClick: onDistill }, t('quickDistill'))))
       : route.page === 'pack'
-          ? h('section', { 'aria-labelledby': 'dsw-packs-title' },
-            h('h2', { id: 'dsw-packs-title', style: S.pageTitle }, route.packId ? t('pagePackDetail') : t('navRail')), packDetailPageBody)
+          ? h(Page, { labelledby: 'dsw-packs-title' },
+            PageHead({ id: 'dsw-packs-title', title: route.packId ? t('pagePackDetail') : t('navRail') }),
+            packDetailPageBody)
           : route.page === 'rules'
             ? (() => {
               /* Rules page: scope chips + document-style list. Counts and
@@ -3604,14 +3623,14 @@ window.__ModuleLoader__.load({
                   rule.outsidePreset && scopedPreset
                     ? h('button', { style: S.linkButton, onClick: () => onAddToPreset(rule.id) }, t('addToPreset'))
                     : null))
-              return h('section', { 'aria-labelledby': 'dsw-rules-page-title' },
+              return h(Page, { labelledby: 'dsw-rules-page-title' },
                 PageHead({
                   id: 'dsw-rules-page-title',
                   title: t('navRules'),
                   count: filteredRules.length,
                   action: h('button', { type: 'button', style: S.smallButton, onClick: () => setEditing({ id: '', title: '', text: '' }) }, '+ ' + t('newRule')),
                 }),
-                h('div', { role: 'group', 'aria-label': t('all'), style: { ...S.filterRow, marginLeft: 0, paddingTop: 12, gap: 2 } },
+                h('div', { role: 'group', 'aria-label': t('all'), style: { ...S.filterRow, marginLeft: 0, gap: 2 } },
                   scopeChips.map(([key, label, count]) => Chip({
                     label, count,
                     on: scopeFilter === key,
@@ -3627,7 +3646,7 @@ window.__ModuleLoader__.load({
                   }))
             })()
             : route.page === 'presets'
-              ? h('section', { 'aria-labelledby': 'dsw-presets-page-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+              ? h(Page, { labelledby: 'dsw-presets-page-title' },
                 PageHead({
                   id: 'dsw-presets-page-title',
                   title: t('navPresets'),
@@ -3636,7 +3655,7 @@ window.__ModuleLoader__.load({
                 }),
                 presetsBody)
               : route.page === 'skills'
-                ? h('section', { 'aria-labelledby': 'dsw-skills-page-title', style: { display: 'flex', flexDirection: 'column', gap: 16 } },
+                ? h(Page, { labelledby: 'dsw-skills-page-title' },
                   PageHead({
                     id: 'dsw-skills-page-title',
                     title: t('navSkills'),
@@ -3644,16 +3663,16 @@ window.__ModuleLoader__.load({
                   }),
                   skillsBody)
                 : route.page === 'distill'
-                  ? h('section', { 'aria-labelledby': 'dsw-distill-title' },
+                  ? h(Page, { labelledby: 'dsw-distill-title' },
                     PageHead({ id: 'dsw-distill-title', title: t('distillReview') }),
                     h(DistillPage, { onNavigate: navigate, onScan: onDistill, historyError: reportsError, onRetryHistory: load }))
                   : route.page === 'metrics'
-                    ? h('section', { 'aria-labelledby': 'dsw-metrics-title' },
+                    ? h(Page, { labelledby: 'dsw-metrics-title' },
                       PageHead({ id: 'dsw-metrics-title', title: t('pageMetrics') }),
                       h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }),
                       /* The old run page survives as the lower half of metrics. */
                       h(Section, { id: 'dsw-run', label: t('pageRun') }, runBody))
-                    : h('section', { 'aria-labelledby': 'dsw-distribute-title' },
+                    : h(Page, { labelledby: 'dsw-distribute-title' },
                 PageHead({
                   id: 'dsw-distribute-title',
                   title: t('pageDistribute'),

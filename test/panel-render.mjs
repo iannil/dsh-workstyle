@@ -1117,7 +1117,7 @@ console.log('  ✓ standalone presets & skills pages')
 
 // --- distill / metrics / distribute reskin ---
 assert.ok(!/route\.page === 'run'/.test(src), 'standalone run page must be merged into metrics')
-const metricsCase = src.match(/route\.page === 'metrics'[\s\S]*?(?=\n\s+: h\('section', \{ 'aria-labelledby': 'dsw-distribute-title')/)
+const metricsCase = src.match(/route\.page === 'metrics'[\s\S]*?(?=\n\s+: h\(Page, \{ labelledby: 'dsw-distribute-title')/)
 assert.ok(metricsCase && /dsw-run/.test(metricsCase[0]), 'metrics page must carry the run console section')
 console.log('  ✓ distill / metrics / distribute pages reskinned (run merged into metrics)')
 
@@ -1275,6 +1275,9 @@ const packCase = src.match(/const packDetailPageBody[\s\S]*?\n\n      const Dist
 assert.ok(packCase, 'packDetailPageBody block missing')
 assert.ok(!/S\.tile/.test(packCase[0]), 'pack detail page must not use the tile style')
 assert.ok(/S\.sectionHead/.test(packCase[0]) && /S\.sectionLabel/.test(packCase[0]), 'pack detail header must use the sectionHead block style')
+// Section labels are plain nouns: the v5 page numbers (① 载入预览 …) only made
+// sense on a single page and became orphans once the panel split into routes.
+assert.ok(!/'[①②③④⑤⑥⑦⑧⑨⑩] '\s*\+/.test(src), 'section labels must not carry circled ordinals')
 
 // --- locale coverage ---
 // The zh/en dictionaries are registered inline via ctx.locale.register and
@@ -1810,6 +1813,49 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     route.hash = '#/run'
     if (hashChange) hashChange()
     view = await act(() => button(view, '刷新').props.onClick())
+  }
+}
+
+/* --- spacing contract: every page shares one page stack and section rhythm --- */
+{
+  const pageRoutes = ['overview', 'pack', 'pack/fde-engineering', 'rules', 'presets', 'skills', 'distill', 'metrics', 'distribute']
+  const minSections = { overview: 0, rules: 0, presets: 0, skills: 0 }
+  const collect = (node, predicate, out = []) => {
+    if (node === null || node === undefined || typeof node !== 'object') return out
+    if (Array.isArray(node)) {
+      for (const child of node) collect(child, predicate, out)
+      return out
+    }
+    if (predicate(node)) out.push(node)
+    collect(node.props && node.props.children, predicate, out)
+    return out
+  }
+  for (const name of pageRoutes) {
+    route.hash = '#/' + name
+    if (hashChange) hashChange()
+    view = await settle(12)
+    const pages = collect(view, (node) => node.type === 'section' && node.props && node.props['data-dsw-page'])
+    ok(pages.length === 1, 'spacing: ' + name + ' renders exactly one page shell')
+    const page = pages[0]
+    ok(page && page.props.style.gap === 16, 'spacing: ' + name + ' page stack uses a 16px gap')
+    const kids = page && page.props.children
+    const first = Array.isArray(kids) ? kids[0] : kids
+    ok(first && first.props && first.props.style && first.props.style.justifyContent === 'space-between',
+      'spacing: ' + name + ' starts with the shared page head')
+    const sections = collect(page, (node) => node.type === 'section' && node.props && node.props['data-dsw-section'])
+    ok(sections.length >= (minSections[name] ?? 1), 'spacing: ' + name + ' renders its section blocks')
+    for (const section of sections) {
+      const children = section.props.children
+      const head = Array.isArray(children) ? children[0] : children
+      const body = Array.isArray(children) ? children[1] : null
+      ok(head && head.props && head.props.style && head.props.style.paddingBottom === 12,
+        'spacing: ' + name + ' section head keeps its 12px rule gap')
+      if (body) {
+        ok(body.props && body.props.style && body.props.style.paddingTop === 12
+          && body.props.style.gap === 12,
+          'spacing: ' + name + ' section body uses the shared 12px rhythm')
+      }
+    }
   }
 }
 

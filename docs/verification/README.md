@@ -38,10 +38,12 @@ v5 把首屏从「包的控制台」改成「工作方式环境」。设计见 `
 
 **截图来源**：用真机 API 的真实响应（`/status`、`/evidence`、`/scope`、`/inject`、`/metrics`，经 cookie 鉴权后取自 `http://127.0.0.1:55576`）喂给面板组件，再用无头 Chrome 渲染成图。因此像素是面板真实输出，不是示意图：
 
-- `panel-v5-top.png`：首屏。标题、状态行、状态带、待办条、四锚点、①载入预览（真实注入 markdown + `sha256 85aead453ee3` + 610 字符）。
-- `panel-v5-rules.png`：向下延伸，②有效规则 7 行（作用域徽标「全局」）、③预设三卡与「规则 · 7 / 技能 · 40 / 模板 · 3」页签。
-- `panel-v5-presets.png`：③④ 区域。
+- `panel-v5-top.png`：首屏。标题、状态行、状态带、待办条、四锚点、载入预览（真实注入 markdown + `sha256 85aead453ee3` + 610 字符）。
+- `panel-v5-rules.png`：向下延伸，有效规则 7 行（作用域徽标「全局」）、预设三卡与「规则 · 7 / 技能 · 40 / 模板 · 3」页签。
+- `panel-v5-presets.png`：预设与分发区域。
 - `panel-v5-real.html`：生成的可交互 HTML 快照（可直接浏览器打开）。
+
+> 2026-11-09：区块标题里的 ①②③ 序号已移除，截图与 HTML 快照保留为 2026-11-08 的历史记录。
 
 真机 GUI 本身无法自动截取：`dsh web` 要求鉴权 cookie，无头 Chrome 无法在 127.0.0.1 域上注入该 cookie（`document.cookie` 写入被丢弃，`file://` 与 127.0.0.1 跨源也写不进去）。API 侧已用逐条 cookie 试 200 的方式验证通过。
 
@@ -160,3 +162,33 @@ bun test/multipage-render.mjs # 97 CHECKS PASSED
 - `panel-forms-real-presets.png`：真机预设页，新建预设卡片约 265px，三列字段 + 三列勾选。
 
 回归：`bun test/smoke.mjs` 456、`bun test/panel-render.mjs` 221、`bun test/multipage-render.mjs` 97 全过。
+
+## panel-spacing（2026-11-09）
+
+用户反馈「所有页面的间距应该对齐和一致」。审计发现页面标题到首块内容有 **16 / 12 / 18 / 0+4 / 0+8 / 0** 六种距离：
+overview、presets、skills 用 16px 页面栈；rules 靠筛选行 `paddingTop: 12`；distill、metrics、distribute 的页面体自带 18px 栈；
+pack 列表与详情则完全没有页面栈。列表行、卡片网格、筛选行、空态还各自带 4/8/9/10/14/16/18 的补偿 padding / margin。
+
+**修复**（只改 `client.js` 的布局/样式与一条测试正则，i18n、ARIA、路由不变）：
+
+- 新增 `SPACE` 4px 刻度（8/12/16/24/32）与共享 `Page` 壳：页头 → 首块、页内顶层块一律 16px。
+- `Section` 统一包一层 `sectionBody`：标题下边框 → 正文 12px，正文块之间 12px；空 Section 不再渲染空的 12px 正文盒。
+- 8 条路由全部改用 `Page`；pack 页用 `PageHead` 替换裸 `h2`，pack 列表 / 详情 / 预设 / 蒸馏 / 度量 / 分发内部改为 16px 栈。
+- 规则、技能、报告、修订等列表行统一 12px；卡片 padding 16、网格 gap 12；tabs 与 tabpanel 之间 12px；页脚上边距 32。
+- shell 同步 4px 化：frame 上边距 32、body 上边距 24、左右栏 gap 40、内容栈 24、导航栈 16；窄屏 16。
+
+**审计方法**：用 React shim 把 9 个路由状态（overview、pack 列表、pack 详情、rules、presets、skills、distill、metrics、distribute）
+序列化为静态 HTML，再用无头 Chrome（`--no-sandbox`）逐页测量 `#dsw-main` 的页面头→首块、页内块间距、
+以及每个 Section 标题下边框→正文首元素的距离。修复后结果：
+
+```text
+SPACING AUDIT: ALL ROUTES ALIGNED
+page head→first: 16px    page block gaps: 16px    section head→content: 12px
+```
+
+截图（React shim + 测试夹具渲染，1440 宽，非真机 CDP）：`panel-spacing-overview.png`、`panel-spacing-pack-list.png`、
+`panel-spacing-pack-detail.png`、`panel-spacing-rules.png`、`panel-spacing-presets.png`、`panel-spacing-skills.png`、
+`panel-spacing-distill.png`、`panel-spacing-metrics.png`、`panel-spacing-distribute.png`。
+
+回归：`bun test/panel-render.mjs` **277**（新增 56 项间距契约：每条路由一个 `Page` 壳、16px 页面栈、
+共享页头、Section 标题 12px / 正文 12px）、`bun test/smoke.mjs` **456**、`bun test/multipage-render.mjs` **97** 全过。
