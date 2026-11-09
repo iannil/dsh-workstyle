@@ -114,7 +114,10 @@ text = textOf(view)
 ok(text.includes('规则已保存到项目叠层') && text.includes('指纹'), 'project rule save refreshes and reports its fingerprint')
 ok(text.includes('mp-project-rule') || text.includes('多页项目规则'), 'saved project rule remains visible in the refreshed scope')
 view = await navigateHash('#/packs/fde-engineering')
-const remove = button(view, '移除')
+// Every rule row now exposes 移除, so scope the lookup to the saved project rule.
+const removeRow = findHost(view, (node) => node.type === 'div'
+  && node.props && node.props.className === 'dsw-row' && textOf(node).includes('多页项目规则'))
+const remove = findHost(removeRow, (node) => node.type === 'button' && textOf(node) === '移除')
 ok(!!remove, 'project rule exposes remove action')
 view = await panel.act(() => remove.props.onClick())
 ok(textOf(view).includes('规则已从项目叠层移除'), 'project rule removal refreshes the environment')

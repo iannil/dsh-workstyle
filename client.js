@@ -278,8 +278,21 @@ window.__ModuleLoader__.load({
       ruleTitleLabel: '标题',
       ruleTextLabel: '正文',
       ruleSaved: '规则已保存到项目叠层',
+      ruleSavedLocal: '规则已保存到本机',
+      ruleRestored: '规则已恢复',
       ruleRemoved: '规则已从项目叠层移除',
+      ruleRemovedLocal: '已从本机移除',
       removeRule: '移除',
+      targetOverlay: '本机覆盖层（不改包文件）',
+      targetPack: '包文件（直接写入）',
+      targetProject: '项目层（.dsh/workstyle.json）',
+      targetUnknown: '位置未知 · 只读',
+      writeTarget: '将写入',
+      writeBlocked: '无法写入：该包使用 workstyle.yaml，请直接编辑该文件',
+      outsidePreset: '不在当前预设',
+      addToPreset: '加入当前预设',
+      restoreRule: '恢复',
+      removedTag: '已移除',
       envUnavailable: '环境视图不可用：',
       onboardingTitle: '3 分钟上手',
       onboardingStep1: '① 看状态带的注入指纹——有指纹就说明规则已进系统提示',
@@ -514,8 +527,21 @@ window.__ModuleLoader__.load({
       ruleTitleLabel: 'Title',
       ruleTextLabel: 'Text',
       ruleSaved: 'Rule saved to the project layer',
+      ruleSavedLocal: 'Rule saved on this machine',
+      ruleRestored: 'Rule restored',
       ruleRemoved: 'Rule removed from the project layer',
+      ruleRemovedLocal: 'Removed on this machine',
       removeRule: 'Remove',
+      targetOverlay: 'Local overlay (pack file untouched)',
+      targetPack: 'Pack file (written directly)',
+      targetProject: 'Project layer (.dsh/workstyle.json)',
+      targetUnknown: 'unknown · read-only',
+      writeTarget: 'Will write to',
+      writeBlocked: 'Cannot save: this pack uses workstyle.yaml — edit that file directly',
+      outsidePreset: 'Not in the current preset',
+      addToPreset: 'Add to current preset',
+      restoreRule: 'Restore',
+      removedTag: 'Removed',
       envUnavailable: 'Environment view unavailable: ',
       onboardingTitle: '3-minute start',
       onboardingStep1: '① Check the status-rail fingerprint — if it shows, rules are in the system prompt',
@@ -1716,6 +1742,11 @@ window.__ModuleLoader__.load({
       const onSaveRule = (draft) => {
         if (!requireCurrentContext()) return Promise.resolve()
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
+        /* A rule opened from the list remembers which layer owns it; a new
+           rule has no owner yet and lands in the project layer. */
+        const target = editing && editing.target ? editing.target : 'project'
+        const packId = (editing && editing.packId)
+          || (status && status.activePack ? status.activePack.id : '')
         const normalized = {
           id: typeof draft.id === 'string' ? draft.id.trim() : '',
           title: typeof draft.title === 'string' ? draft.title.trim() : '',
@@ -1725,28 +1756,92 @@ window.__ModuleLoader__.load({
           setError(t('ruleIdLabel') + '、' + t('ruleTitleLabel') + '、' + t('ruleTextLabel') + '不能为空')
           return Promise.resolve()
         }
-        if (!cwd) { setError(t('envUnavailable') + 'no cwd'); return Promise.resolve() }
+        if (target === 'project' && !cwd) { setError(t('envUnavailable') + 'no cwd'); return Promise.resolve() }
+        if (target !== 'project' && !packId) { setError(t('envUnavailable') + 'no pack'); return Promise.resolve() }
         setBusy('rule'); setError(''); setNotice('')
-        return postJson('rule', { cwd, rule: normalized })
+        const body = target === 'project'
+          ? { cwd, rule: normalized }
+          : { target, packId, rule: normalized }
+        return postJson('rule', body)
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'rule save failed')
             setEditing(null)
-            return refreshEnvironment(normalized.id, t('ruleSaved'))
+            return refreshEnvironment(normalized.id, target === 'project' ? t('ruleSaved') : t('ruleSavedLocal'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
       }
 
-      const onRemoveRule = (id) => {
-        if (!requireCurrentContext()) return
+      /* Where a rule lives decides where a write lands: the project layer
+         needs its cwd, every other owner is addressed by pack id. */
+      const ruleWriteBody = (rule, extra) => {
+        const writable = rule && rule.writable ? rule.writable : null
+        const target = writable && writable.scope ? writable.scope : 'project'
         const cwd = env && env.scope ? env.scope.cwd : (session && session.cwd)
-        const normalizedId = typeof id === 'string' ? id.trim() : ''
-        if (!cwd || !normalizedId) return
+        const packId = (writable && writable.packId)
+          || (status && status.activePack ? status.activePack.id : '')
+        return target === 'project'
+          ? { cwd, rule: { id: rule.id }, ...(extra || {}) }
+          : { target, packId, rule: { id: rule.id }, ...(extra || {}) }
+      }
+
+      const onRemoveRule = (rule) => {
+        if (!rule || !requireCurrentContext()) return
+        const normalizedId = typeof rule.id === 'string' ? rule.id.trim() : ''
+        if (!normalizedId) return
+        const body = ruleWriteBody({ ...rule, id: normalizedId }, { remove: true })
+        if (!body.cwd && body.target === undefined) return
+        if (body.target !== undefined && !body.packId) return
         setBusy('rule'); setError(''); setNotice('')
-        postJson('rule', { cwd, rule: { id: normalizedId }, remove: true })
+        postJson('rule', body)
           .then(({ ok, data }) => {
             if (!ok) throw new Error(data && data.error ? data.error : 'rule remove failed')
-            return refreshEnvironment(normalizedId, t('ruleRemoved'))
+            return refreshEnvironment(normalizedId, body.target === undefined ? t('ruleRemoved') : t('ruleRemovedLocal'))
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setBusy(''))
+      }
+
+      const onRestoreRule = (rule) => {
+        if (!rule || !requireCurrentContext()) return
+        const normalizedId = typeof rule.id === 'string' ? rule.id.trim() : ''
+        if (!normalizedId) return
+        const body = ruleWriteBody({ ...rule, id: normalizedId }, { action: 'restore' })
+        if (!body.cwd && body.target === undefined) return
+        if (body.target !== undefined && !body.packId) return
+        setBusy('rule'); setError(''); setNotice('')
+        postJson('rule', body)
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'rule restore failed')
+            return refreshEnvironment(normalizedId, t('ruleRestored'))
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setBusy(''))
+      }
+
+      const onAddToPreset = (ruleId) => {
+        if (!requireCurrentContext()) return
+        const preset = scopedPreset
+        if (!preset || !preset.id) { setError(t('envUnavailable') + 'no preset'); return }
+        const packId = status && status.activePack ? status.activePack.id : ''
+        const rules = Array.isArray(preset.rules) ? preset.rules.slice() : []
+        if (!rules.includes(ruleId)) rules.push(ruleId)
+        setBusy('preset'); setError(''); setNotice('')
+        postJson('preset', {
+          action: 'save',
+          packId,
+          preset: {
+            id: preset.id,
+            title: preset.title || preset.id,
+            description: preset.description || '',
+            rules,
+            skills: Array.isArray(preset.skills) ? preset.skills.slice() : [],
+            templates: Array.isArray(preset.templates) ? preset.templates.slice() : [],
+          },
+        })
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'preset save failed')
+            return refreshEnvironment(ruleId, t('addToPreset'))
           })
           .catch((err) => setError(String(err && err.message ? err.message : err)))
           .finally(() => setBusy(''))
@@ -2073,6 +2168,7 @@ window.__ModuleLoader__.load({
         skills: enabledSkills.length, skillTotal: totalSkills,
       }
       const activePresetId = sc && sc.activePreset ? sc.activePreset.id : null
+      const scopedPreset = sc && sc.activePreset ? sc.activePreset : null
       const scopedDisabled = scopedRules.filter((rule) => rule.enabled === false)
       const projectRules = scopedRules.filter((rule) => rule.origin === 'project')
 
@@ -2092,6 +2188,21 @@ window.__ModuleLoader__.load({
           return h('span', { style: S.scopeBadge('project'), title: t('originProject') }, t('project'))
         }
         return h('span', { style: S.scopeBadge('workspace') }, t('scopeWorkspace'))
+      }
+
+      /* One editor serves every store; the row carries where the text lives,
+         so save/remove/restore write back to the layer that owns the rule. */
+      const openRuleEditor = (rule) => {
+        const writable = rule && rule.writable ? rule.writable : null
+        setEditing({
+          id: rule.id,
+          title: rule.title,
+          text: rule.text,
+          existing: true,
+          target: writable && writable.scope ? writable.scope : 'project',
+          file: writable ? writable.file : undefined,
+          packId: writable ? writable.packId : undefined,
+        })
       }
 
       /* status rail — one line that answers "what is loaded right now" */
@@ -2219,12 +2330,12 @@ window.__ModuleLoader__.load({
           scopeBadge(rule),
           h('span', { style: S.ruleSideText }, t('severity') + ' ' + (rule.severity === 'high' ? t('severityHigh') : rule.severity === 'low' ? t('severityLow') : t('severityMedium')))),
         h('div', { style: { display: 'flex', gap: 8 } },
-          rule.origin === 'project'
-            ? h('button', { style: S.linkButton, onClick: () => setEditing({ id: rule.id, title: rule.title, text: rule.text, existing: true }) }, t('editRule'))
-            : null,
-          rule.origin === 'project'
-            ? h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule.id) }, t('removeRule'))
-            : null)))
+          rule.removed
+            ? h('button', { style: S.linkButton, onClick: () => onRestoreRule(rule) }, t('restoreRule'))
+            : h('button', { style: S.linkButton, onClick: () => openRuleEditor(rule) }, t('editRule')),
+          rule.removed
+            ? null
+            : h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule) }, t('removeRule')))))
 
       const editor = editing
         ? h('div', { style: S.editorBox },
@@ -2254,11 +2365,25 @@ window.__ModuleLoader__.load({
               placeholder: t('ruleTextLabel'),
               onChange: (event) => setEditing({ ...editing, text: event.target.value }),
             })),
+          editing.target
+            ? h('div', { style: S.hint },
+              t('writeTarget') + '：' + (editing.file === null
+                ? t('targetUnknown')
+                : editing.target === 'pack'
+                  ? t('targetPack')
+                  : editing.target === 'project'
+                    ? t('targetProject')
+                    : t('targetOverlay')))
+            : null,
+          editing.file === null
+            ? h('div', { style: S.hint }, t('writeBlocked'))
+            : null,
           h('div', { style: S.editorActions },
             h('button', { style: S.button, onClick: () => setEditing(null) }, t('cancel')),
             h('button', {
-              style: busy ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
-              disabled: !!busy,
+              style: busy || editing.file === null ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+              disabled: !!busy || editing.file === null,
+              title: editing.file === null ? t('writeBlocked') : undefined,
               onClick: () => onSaveRule({ id: editing.id.trim(), title: editing.title.trim(), text: editing.text.trim() }),
             }, t('saveRule'))))
         : null
@@ -2776,18 +2901,25 @@ window.__ModuleLoader__.load({
                 h('div', { style: { minWidth: 0, display: 'flex', flexDirection: 'column', gap: 3 } },
                   h('span', { style: S.ruleTitle }, rule.title),
                   h('span', { style: S.hint }, rule.text || ''),
-                  rule.enabled === false && rule.disabledBy
-                    ? h('span', { style: S.overridden }, t('disabledBy') + ' · ' + (rule.disabledBy === 'session' ? t('scopeSession') : rule.disabledBy === 'project' ? t('project') : t('scopeWorkspace')))
-                    : null),
+                  rule.removed
+                    ? h('span', { style: S.overridden }, t('removedTag'))
+                    : rule.enabled === false && rule.outsidePreset
+                      ? h('span', { style: S.overridden }, t('outsidePreset') + ' · ' + rule.outsidePreset)
+                      : rule.enabled === false && rule.disabledBy
+                        ? h('span', { style: S.overridden }, t('disabledBy') + ' · ' + (rule.disabledBy === 'session' ? t('scopeSession') : rule.disabledBy === 'project' ? t('project') : t('scopeWorkspace')))
+                        : null),
                 h('div', { style: { display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' } },
                   scopeBadge(rule),
                   h('span', { style: S.ruleSideText }, t('severity') + ' ' + (rule.severity === 'high' ? t('severityHigh') : rule.severity === 'low' ? t('severityLow') : t('severityMedium')))),
-                h('div', { style: { display: 'flex', gap: 8 } },
-                  rule.origin === 'project'
-                    ? h('button', { style: S.linkButton, onClick: () => setEditing({ id: rule.id, title: rule.title, text: rule.text, existing: true }) }, t('editRule'))
-                    : null,
-                  rule.origin === 'project'
-                    ? h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule.id) }, t('removeRule'))
+                h('div', { style: { display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' } },
+                  rule.removed
+                    ? h('button', { style: S.linkButton, onClick: () => onRestoreRule(rule) }, t('restoreRule'))
+                    : h('button', { style: S.linkButton, onClick: () => openRuleEditor(rule) }, t('editRule')),
+                  rule.removed
+                    ? null
+                    : h('button', { style: S.linkButton, onClick: () => onRemoveRule(rule) }, t('removeRule')),
+                  rule.outsidePreset && scopedPreset
+                    ? h('button', { style: S.linkButton, onClick: () => onAddToPreset(rule.id) }, t('addToPreset'))
                     : null))
               return h('section', { 'aria-labelledby': 'dsw-rules-page-title' },
                 PageHead({

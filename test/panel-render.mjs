@@ -398,6 +398,7 @@ globalThis.fetch = async (url, options = {}) => {
   }
   if (target.endsWith('/api/dsh-workstyle/preset')) {
     const body = JSON.parse(options.body || '{}')
+    mutationCalls.push({ path: 'preset', body })
     if (body.action === 'use') {
       currentScope.activePreset = { id: body.preset, title: body.preset, rules: [], skills: [], templates: [] }
       return json({ used: body.preset, scope: currentScope })
@@ -991,6 +992,122 @@ console.log('  ✓ sidebar IA (NAV_GROUPS / Sidebar / legacy route aliases)')
     route.hash = '#/run'
     hashChange()
     await act(() => button(view, '刷新').props.onClick())
+  }
+}
+
+/* --- Task 9: rules page edit / remove / restore across write scopes --- */
+{
+  const originalRules = currentScope.rules
+  const originalProjectRules = currentScope.project.rules
+  const originalPreset = currentScope.activePreset
+  const overlayTarget = { scope: 'overlay', packId: 'fde-engineering', file: '/tmp/state/overrides.json' }
+  const packTarget = { scope: 'pack', packId: 'fde-engineering', file: '/tmp/dsh-workstyle/pack/workstyle.json' }
+  const fixtures = [
+    { id: 'owned-overlay', title: '覆盖层规则', text: '覆盖层正文', severity: 'low', origin: 'distilled', textScope: 'workspace', enabled: true, writable: overlayTarget },
+    { id: 'owned-pack', title: '包内规则', text: '包正文', severity: 'low', origin: 'pack', textScope: 'workspace', enabled: true, writable: packTarget },
+    { id: 'tombstone', title: '墓碑规则', text: '墓碑正文', severity: 'low', origin: 'pack', textScope: 'workspace', removed: true, enabled: false, writable: overlayTarget },
+    { id: 'outside', title: '预设外规则', text: '预设外正文', severity: 'low', origin: 'pack', textScope: 'workspace', enabled: false, outsidePreset: 'writing', writable: packTarget },
+    { id: 'yaml-only', title: 'YAML 包规则', text: 'YAML 正文', severity: 'low', origin: 'pack', textScope: 'workspace', enabled: true, writable: { scope: 'pack', packId: 'fde-engineering', file: null } },
+  ]
+  const rowOf = (v, title) => findHost(v, (node) => node.type === 'div'
+    && node.props && node.props.className === 'dsw-row' && textOf(node).includes(title))
+  const same = (actual, expected) => JSON.stringify(actual) === JSON.stringify(expected)
+  const callsSince = (path, since) => mutationCalls.slice(since).filter((call) => call.path === path)
+  const goRules = async () => {
+    route.hash = '#/rules'
+    if (hashChange) hashChange()
+    return settle(12)
+  }
+  const freshRules = async () => {
+    currentScope.rules = originalRules.concat(fixtures.map((rule) => ({ ...rule })))
+    view = await act(() => button(view, '刷新').props.onClick())
+    return goRules()
+  }
+  try {
+    // An earlier preset-switch test emptied the active preset; give it a
+    // stable membership so the append assertion has something to keep.
+    currentScope.activePreset = { id: 'fde-delivery', title: 'FDE 交付', description: '工程交付', rules: ['plan-first', 'verify-first'], skills: [], templates: [] }
+    view = await freshRules()
+    const tombRow = rowOf(view, '墓碑规则')
+    ok(!!tombRow, 'rules page still lists a removed rule')
+    ok(!!findHost(tombRow, (node) => node.type === 'span' && textOf(node) === '已移除'), 'removed rule carries the 已移除 chip')
+    ok(!!button(tombRow, '恢复'), 'removed rule offers 恢复')
+    ok(!button(tombRow, '移除'), 'removed rule hides 移除')
+
+    const outsideRow = rowOf(view, '预设外规则')
+    ok(!!findHost(outsideRow, (node) => node.type === 'span' && textOf(node) === '不在当前预设 · writing'), 'outside-preset rule names the preset it is missing from')
+    ok(!!button(outsideRow, '加入当前预设'), 'outside-preset rule offers 加入当前预设')
+
+    let since = mutationCalls.length
+    view = await act(() => button(outsideRow, '加入当前预设').props.onClick())
+    let calls = callsSince('preset', since)
+    ok(calls.length === 1 && calls[0].body.action === 'save' && calls[0].body.packId === 'fde-engineering', '加入当前预设 saves the composed preset for the active pack')
+    ok(calls.length === 1 && same(calls[0].body.preset.rules, ['plan-first', 'verify-first', 'outside']), '加入当前预设 keeps members and appends the rule')
+
+    view = await freshRules()
+    view = await act(() => button(rowOf(view, '覆盖层规则'), '编辑').props.onClick())
+    ok(textOf(view).includes('将写入') && textOf(view).includes('本机覆盖层'), 'editor names the overlay as the write target')
+    since = mutationCalls.length
+    view = await act(() => button(view, '保存').props.onClick())
+    calls = callsSince('rule', since)
+    ok(calls.length === 1 && same(calls[0].body, { target: 'overlay', packId: 'fde-engineering', rule: { id: 'owned-overlay', title: '覆盖层规则', text: '覆盖层正文' } }), 'editor save posts the overlay target')
+
+    view = await freshRules()
+    view = await act(() => button(rowOf(view, '包内规则'), '编辑').props.onClick())
+    ok(textOf(view).includes('将写入') && textOf(view).includes('包文件'), 'editor names the pack file as the write target')
+    since = mutationCalls.length
+    view = await act(() => button(view, '保存').props.onClick())
+    calls = callsSince('rule', since)
+    ok(calls.length === 1 && same(calls[0].body, { target: 'pack', packId: 'fde-engineering', rule: { id: 'owned-pack', title: '包内规则', text: '包正文' } }), 'editor save posts the pack target')
+
+    view = await freshRules()
+    view = await act(() => button(rowOf(view, 'YAML 包规则'), '编辑').props.onClick())
+    const saveButton = button(view, '保存')
+    ok(!!saveButton && saveButton.props.disabled === true, 'editor disables Save when the write target has no file')
+    ok(textOf(view).includes('workstyle.yaml'), 'editor explains the YAML-only write target')
+    view = await act(() => button(view, '取消').props.onClick())
+
+    view = await freshRules()
+    since = mutationCalls.length
+    view = await act(() => button(rowOf(view, '包内规则'), '移除').props.onClick())
+    calls = callsSince('rule', since)
+    ok(calls.length === 1 && same(calls[0].body, { target: 'pack', packId: 'fde-engineering', rule: { id: 'owned-pack' }, remove: true }), 'pack-owned removal posts the pack target')
+
+    view = await freshRules()
+    since = mutationCalls.length
+    view = await act(() => button(rowOf(view, '覆盖层规则'), '移除').props.onClick())
+    calls = callsSince('rule', since)
+    ok(calls.length === 1 && same(calls[0].body, { target: 'overlay', packId: 'fde-engineering', rule: { id: 'owned-overlay' }, remove: true }), 'overlay-owned removal posts the overlay target')
+
+    view = await freshRules()
+    since = mutationCalls.length
+    view = await act(() => button(rowOf(view, '项目：只改 docs/'), '移除').props.onClick())
+    calls = callsSince('rule', since)
+    ok(calls.length === 1 && same(calls[0].body, { cwd: '/tmp/project-b', rule: { id: 'project-docs-only' }, remove: true }), 'project rule removal keeps the cwd form')
+
+    view = await freshRules()
+    since = mutationCalls.length
+    view = await act(() => button(rowOf(view, '墓碑规则'), '恢复').props.onClick())
+    calls = callsSince('rule', since)
+    ok(calls.length === 1 && same(calls[0].body, { target: 'overlay', packId: 'fde-engineering', rule: { id: 'tombstone' }, action: 'restore' }), '恢复 posts the restore action to the original scope')
+
+    view = await freshRules()
+    route.hash = '#/pack/fde-engineering'
+    if (hashChange) hashChange()
+    view = await settle(12)
+    view = await act(() => button(rowOf(view, '覆盖层规则'), '编辑').props.onClick())
+    ok(textOf(view).includes('将写入') && textOf(view).includes('本机覆盖层'), 'pack detail edit carries the row write scope')
+    console.log('  ✓ rules page edit / remove / restore across scopes')
+  } finally {
+    // The last check left an editor open; close it so later suites mount clean.
+    const cancel = button(view, '取消')
+    if (cancel) view = await act(() => cancel.props.onClick())
+    currentScope.rules = originalRules
+    currentScope.project.rules = originalProjectRules
+    currentScope.activePreset = originalPreset
+    route.hash = '#/run'
+    if (hashChange) hashChange()
+    view = await act(() => button(view, '刷新').props.onClick())
   }
 }
 
