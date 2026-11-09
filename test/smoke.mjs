@@ -713,6 +713,136 @@ const userPackAfterDelete = JSON.parse(fs.readFileSync(path.join(userPackDir, 'w
 ok(!(userPackAfterDelete.presets || []).some((preset) => preset.id === 'smoke-owned-preset'),
   'the deleted user pack preset is gone from the pack file')
 
+/* ------------------- preset contract: review fixes ---------------------- */
+
+const readStateFile = () => JSON.parse(fs.readFileSync(path.join(home, 'workstyle', 'state.json'), 'utf8'))
+const postPreset = (body) => callRoute('/api/dsh-workstyle/preset', { method: 'POST', body })
+
+/* R1: `use` resolves against the ACTIVE pack; a non-active packId is refused */
+const useForOtherPack = await postPreset({ action: 'use', packId: 'smoke-pack', preset: 'smoke-owned-preset', cwd: projectDir })
+ok(useForOtherPack.status === 400 && useForOtherPack.data.error === 'apply that pack before using its presets',
+  'using a preset of a non-active pack is refused, not silently ignored')
+const useActivePresetViaOtherPack = await postPreset({ action: 'use', packId: 'smoke-pack', preset: 'writing', cwd: projectDir })
+ok(useActivePresetViaOtherPack.status === 400 && useActivePresetViaOtherPack.data.error === 'apply that pack before using its presets',
+  'a preset the active pack ships is not reported as unknown for another pack')
+const scopeAfterRefusedUse = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir))
+ok(scopeAfterRefusedUse.data.activePreset?.id === 'smoke-slice',
+  'a refused use leaves the scope preset untouched')
+const useActivePresetExplicitly = await postPreset({ action: 'use', packId: 'fde-engineering', preset: 'writing', cwd: projectDir })
+ok(useActivePresetExplicitly.status === 200 && useActivePresetExplicitly.data.used === 'writing',
+  'naming the active pack explicitly still uses its preset')
+const useBackToProjectPreset = await postPreset({ action: 'use', preset: 'smoke-slice', cwd: projectDir })
+ok(useBackToProjectPreset.status === 200, 'the project preset can be restored')
+
+/* R2: delete drops the local override before applying the shipped policy */
+const overrideForShipped = await postPreset({ action: 'save', preset: { id: 'writing', title: '我的写作', rules: [] } })
+ok(overrideForShipped.status === 200, 'a shipped preset can carry a local override')
+const deleteOverriddenShipped = await postPreset({ action: 'delete', packId: 'fde-engineering', preset: 'writing', cwd: projectDir })
+ok(deleteOverriddenShipped.status === 200 && deleteOverriddenShipped.data.removed === 'blocked' && deleteOverriddenShipped.data.local === true,
+  'deleting an overridden shipped preset removes the override and blocks it')
+const stateAfterOverriddenDelete = readStateFile()
+ok(!(stateAfterOverriddenDelete.presets || []).some((preset) => preset.id === 'writing'),
+  'the local override is gone from the state file')
+const scopeAfterOverriddenDelete = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir))
+ok(!(scopeAfterOverriddenDelete.data.presets || []).some((preset) => preset.id === 'writing'),
+  'the blocked preset is gone from the scope presets')
+const unblockShippedAgain = await postPreset({ action: 'unblock', packId: 'fde-engineering', preset: 'writing' })
+ok(unblockShippedAgain.status === 200, 'the blocked shipped preset can be unblocked')
+const scopeAfterRepairUnblock = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir))
+const restoredShipped = (scopeAfterRepairUnblock.data.presets || []).find((preset) => preset.id === 'writing')
+ok(restoredShipped && restoredShipped.title === '写书',
+  'unblocking returns the shipped preset, not the deleted local copy')
+
+/* R2 + M1: a user pack preset with a local override; overlay target writes state only */
+const packShareSave = await postPreset({ action: 'save', packId: 'smoke-pack', preset: { id: 'smoke-shared', title: '包内共享', rules: ['smoke-owned'] } })
+ok(packShareSave.status === 200 && packShareSave.data.revision, 'saving a user pack preset defaults to the pack file')
+const userPackBytesBeforeOverlay = fs.readFileSync(path.join(userPackDir, 'workstyle.json'), 'utf8')
+const overlayOverPack = await postPreset({ action: 'save', target: 'overlay', packId: 'smoke-pack', preset: { id: 'smoke-shared', title: '本机共享', rules: [] } })
+ok(overlayOverPack.status === 200 && overlayOverPack.data.saved === 'smoke-shared',
+  "target:'overlay' saves a user pack preset into the overlay")
+ok(fs.readFileSync(path.join(userPackDir, 'workstyle.json'), 'utf8') === userPackBytesBeforeOverlay,
+  "target:'overlay' leaves a user pack file untouched")
+ok((readStateFile().presets || []).some((preset) => preset.id === 'smoke-shared'),
+  'the overlaid user pack preset lands in the state file')
+const deleteOverriddenPackPreset = await postPreset({ action: 'delete', packId: 'smoke-pack', preset: 'smoke-shared' })
+ok(deleteOverriddenPackPreset.status === 200 && deleteOverriddenPackPreset.data.removed === 'pack'
+  && deleteOverriddenPackPreset.data.local === true && deleteOverriddenPackPreset.data.revision,
+  'deleting an overridden user pack preset clears the override and edits the pack file')
+ok(!(readStateFile().presets || []).some((preset) => preset.id === 'smoke-shared'),
+  'the user pack preset override is gone from the state file')
+ok(!(JSON.parse(fs.readFileSync(path.join(userPackDir, 'workstyle.json'), 'utf8')).presets || []).some((preset) => preset.id === 'smoke-shared'),
+  'the user pack preset is gone from the pack file')
+
+/* R3: block only accepts shipped presets; unblock only restores real blocks */
+const localOnlySave = await postPreset({ action: 'save', preset: { id: 'smoke-local-only', title: '仅本机' } })
+ok(localOnlySave.status === 200, 'a purely local preset can be saved')
+const blockLocalOnly = await postPreset({ action: 'block', packId: 'fde-engineering', preset: 'smoke-local-only' })
+ok(blockLocalOnly.status === 404 && blockLocalOnly.data.error === 'unknown preset: smoke-local-only',
+  'blocking a purely local preset is a 404')
+const blockGhost = await postPreset({ action: 'block', packId: 'fde-engineering', preset: 'ghost-preset' })
+ok(blockGhost.status === 404 && blockGhost.data.error === 'unknown preset: ghost-preset',
+  'blocking an unknown preset is a 404')
+const blockedAfterGhosts = readStateFile().presetBlocked || {}
+ok(!(blockedAfterGhosts['fde-engineering'] || []).includes('smoke-local-only')
+  && !(blockedAfterGhosts['fde-engineering'] || []).includes('ghost-preset'),
+  'a refused block leaves no phantom presetBlocked entry')
+const unblockUnblocked = await postPreset({ action: 'unblock', packId: 'fde-engineering', preset: 'fde-delivery' })
+ok(unblockUnblocked.status === 404, 'unblocking a preset that is not blocked is a 404')
+const unblockUnknownPack = await postPreset({ action: 'unblock', packId: 'no-such-pack', preset: 'writing' })
+ok(unblockUnknownPack.status === 404, 'unblocking on an unknown pack is a 404')
+
+/* R4: block refuses the preset currently in use */
+const useWritingNow = await postPreset({ action: 'use', preset: 'writing', cwd: projectDir })
+ok(useWritingNow.status === 200, 'the shipped preset can be used for this project')
+const blockInUse = await postPreset({ action: 'block', packId: 'fde-engineering', preset: 'writing', cwd: projectDir })
+ok(blockInUse.status === 400 && blockInUse.data.error === 'preset is in use: writing; switch preset first',
+  'blocking the preset in use is refused')
+const injectAfterRefusedBlock = await callRoute('/api/dsh-workstyle/inject?cwd=' + encodeURIComponent(projectDir))
+ok(injectAfterRefusedBlock.data.preset === 'writing',
+  'a refused block leaves the effective preset unchanged')
+ok(!(readStateFile().presetBlocked?.['fde-engineering'] || []).includes('writing'),
+  'a refused block leaves no presetBlocked entry')
+const useProjectPresetAgain = await postPreset({ action: 'use', preset: 'smoke-slice', cwd: projectDir })
+ok(useProjectPresetAgain.status === 200, 'the project preset can be restored after the refusal')
+
+/* R5: duplicate refuses to overwrite an existing preset */
+const dupSourceSave = await postPreset({ action: 'save', preset: { id: 'smoke-dup-src', title: '来源预设', rules: [] } })
+const dupTargetSave = await postPreset({ action: 'save', preset: { id: 'smoke-dup-dst', title: '既有预设', rules: ['plan-first'] } })
+ok(dupSourceSave.status === 200 && dupTargetSave.status === 200, 'duplicate fixtures are saved')
+const duplicateOntoLocal = await postPreset({ action: 'duplicate', preset: 'smoke-dup-src', newId: 'smoke-dup-dst' })
+ok(duplicateOntoLocal.status === 400 && duplicateOntoLocal.data.error === 'preset already exists: smoke-dup-dst',
+  'duplicating onto an existing local preset is refused')
+const duplicateOntoShipped = await postPreset({ action: 'duplicate', preset: 'smoke-dup-src', newId: 'writing' })
+ok(duplicateOntoShipped.status === 400 && duplicateOntoShipped.data.error === 'preset already exists: writing',
+  'duplicating onto a shipped preset is refused')
+const scopeAfterDuplicateRefusals = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir))
+const untouchedDupTarget = (scopeAfterDuplicateRefusals.data.presets || []).find((preset) => preset.id === 'smoke-dup-dst')
+ok(untouchedDupTarget && untouchedDupTarget.title === '既有预设'
+  && JSON.stringify(untouchedDupTarget.rules) === JSON.stringify(['plan-first']),
+  'a refused duplicate leaves the existing preset untouched')
+const duplicateFresh = await postPreset({ action: 'duplicate', preset: 'smoke-dup-src' })
+ok(duplicateFresh.status === 200 && duplicateFresh.data.saved === 'smoke-dup-src-copy',
+  'duplicating to a free id still works with the default copy id')
+const duplicateFreshAgain = await postPreset({ action: 'duplicate', preset: 'smoke-dup-src' })
+ok(duplicateFreshAgain.status === 400 && duplicateFreshAgain.data.error === 'preset already exists: smoke-dup-src-copy',
+  'the default copy id is protected on the second duplicate')
+
+/* M1: target:'pack' is refused for bundled packs; bad targets are rejected */
+const packTargetBuiltin = await postPreset({ action: 'save', target: 'pack', packId: 'fde-engineering', preset: { id: 'smoke-write-attempt' } })
+ok(packTargetBuiltin.status === 400 && packTargetBuiltin.data.error === 'bundled packs are read-only: fde-engineering',
+  "target:'pack' on a bundled pack is refused")
+ok(fs.readFileSync(lifecyclePackFile, 'utf8') === lifecyclePackBefore,
+  'the bundled pack file is byte-identical after a refused pack write')
+const badTarget = await postPreset({ action: 'save', target: 'elsewhere', preset: { id: 'smoke-bad-target' } })
+ok(badTarget.status === 400, 'an unknown save target is rejected')
+
+/* M3: `use` validates cwd like the other routes */
+const notADirectory = path.join(home, 'not-a-dir')
+fs.writeFileSync(notADirectory, 'x')
+const useBadCwd = await postPreset({ action: 'use', preset: 'writing', cwd: notADirectory })
+ok(useBadCwd.status === 400 && useBadCwd.data.error === 'cwd must be an existing directory',
+  'use with a non-directory cwd is a clean 400')
+
 /* ------------------------------- cleanup ------------------------------- */
 
 
