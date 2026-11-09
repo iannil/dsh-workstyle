@@ -489,11 +489,23 @@ ok(forcedBack.data.rules.find((rule) => rule.id === 'smoke-plan').enabled === tr
 
 await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'use', preset: 'smoke-slice', cwd: projectDir } })
 
+/* ---------------- status carries writable metadata for every rule ---------------- */
+
+console.log('status writable:')
+const statusWritable = await callRoute('/api/dsh-workstyle/status')
+ok(statusWritable.status === 200 && statusWritable.data.rules.length > 0, 'GET /status returns the rule list')
+ok(statusWritable.data.rules.every((rule) => rule.writable && typeof rule.writable.scope === 'string'),
+  'every status rule carries writable.scope')
+const statusPlanFirst = statusWritable.data.rules.find((rule) => rule.id === 'plan-first')
+ok(statusPlanFirst && statusPlanFirst.writable.scope === 'overlay',
+  'builtin rule plan-first is writable through the overlay')
+ok(statusPlanFirst && statusPlanFirst.writable.packId === 'fde-engineering',
+  'status writable names the active pack')
+
 /* ---------------- overlay: patch a bundled rule without touching the pack ---------------- */
 
 const packFile = path.join(root, 'pack', 'reference', 'workstyle.json')
 const packBefore = fs.readFileSync(packFile, 'utf8')
-const originalRule = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
 
 const patchRes = await callRoute('/api/dsh-workstyle/rule', {
   method: 'POST',
@@ -501,6 +513,7 @@ const patchRes = await callRoute('/api/dsh-workstyle/rule', {
 })
 ok(patchRes.status === 200, 'patching a bundled rule succeeds')
 ok(fs.readFileSync(packFile, 'utf8') === packBefore, 'the bundled pack file is untouched')
+ok(fs.statSync(referencePath).mtimeMs === referenceBefore, 'patching a bundled rule leaves pack/reference mtime alone')
 const patched = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
 ok(patched.text === '本机覆盖后的正文。', 'the effective rule uses the patched text')
 
@@ -510,8 +523,11 @@ const removedRule = await callRoute('/api/dsh-workstyle/rule', {
 })
 ok(removedRule.status === 200, 'removing a bundled rule succeeds')
 const afterRemove = await callRoute('/api/dsh-workstyle/scope')
-ok(afterRemove.data.rules.find((rule) => rule.id === 'plan-first').removed === true, 'removed rule stays visible with removed: true')
-ok(!afterRemove.data.counts.injected || afterRemove.data.rules.find((rule) => rule.id === 'plan-first').enabled === false, 'removed rule is not injected')
+const afterRemovePlanFirst = afterRemove.data.rules.find((rule) => rule.id === 'plan-first')
+ok(afterRemovePlanFirst && afterRemovePlanFirst.removed === true, 'removed rule stays visible with removed: true')
+ok(afterRemovePlanFirst && afterRemovePlanFirst.enabled === false, 'removed rule is not enabled in the composed scope')
+const afterRemoveInject = await callRoute('/api/dsh-workstyle/inject')
+ok(!afterRemoveInject.data.text.includes('本机覆盖后的正文。'), 'a removed rule is absent from the injected prompt')
 ok(fs.readFileSync(packFile, 'utf8') === packBefore, 'the bundled pack file is still untouched')
 
 const restoredRule = await callRoute('/api/dsh-workstyle/rule', {
@@ -542,7 +558,68 @@ const userPackManifest = JSON.parse(fs.readFileSync(path.join(userPackDir, 'work
 ok(userPackManifest.rules.find((rule) => rule.id === 'smoke-owned').text === '直接写入包文件。', 'user pack edits land in the pack file')
 ok(userPackEdit.data.revision && userPackEdit.data.revision.id, 'user pack edit returns a revision')
 
+/* adopted (distilled) rules stay in the overlay, even under a user pack */
+fs.writeFileSync(reportPath, JSON.stringify(fakeReport, null, 2) + '\n')
+const adoptUnderUserPack = await callRoute('/api/dsh-workstyle/adopt', { method: 'POST', body: { ruleIds: ['smoke-plan'] } })
+ok(adoptUnderUserPack.status === 200, 'a distilled rule can be adopted while a user pack is active')
+const adoptCwd = fs.mkdtempSync(path.join(home, 'adopt-proj-'))
+const userPackFile = path.join(userPackDir, 'workstyle.json')
+const adoptedRuleIds = () => JSON.parse(fs.readFileSync(userPackFile, 'utf8')).rules.filter((rule) => rule.id === 'smoke-plan').length
+const userPackAdoptedCount = adoptedRuleIds()
+const adoptedBefore = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(adoptCwd))
+const adoptedUnderPack = adoptedBefore.data.rules.find((rule) => rule.id === 'smoke-plan')
+ok(adoptedUnderPack && adoptedUnderPack.enabled === true, 'the adopted rule is enabled under the user pack')
+ok(adoptedUnderPack && adoptedUnderPack.writable.scope === 'overlay',
+  'an adopted rule reports the overlay, not the user pack file')
+
+const removeAdopted = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'smoke-pack', rule: { id: 'smoke-plan' }, remove: true },
+})
+ok(removeAdopted.status === 200 && removeAdopted.data.saved === 'removed',
+  'removing an adopted rule under a user pack succeeds')
+const afterAdoptedRemove = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(adoptCwd))
+const adoptedRemoved = afterAdoptedRemove.data.rules.find((rule) => rule.id === 'smoke-plan')
+ok(!adoptedRemoved || adoptedRemoved.enabled === false, 'a removed adopted rule is no longer enabled')
+const afterAdoptedRemoveInject = await callRoute('/api/dsh-workstyle/inject?cwd=' + encodeURIComponent(adoptCwd))
+ok(!afterAdoptedRemoveInject.data.text.includes('动手前先写清楚验收标准'),
+  'a removed adopted rule is absent from the injected prompt')
+ok(adoptedRuleIds() === userPackAdoptedCount, 'removing an adopted rule never touches the user pack file')
+
+const restoreAdopted = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'smoke-pack', action: 'restore', rule: { id: 'smoke-plan' } },
+})
+ok(restoreAdopted.status === 200 && restoreAdopted.data.saved === 'restored', 'restoring an adopted rule succeeds')
+const afterAdoptedRestore = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(adoptCwd))
+ok(afterAdoptedRestore.data.rules.find((rule) => rule.id === 'smoke-plan').enabled === true,
+  'the restored adopted rule is enabled again')
+ok(adoptedRuleIds() === userPackAdoptedCount, 'restoring an adopted rule never touches the user pack file')
+
 await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
+
+/* ---------------- /rule target=session: enable, disable, restore ---------------- */
+
+const ruleSessionId = 'smoke-rule-session'
+const sessionEnable = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'session', sessionId: ruleSessionId, rule: { id: 'plan-first', title: 't', text: 'x' } },
+})
+ok(sessionEnable.status === 200 && sessionEnable.data.saved === 'enabled', 'POST /rule target=session enables a rule')
+const sessionDisable = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'session', sessionId: ruleSessionId, rule: { id: 'plan-first' }, remove: true },
+})
+ok(sessionDisable.status === 200 && sessionDisable.data.saved === 'disabled', 'POST /rule target=session disables a rule')
+const sessionRestore = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'session', sessionId: ruleSessionId, action: 'restore', rule: { id: 'plan-first' } },
+})
+ok(sessionRestore.status === 200 && sessionRestore.data.saved === 'restored',
+  'POST /rule target=session restore reports restored')
+const sessionLists = sessionRestore.data.scope.session
+ok(!sessionLists.enabledRules.includes('plan-first') && !sessionLists.disabledRules.includes('plan-first'),
+  'a restored session rule is absent from both session lists')
 
 /* ------------------------------- cleanup ------------------------------- */
 

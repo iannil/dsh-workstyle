@@ -18,7 +18,7 @@ import {
 } from './lib/pack.js'
 import {
   applyRuleOverlay, commit, isUserPack, patchOverlay, removeOverlay,
-  resolveWrite, restoreOverlay, snapshot,
+  restoreOverlay, snapshot,
 } from './lib/manage.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
@@ -368,9 +368,23 @@ export function apply(ctx) {
     return { cwd, sessionId }
   }
 
+  /**
+   * Where an edit to `rule` actually lands.
+   *
+   * Ownership decides, not just the pack kind: a user pack's own rules live in
+   * its `workstyle.json`, but a rule adopted from distillation belongs to this
+   * machine's overlay even while a user pack is active. `cwd` is optional
+   * (`/status` has no working directory), so a project rule then reports
+   * `file: null` instead of guessing a path.
+   */
   const writableFor = (rule, cwd) => {
-    if (rule.origin === 'project') return { scope: 'project', packId: active.id, file: projectFilePath(cwd) }
-    if (isUserPack(active)) return { scope: 'pack', packId: active.id, file: path.join(active.dir, 'workstyle.json') }
+    if (rule.origin === 'project') {
+      return { scope: 'project', packId: active.id, file: cwd ? projectFilePath(cwd) : null }
+    }
+    const ownedByPack = (ruleId) => (active.rules || []).some((item) => item.id === ruleId)
+    if (isUserPack(active) && ownedByPack(rule.id)) {
+      return { scope: 'pack', packId: active.id, file: path.join(active.dir, 'workstyle.json') }
+    }
     return { scope: 'overlay', packId: active.id, file: statePath() }
   }
 
@@ -434,7 +448,7 @@ export function apply(ctx) {
     return { packsNow, next }
   }
 
-  const buildStatus = () => {
+  const buildStatus = (options = {}) => {
     const latest = readLatestReport()
     const off = disabledFor(active.id)
     const packRuleIds = new Set(active.rules.map((rule) => rule.id))
@@ -444,6 +458,7 @@ export function apply(ctx) {
       ...rule,
       enabled: !off.rules.has(rule.id),
       origin: rule.source === 'distilled' ? 'distilled' : 'pack',
+      writable: writableFor(rule, options.cwd),
     }))
     const skills = (active.skillList || []).map((skill) => ({
       name: skill.name,
@@ -1241,7 +1256,10 @@ export function apply(ctx) {
                   ? [...new Set([...current.disabledRules, id])]
                   : current.disabledRules.filter((ruleId) => ruleId !== id),
               })
-              return jsonResponse({ saved: body.remove === true ? 'disabled' : 'enabled', id, revision: null, scope: scopeFor({ sessionId: body.sessionId }) })
+              return jsonResponse({
+                saved: body.action === 'restore' ? 'restored' : body.remove === true ? 'disabled' : 'enabled',
+                id, revision: null, scope: scopeFor({ sessionId: body.sessionId }),
+              })
             }
 
             /* target === 'pack' */
@@ -1249,7 +1267,12 @@ export function apply(ctx) {
             if (!targetPack) return jsonResponse({ error: 'unknown pack: ' + (body.packId || active.id) }, 404)
             const known = baseRulesFor(targetPack).find((rule) => rule.id === id)
             if (!known && body.action !== 'restore') return jsonResponse({ error: 'unknown rule: ' + id }, 404)
-            const write = resolveWrite({ entity: 'rule', pack: targetPack })
+            /* Ownership routes the write: only the pack's own rules belong to
+               its file; adopted/distilled ones stay in the machine overlay. */
+            const owned = (targetPack.rules || []).some((rule) => rule.id === id)
+            const write = owned && isUserPack(targetPack)
+              ? { scope: 'pack', file: path.join(targetPack.dir, 'workstyle.json') }
+              : { scope: 'overlay' }
 
             if (write.scope === 'overlay') {
               const state = readState()
@@ -1270,6 +1293,9 @@ export function apply(ctx) {
             }
 
             /* user pack: edit workstyle.json in place */
+            if (body.remove !== true && (typeof raw.text !== 'string' || !raw.text.trim())) {
+              return jsonResponse({ error: 'rule.text is required to save a rule' }, 400)
+            }
             const file = write.file
             const manifest = JSON.parse(fs.readFileSync(file, 'utf8'))
             const rules = Array.isArray(manifest.rules) ? [...manifest.rules] : []
@@ -1282,7 +1308,10 @@ export function apply(ctx) {
               rules.push({ id, title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : id, text: raw.text.trim() })
             }
             const result = commit(file, { ...manifest, rules }, { reason: 'rule:' + id })
-            refreshPacks()
+            const refreshed = refreshPacks()
+            if (!refreshed.ok) {
+              return jsonResponse({ error: refreshed.error || 'failed to reload packs' }, 500)
+            }
             return jsonResponse({ saved: body.remove === true ? 'removed' : 'rule', id, revision: result.revision, scope: scopeFor({}) })
           } catch (error) {
             return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
