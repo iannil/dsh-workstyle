@@ -843,6 +843,130 @@ const useBadCwd = await postPreset({ action: 'use', preset: 'writing', cwd: notA
 ok(useBadCwd.status === 400 && useBadCwd.data.error === 'cwd must be an existing directory',
   'use with a non-directory cwd is a clean 400')
 
+/* ---------------- session-scoped preset is a real layer ---------------- */
+
+console.log('session preset:')
+const sessionPreset = 'preset-session-' + Date.now()
+const useInSession = await postPreset({ action: 'use', preset: 'writing', sessionId: sessionPreset })
+ok(useInSession.status === 200, 'session preset use succeeds')
+const sessionScope = await callRoute('/api/dsh-workstyle/scope?session=' + sessionPreset)
+ok(sessionScope.data.activePreset && sessionScope.data.activePreset.id === 'writing',
+  'session preset takes effect')
+ok(sessionScope.data.presetScope === 'session',
+  'session preset is attributed to the session layer')
+const sessionInject = await callRoute('/api/dsh-workstyle/inject?session=' + sessionPreset)
+ok(sessionInject.data.preset === 'writing',
+  'session preset reaches the injected text')
+/* an unrelated session write must not drop the preset */
+await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'session', sessionId: sessionPreset, rule: { id: 'plan-first' }, remove: true },
+})
+const sessionScope2 = await callRoute('/api/dsh-workstyle/scope?session=' + sessionPreset)
+ok(sessionScope2.data.activePreset && sessionScope2.data.activePreset.id === 'writing',
+  'session preset survives an unrelated session write')
+/* project beats session; an explicit argument would beat both */
+const projectOverSession = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir) + '&session=' + sessionPreset)
+ok(projectOverSession.data.activePreset && projectOverSession.data.activePreset.id === 'smoke-slice',
+  'a project preset outranks the session preset')
+ok(projectOverSession.data.presetScope === 'project',
+  'the project layer is credited with that choice')
+
+/* an emptied session still deletes its file, preset key included */
+const emptySessionId = 'preset-empty-' + Date.now()
+const emptySessionFile = path.join(home, 'workstyle', 'sessions', emptySessionId + '.json')
+await postPreset({ action: 'use', preset: 'writing', sessionId: emptySessionId })
+ok(fs.existsSync(emptySessionFile), 'a session preset writes the session file')
+await callRoute('/api/dsh-workstyle/scope', {
+  method: 'POST',
+  body: { layer: 'session', sessionId: emptySessionId, patch: { preset: '' } },
+})
+ok(!fs.existsSync(emptySessionFile), 'an emptied session deletes its file even after holding a preset')
+
+/* ---------------- delete applies the same in-use guard as block ---------------- */
+
+console.log('preset delete guard:')
+const useWritingForDelete = await postPreset({ action: 'use', preset: 'writing', cwd: projectDir })
+ok(useWritingForDelete.status === 200, 'the shipped preset is in use for the delete guard test')
+const injectBeforeDeleteGuard = await callRoute('/api/dsh-workstyle/inject?cwd=' + encodeURIComponent(projectDir))
+ok(injectBeforeDeleteGuard.data.preset === 'writing', 'the effective preset is the shipped one')
+const deleteShippedInUse = await postPreset({ action: 'delete', packId: 'fde-engineering', preset: 'writing', cwd: projectDir })
+ok(deleteShippedInUse.status === 400
+  && deleteShippedInUse.data.error === 'preset is in use: writing; switch preset first',
+  'deleting the effective shipped preset is refused')
+const injectAfterRefusedDelete = await callRoute('/api/dsh-workstyle/inject?cwd=' + encodeURIComponent(projectDir))
+ok(injectAfterRefusedDelete.data.preset === 'writing'
+  && injectAfterRefusedDelete.data.fingerprint === injectBeforeDeleteGuard.data.fingerprint,
+  'a refused delete leaves the prompt unchanged')
+ok(!(readStateFile().presetBlocked?.['fde-engineering'] || []).includes('writing'),
+  'a refused delete leaves no presetBlocked entry')
+
+/* the guard covers the local-only branch too */
+const guardLocalSave = await postPreset({ action: 'save', preset: { id: 'smoke-guard-local', title: '守卫预设', rules: [] } })
+ok(guardLocalSave.status === 200, 'a local preset can be saved for the guard test')
+const useGuardLocal = await postPreset({ action: 'use', preset: 'smoke-guard-local', cwd: projectDir })
+ok(useGuardLocal.status === 200, 'the local preset is in use')
+const deleteLocalInUse = await postPreset({ action: 'delete', packId: 'fde-engineering', preset: 'smoke-guard-local', cwd: projectDir })
+ok(deleteLocalInUse.status === 400
+  && deleteLocalInUse.data.error === 'preset is in use: smoke-guard-local; switch preset first',
+  'deleting the effective local preset is refused')
+const restoreProjectPreset = await postPreset({ action: 'use', preset: 'smoke-slice', cwd: projectDir })
+ok(restoreProjectPreset.status === 200, 'the project preset is restored after the guard tests')
+
+/* ---------------- user pack delete: commit first, prune the block ---------------- */
+
+console.log('preset delete ordering:')
+const orderPackDir = path.join(home, 'workstyle', 'packs', 'order-pack')
+fs.mkdirSync(path.join(orderPackDir, 'skills'), { recursive: true })
+fs.writeFileSync(path.join(orderPackDir, 'workstyle.json'), JSON.stringify({
+  id: 'order-pack', name: 'order-pack', displayName: 'Order Pack', version: '0.1.0',
+  rules: [{ id: 'order-owned', title: '顺序规则', text: '先提交包文件。' }],
+  presets: [{ id: 'order-shipped', title: '顺序预设', rules: ['order-owned'], skills: [], templates: [] }],
+}, null, 2) + '\n')
+const applyOrderPack = await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'order-pack' } })
+ok(applyOrderPack.status === 200, 'the ordering fixture pack applies')
+const orderOverride = await postPreset({ action: 'save', target: 'overlay', packId: 'order-pack', preset: { id: 'order-shipped', title: '本机覆盖', rules: [] } })
+ok(orderOverride.status === 200, 'the user pack preset carries a local override')
+const blockOrderPreset = await postPreset({ action: 'block', packId: 'order-pack', preset: 'order-shipped' })
+ok(blockOrderPreset.status === 200, 'the user pack preset can be blocked')
+
+const orderPackFile = path.join(orderPackDir, 'workstyle.json')
+const orderPackBytes = fs.readFileSync(orderPackFile, 'utf8')
+const stateBeforeFailedDelete = readStateFile()
+const isRootUser = typeof process.getuid === 'function' && process.getuid() === 0
+if (!isRootUser) {
+  /* A failed pack commit must not move any state. */
+  fs.chmodSync(orderPackDir, 0o555)
+  try {
+    const failedDelete = await postPreset({ action: 'delete', packId: 'order-pack', preset: 'order-shipped' })
+    ok(failedDelete.status === 400, 'a failed pack commit surfaces as a 400')
+    const stateAfterFailedDelete = readStateFile()
+    ok(JSON.stringify(stateAfterFailedDelete.presets) === JSON.stringify(stateBeforeFailedDelete.presets),
+      'a failed pack commit leaves the local override untouched')
+    ok(JSON.stringify(stateAfterFailedDelete.presetBlocked) === JSON.stringify(stateBeforeFailedDelete.presetBlocked),
+      'a failed pack commit leaves presetBlocked untouched')
+    ok(fs.readFileSync(orderPackFile, 'utf8') === orderPackBytes,
+      'a failed pack commit leaves the pack file untouched')
+  } finally {
+    fs.chmodSync(orderPackDir, 0o755)
+  }
+}
+
+const deleteOrderPreset = await postPreset({ action: 'delete', packId: 'order-pack', preset: 'order-shipped' })
+ok(deleteOrderPreset.status === 200 && deleteOrderPreset.data.removed === 'pack'
+  && deleteOrderPreset.data.local === true,
+  'deleting a shipped+overridden user pack preset edits the pack file')
+const orderPackAfterDelete = JSON.parse(fs.readFileSync(orderPackFile, 'utf8'))
+ok(!(orderPackAfterDelete.presets || []).some((preset) => preset.id === 'order-shipped'),
+  'the deleted preset is gone from the user pack file')
+const orderStateAfterDelete = readStateFile()
+ok(!(orderStateAfterDelete.presets || []).some((preset) => preset.id === 'order-shipped'),
+  'the local override is gone from the state file')
+ok(!(orderStateAfterDelete.presetBlocked?.['order-pack'] || []).includes('order-shipped'),
+  'deleting a pack preset prunes its stale block entry')
+const unblockVanished = await postPreset({ action: 'unblock', packId: 'order-pack', preset: 'order-shipped' })
+ok(unblockVanished.status === 404, 'unblocking a vanished preset is a 404')
+
 /* ------------------------------- cleanup ------------------------------- */
 
 

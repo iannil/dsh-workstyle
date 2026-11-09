@@ -1433,11 +1433,18 @@ export function apply(ctx) {
               const localList = Array.isArray(state.presets) ? state.presets.filter((item) => item && item.id !== presetId) : []
               const hadLocal = Array.isArray(state.presets) && state.presets.some((item) => item && item.id === presetId)
               const shipped = (targetPack.presets || []).some((preset) => preset.id === presetId)
+              /* Deleting the effective preset is as destructive as blocking it:
+               * the layer that points at it would be left dangling. */
+              if (selectedPresetId(body) === presetId) {
+                return jsonResponse({ error: 'preset is in use: ' + presetId + '; switch preset first' }, 400)
+              }
               /* A local override is this machine's copy of a shipped preset, so
-               * it goes first; otherwise delete would leave the override behind
-               * and unblock would resurface the local copy instead of the original. */
+               * it goes with it; otherwise delete would leave the override behind
+               * and unblock would resurface the local copy instead of the original.
+               * Commit the pack file FIRST: a failed commit must not touch state,
+               * and one overlay write then drops both the override and any stale
+               * block entry for the id that no longer ships. */
               if (shipped && isUserPack(targetPack)) {
-                if (hadLocal) writeOverlay({ presets: localList }, 'preset-delete:' + presetId)
                 const write = resolveWrite({ entity: 'preset', pack: targetPack })
                 const manifest = JSON.parse(fs.readFileSync(write.file, 'utf8'))
                 const list = (Array.isArray(manifest.presets) ? manifest.presets : []).filter((item) => item && item.id !== presetId)
@@ -1446,6 +1453,11 @@ export function apply(ctx) {
                 if (!refreshed.ok) {
                   return jsonResponse({ error: refreshed.error || 'failed to reload packs', reload: 'failed' }, 500)
                 }
+                /* Re-read state: the commit may have taken a moment, and this
+                 * write must carry the freshest overlay, not the pre-commit one. */
+                const overlayState = readState()
+                const overlayList = Array.isArray(overlayState.presets) ? overlayState.presets.filter((item) => item && item.id !== presetId) : []
+                writeOverlay(blockPreset({ ...overlayState, presets: overlayList }, targetPack.id, presetId, false), 'preset-delete:' + presetId)
                 return jsonResponse({ removed: 'pack', id: presetId, revision: result.revision, ...(hadLocal ? { local: true } : {}) })
               }
               if (shipped) {
