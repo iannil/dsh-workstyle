@@ -336,6 +336,12 @@ export function apply(ctx) {
   }
 
   const writeOverlay = (patch, reason) => {
+    /* snapshot() returns null for a file that does not exist yet, so on a
+     * fresh $DSH_HOME the very first overlay edit would record no revision and
+     * the panel's rollback list would stay empty. Seed an empty state first so
+     * that edit has a baseline to roll back to. writeState merges and is a
+     * no-op beyond `updatedAt`, so this cannot drop anything. */
+    if (!fs.existsSync(statePath())) writeState({})
     snapshot(statePath(), reason)
     writeState(patch)
   }

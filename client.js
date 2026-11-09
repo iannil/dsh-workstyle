@@ -159,6 +159,7 @@ window.__ModuleLoader__.load({
       presetAddedNotice: '已加入当前预设',
       sourcePrefix: '来源：',
       sourceBuiltin: '本地内置',
+      sourceLocal: '本机自建',
       rulesUnit: '条规则',
       skillsUnit: '个技能',
       readonly: '只读',
@@ -452,6 +453,7 @@ window.__ModuleLoader__.load({
       presetAddedNotice: 'Added to the current preset',
       sourcePrefix: 'Source: ',
       sourceBuiltin: 'bundled',
+      sourceLocal: 'local',
       rulesUnit: 'rules',
       skillsUnit: 'skills',
       readonly: 'read-only',
@@ -1882,6 +1884,13 @@ window.__ModuleLoader__.load({
         return list.find((pack) => pack.id === id) || null
       }
 
+      /* The same root that decides writability decides the source label: a
+         pack under the host's workstyle/packs root is one this machine built,
+         everything else is a bundled reference pack. */
+      const packSourceLabel = (pack) => (pack && pack.source)
+        ? pack.source
+        : (packWritable(pack) ? t('sourceLocal') : t('sourceBuiltin'))
+
       const sendPackAction = (body, message) => {
         setBusy('pack'); setError(''); setNotice('')
         return postJson('pack', body)
@@ -3222,7 +3231,7 @@ window.__ModuleLoader__.load({
               h('span', { style: S.ruleTitle }, pack.displayName || pack.name || pack.id),
               pack.id === active.id ? h('span', { style: S.badge }, t('packActiveBadge')) : null),
             h('span', { style: S.mono }, pack.id + ' · v' + pack.version),
-            h('span', { style: S.ruleSideText }, t('sourcePrefix') + (pack.source || t('sourceBuiltin')) + ' · ' + (pack.ruleCount || 0) + ' ' + t('rulesUnit') + ' · ' + (pack.skillCount || 0) + ' ' + t('skillsUnit')),
+            h('span', { style: S.ruleSideText }, t('sourcePrefix') + packSourceLabel(pack) + ' · ' + (pack.ruleCount || 0) + ' ' + t('rulesUnit') + ' · ' + (pack.skillCount || 0) + ' ' + t('skillsUnit')),
             pack.id === active.id ? h('span', { style: S.hint }, t('packActiveNow')) : h('span', { style: S.hint }, t('packViewable'))))),
         /* Trash is a host listing, not this session's memory: the pack list
            page shows it whenever the route is open, including an empty state,
@@ -3281,7 +3290,7 @@ window.__ModuleLoader__.load({
                   selectedIsActive ? h('span', { style: S.badge }, t('packActiveBadge')) : h('span', { style: S.mutedBadge }, t('packInactiveBadge'))),
                 h('span', { style: S.sectionRight },
                   h('span', { style: S.mono }, selectedPack.id + ' · v' + selectedPack.version),
-                  h('span', null, t('sourcePrefix') + (selectedPack.source || t('sourceBuiltin')) + ' · ' + selectedPack.ruleCount + ' ' + t('rulesUnit') + ' · ' + selectedPack.skillCount + ' ' + t('skillsUnit')))),
+                  h('span', null, t('sourcePrefix') + packSourceLabel(packSummaryOf(selectedPack.id) || selectedPack) + ' · ' + selectedPack.ruleCount + ' ' + t('rulesUnit') + ' · ' + selectedPack.skillCount + ' ' + t('skillsUnit')))),
               (() => {
                 const summary = packSummaryOf(selectedPack.id) || selectedPack
                 const writable = packWritable(summary)

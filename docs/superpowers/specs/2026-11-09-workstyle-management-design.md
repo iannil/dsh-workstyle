@@ -177,3 +177,12 @@ restore(revisionId)
 - 新增：`lib/manage.js`（写入层 + 快照 + revisions）。
 - 修改：`index.js`（`/rule` `/preset` `/pack` `/revisions` 路由、`refreshPacks`、status/scope 元数据）、`lib/scope.js`（预设过滤 + 可见性原因）、`lib/export.js`（合并覆盖层、导出 presets/templates）、`client.js`（包 / 规则 / 预设三页与回滚区）、`docs/USAGE.md`（新概念与行为变更）、`README.md`（管理能力一句话）。
 - 测试：`test/smoke.mjs` 扩展；必要时新增 `test/manage.mjs`。
+
+## 实现状态（2026-11-09）
+
+本节记录上面哪些条目没有落地、以及为什么，避免下一位读者把设想当成约束验收。正文决定保持原样，不在此修改。
+
+- **§10「撤销上一次」**：未实现。回滚统一走 `#/distribute` 的「修订历史」：列快照 id、一键恢复，回滚本身也会留下一条新快照，可反向回去。编辑弹层不另设入口，避免两套撤销语义。
+- **§10「补丁失效」清理**：未实现。patch 指向已不存在的规则 id 时不会被应用（组装只认当前规则 id），但面板既不标「补丁失效」也不提供清理按钮；悬空 patch 留在 `state.json` 里，等包升级换回该 id，或由用户直接改覆盖层。风险低：它不注入任何文本。
+- **§11 导入拒绝符号链接与 `..`**：未实现。`POST /pack {action: 'import'}` 目前只校验「绝对路径且是存在的目录、含 `workstyle.json`/`workstyle.yaml`、id 不冲突、不复制进自身子目录」，随后整目录复制；没有 `realpath` 越界检查，也没有跳过符号链接。留待后续版本补上或改成显式确认的安全导入。
+- 其余条目（§12 的 1–8 项）已实现并有断言，证据见 `test/smoke.mjs`、`test/panel-render.mjs` 与 `.superpowers/sdd/2026-11-09-workstyle-management/review-final.md`。

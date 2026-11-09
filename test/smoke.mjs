@@ -1587,6 +1587,7 @@ ok(badJsonBody.status === 400 && typeof badJsonData.error === 'string', 'a malfo
 console.log('state rollback:')
 await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
 const pristineRule = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
+const beforePatchFingerprint = (await callRoute('/api/dsh-workstyle/inject')).data.fingerprint
 const patchBefore = await callRoute('/api/dsh-workstyle/rule', {
   method: 'POST',
   body: { target: 'pack', rule: { id: 'plan-first', title: '回滚前标题', text: '回滚前正文。' } },
@@ -1600,12 +1601,13 @@ ok((await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 
   'the active pack moves to smoke-pack before the rollback')
 
 const stateRevs = await callRoute('/api/dsh-workstyle/revisions?file=' + encodeURIComponent(stateFilePath))
-ok(stateRevs.status === 200 && stateRevs.data.revisions.length > 0, 'state.json has revisions')
 /* Newest first: this is the snapshot the patch took before it overwrote
  * state.json, so replaying it drops the patch and restores the fde-engineering
- * active pack at that moment. */
-const patchRev = stateRevs.data.revisions.find((rev) => rev.reason === 'rule-patch:plan-first')
-ok(!!patchRev, 'the rule patch left a state.json revision behind')
+ * active pack at that moment. Asserting the exact row (not just "some
+ * revisions exist") is what makes a missing pre-write snapshot go red. */
+const patchRev = stateRevs.data.revisions[0]
+ok(stateRevs.status === 200 && !!patchRev && patchRev.reason === 'rule-patch:plan-first',
+  'revisions[0] of state.json is the snapshot this rule patch took before writing')
 const rollback = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'restore', id: patchRev.id } })
 ok(rollback.status === 200 && rollback.data.restored.file === stateFilePath, 'restoring a state.json revision succeeds')
 ok(rollback.data.status && rollback.data.status.activePackId === 'fde-engineering',
@@ -1613,8 +1615,61 @@ ok(rollback.data.status && rollback.data.status.activePackId === 'fde-engineerin
 const afterRollback = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
 ok(afterRollback.title === pristineRule.title && afterRollback.text === pristineRule.text,
   '/scope serves the pre-patch rule text again')
+ok((await callRoute('/api/dsh-workstyle/inject')).data.fingerprint === beforePatchFingerprint,
+  'rolling back the patch returns the fingerprint the prompt had before it')
 ok((await callRoute('/api/dsh-workstyle/status')).data.activePackId === 'fde-engineering',
   '/status names the pack the restored state points at')
+
+/* ---- the first overlay edit on a virgin $DSH_HOME is undoable ----
+ * The README promises "edit a bundled rule, then roll it back". On a fresh
+ * install state.json does not exist yet, so the pre-write snapshot must be
+ * taken against a seeded file, not skipped. This needs its own throwaway home:
+ * the shared fixture above has been written many times and cannot show it. */
+
+console.log('virgin home rollback:')
+const virginHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-virgin-'))
+const virginStateFile = path.join(virginHome, 'workstyle', 'state.json')
+const warmHome = process.env.DSH_HOME
+try {
+  process.env.DSH_HOME = virginHome
+  ok(!fs.existsSync(virginStateFile), 'a fresh DSH_HOME starts without state.json')
+  const virginFirstFingerprint = (await callRoute('/api/dsh-workstyle/inject')).data.fingerprint
+  const firstOverlayEdit = await callRoute('/api/dsh-workstyle/rule', {
+    method: 'POST',
+    body: { target: 'overlay', packId: 'fde-engineering', rule: { id: 'plan-first', title: '首次改写', text: '首次改写的正文。' } },
+  })
+  ok(firstOverlayEdit.status === 200 && fs.existsSync(virginStateFile),
+    'the first overlay edit on a fresh home writes state.json')
+  const revsAfterFirst = await callRoute('/api/dsh-workstyle/revisions?file=' + encodeURIComponent(virginStateFile))
+  ok(revsAfterFirst.status === 200 && revsAfterFirst.data.revisions.length === 1
+    && revsAfterFirst.data.revisions[0].reason === 'rule-patch:plan-first',
+  'the first overlay edit on a fresh home records a rollback revision')
+  const firstOverlayFingerprint = (await callRoute('/api/dsh-workstyle/inject')).data.fingerprint
+  ok(firstOverlayFingerprint !== virginFirstFingerprint,
+    'the first overlay edit changes the injected fingerprint')
+
+  const secondOverlayEdit = await callRoute('/api/dsh-workstyle/rule', {
+    method: 'POST',
+    body: { target: 'overlay', packId: 'fde-engineering', rule: { id: 'plan-first', title: '第二次改写', text: '第二次改写的正文。' } },
+  })
+  ok(secondOverlayEdit.status === 200, 'the second overlay edit on a fresh home lands')
+  const revsAfterSecond = await callRoute('/api/dsh-workstyle/revisions?file=' + encodeURIComponent(virginStateFile))
+  ok(revsAfterSecond.data.revisions.length === 2,
+    'two overlay edits on a fresh home leave exactly two state.json revisions')
+  const oldestVirginRev = revsAfterSecond.data.revisions[revsAfterSecond.data.revisions.length - 1]
+  ok(oldestVirginRev.reason === 'rule-patch:plan-first' && oldestVirginRev.id !== revsAfterSecond.data.revisions[0].id,
+    'the oldest revision is the snapshot taken before the first edit')
+  const virginRollback = await callRoute('/api/dsh-workstyle/revisions', {
+    method: 'POST', body: { action: 'restore', id: oldestVirginRev.id },
+  })
+  ok(virginRollback.status === 200 && virginRollback.data.restored.file === virginStateFile,
+    'restoring the oldest revision of a fresh home succeeds')
+  const virginAfterRollback = (await callRoute('/api/dsh-workstyle/inject')).data
+  ok(virginAfterRollback.fingerprint === virginFirstFingerprint,
+    'restoring the oldest revision returns the pre-first-edit fingerprint')
+} finally {
+  process.env.DSH_HOME = warmHome
+}
 
 /* ---- a snapshot that vanished is data damage, not a client error ---- */
 
@@ -1694,6 +1749,7 @@ await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: '
 
 
 fs.rmSync(home, { recursive: true, force: true })
+fs.rmSync(virginHome, { recursive: true, force: true })
 fs.rmSync(extract, { recursive: true, force: true })
 fs.rmSync(scopedExtract, { recursive: true, force: true })
 fs.rmSync(exportExtract, { recursive: true, force: true })
