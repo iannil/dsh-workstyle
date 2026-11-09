@@ -120,7 +120,7 @@ window.__ModuleLoader__.load({
       tabPacks: '工作方式包',
       pageMetrics: '指标与运行',
       pageDistribute: '分发',
-      pagePackDetail: '状态轨',
+      pagePackDetail: '工作包',
       tabDistill: '蒸馏',
       tabMetrics: '度量台',
       tabDistribute: '分发',
@@ -183,7 +183,7 @@ window.__ModuleLoader__.load({
       quickEditRules: '编辑规则',
       quickLoadPreview: '载入预览',
       quickDistill: '蒸馏一次',
-      navRail: '状态轨',
+      navRail: '工作包',
       navRules: '规则',
       navPresets: '预设',
       navSkills: '技能',
@@ -356,7 +356,7 @@ window.__ModuleLoader__.load({
       tabPacks: 'Workstyle packs',
       pageMetrics: 'Metrics & run',
       pageDistribute: 'Distribute',
-      pagePackDetail: 'Status rail',
+      pagePackDetail: 'Work package',
       tabDistill: 'Distill',
       tabMetrics: 'Metrics',
       tabDistribute: 'Distribute',
@@ -419,7 +419,7 @@ window.__ModuleLoader__.load({
       quickEditRules: 'Edit rules',
       quickLoadPreview: 'Load preview',
       quickDistill: 'Distill now',
-      navRail: 'Status rail',
+      navRail: 'Work packages',
       navRules: 'Rules',
       navPresets: 'Presets',
       navSkills: 'Skills',
@@ -639,6 +639,12 @@ window.__ModuleLoader__.load({
         display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0,
         border: '1px solid ' + T.border, borderRadius: 10, padding: '14px 16px',
         background: 'var(--dsw-alias-bg-layer-2)',
+      },
+      statCardLink: {
+        display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0,
+        border: '1px solid ' + T.border, borderRadius: 10, padding: '14px 16px',
+        background: 'var(--dsw-alias-bg-layer-2)',
+        color: 'inherit', textDecoration: 'none', cursor: 'pointer',
       },
       statGrid: {
         display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))', gap: 10,
@@ -1132,6 +1138,11 @@ window.__ModuleLoader__.load({
       #dsw-root input[type="checkbox"]:disabled { opacity: .45; cursor: default; }
       #dsw-root .dsw-row { transition: background-color .12s ease; }
       #dsw-root .dsw-row:hover { background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, transparent); }
+      #dsw-root .dsw-stat-card { transition: background-color .12s ease, border-color .12s ease; }
+      #dsw-root .dsw-stat-card:hover {
+        background: color-mix(in srgb, var(--dsw-alias-label-primary) 5%, var(--dsw-alias-bg-layer-2));
+        border-color: color-mix(in srgb, var(--dsw-alias-label-primary) 22%, transparent);
+      }
       #dsw-review, #dsw-rules, #dsw-skills, #dsw-distribution, #dsw-evidence { scroll-margin-top: 16px; }
       @media (prefers-reduced-motion: reduce) {
         #dsw-root *, #dsw-root *::before, #dsw-root *::after { transition: none !important; }
@@ -1151,10 +1162,20 @@ window.__ModuleLoader__.load({
     }
 
     function Card(props) {
-      const { value, label, tone } = props
-      return h('div', { style: S.card },
-        label ? h('span', { style: S.cardLabel }, label) : null,
-        h('span', { style: S.cardValue(tone) }, String(value)))
+      const { value, label, tone, href, onClick, title } = props
+      const labelNode = label ? h('span', { style: S.cardLabel }, label) : null
+      const valueNode = h('span', { style: S.cardValue(tone) }, String(value))
+      if (!href && !onClick) return h('div', { style: S.card }, labelNode, valueNode)
+      return h('a', {
+        href: href || '#',
+        className: 'dsw-stat-card',
+        title: title || label || undefined,
+        style: S.statCardLink,
+        onClick: (event) => {
+          if (event && event.preventDefault) event.preventDefault()
+          if (onClick) onClick()
+        },
+      }, labelNode, valueNode)
     }
 
     function Chip(props) {
@@ -2705,9 +2726,9 @@ window.__ModuleLoader__.load({
             action: h('button', { type: 'button', style: S.smallButton, onClick: () => navigate({ page: 'pack' }) }, t('packSwitch') + ' ▾'),
           }),
           h('div', { style: S.statGrid },
-            Card({ value: rules.length, label: t('statRules') }),
-            Card({ value: suggestions.length, label: t('statSuggestions'), tone: suggestions.length > 0 ? 'danger' : undefined }),
-            Card({ value: scopedSkills.length, label: t('statSkills') })),
+            Card({ value: rules.length, label: t('statRules'), href: routeHash('rules'), onClick: () => navigate({ page: 'rules' }) }),
+            Card({ value: pendingCount, label: t('statSuggestions'), tone: pendingCount > 0 ? 'danger' : undefined, href: routeHash('distill'), onClick: () => navigate({ page: 'distill' }) }),
+            Card({ value: scopedSkills.length, label: t('statSkills'), href: routeHash('skills'), onClick: () => navigate({ page: 'skills' }) })),
           h('div', { role: 'group', 'aria-label': t('quickActions'), style: { display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'center' } },
             h('span', { style: S.sectionLabel }, t('quickActions')),
             h('button', { type: 'button', style: S.linkButton, onClick: () => navigate({ page: 'rules' }) }, t('quickEditRules')),

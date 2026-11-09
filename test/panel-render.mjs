@@ -549,6 +549,7 @@ let text = textOf(view)
 ok(text.includes('运行台'), 'default legacy #/run route renders metrics page with the run console')
 ok(!!findHost(view, (node) => node.type === 'nav' && node.props && node.props['aria-label']), 'primary navigation is semantic with aria-label')
 ok(!!findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/overview'), 'overview link uses a stable route')
+ok(text.includes('工作包') && !text.includes('状态轨'), 'pack navigation uses the work-package label')
 
 const metricsLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
 ok(!!metricsLink, 'metrics link uses a stable route')
@@ -560,6 +561,14 @@ const overviewLink = findHost(view, (node) => node.type === 'a' && node.props &&
 view = await act(() => overviewLink.props.onClick({ preventDefault() {} }))
 text = textOf(view)
 ok(text.includes('概览'), 'navigation returns to the overview page')
+const suggestionCard = findHost(view, (node) => node.type === 'a' && node.props
+  && node.props.href === '#/distill' && node.props.className === 'dsw-stat-card')
+ok(!!suggestionCard, 'overview pending-suggestions stat is a link')
+ok(textOf(suggestionCard).includes('待审查建议') && textOf(suggestionCard).includes('1'),
+  'pending-suggestions stat shows the pending count')
+view = await act(() => suggestionCard.props.onClick({ preventDefault() {} }))
+text = textOf(view)
+ok(text.includes('建议审阅') && text.includes('中文短句'), 'suggestion stat opens the distill review queue')
 const metricsBackLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/metrics')
 view = await act(() => metricsBackLink.props.onClick({ preventDefault() {} }))
 text = textOf(view)
