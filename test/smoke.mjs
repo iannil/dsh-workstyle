@@ -455,6 +455,40 @@ ok(realPack && Array.isArray(realPack.presets) && realPack.presets.length === 3,
 ok(realPack && Array.isArray(realPack.templates) && realPack.templates.length === 3,
   'the reference pack ships its templates')
 
+/* ---------------- preset whitelist, removals, blocked presets ---------------- */
+
+const whitelistSave = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'save', preset: { id: 'smoke-slice', title: '情境切片', rules: ['plan-first'], skills: [], templates: [] } },
+})
+ok(whitelistSave.status === 200, 'preset save accepts a rule whitelist')
+
+const useWhitelist = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'use', preset: 'smoke-slice', cwd: projectDir },
+})
+ok(useWhitelist.status === 200, 'whitelist preset can be selected')
+
+const sliced = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir))
+const slicedRules = sliced.data.rules
+ok(slicedRules.find((rule) => rule.id === 'plan-first').enabled === true, 'whitelisted rule is injected')
+ok(slicedRules.filter((rule) => rule.id !== 'plan-first').every((rule) => rule.outsidePreset === 'smoke-slice' || rule.disabledBy),
+  'every other rule names the preset that excluded it')
+ok(sliced.data.activePreset && sliced.data.activePreset.id === 'smoke-slice', 'activePreset is reported')
+
+const slicedInject = await callRoute('/api/dsh-workstyle/inject?cwd=' + encodeURIComponent(projectDir))
+ok(slicedInject.data.counts.injected === 1, 'only the whitelisted rule reaches the prompt')
+
+/* session force-enable pulls an excluded rule back in */
+await callRoute('/api/dsh-workstyle/scope', {
+  method: 'POST',
+  body: { layer: 'session', sessionId: 'smoke-slice-session', patch: { enabledRules: ['smoke-plan'] } },
+})
+const forcedBack = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir) + '&session=smoke-slice-session')
+ok(forcedBack.data.rules.find((rule) => rule.id === 'smoke-plan').enabled === true, 'session force-enable beats the preset whitelist')
+
+await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'use', preset: 'smoke-slice', cwd: projectDir } })
+
 /* ------------------------------- cleanup ------------------------------- */
 
 
