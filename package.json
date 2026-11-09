@@ -1,6 +1,6 @@
 {
   "name": "dsh-workstyle",
-  "version": "0.1.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "Work style as code: ship a reviewable, versioned working style (rules + skills + presets) that any teammate can install.",
   "license": "MIT",
@@ -14,7 +14,7 @@
     "index.js",
     "client.js",
     "lib/",
-    "pack/",
+    "market/packs/",
     "locale/",
     "icon.svg",
     "cordis.patch.yml",
@@ -45,6 +45,12 @@
   "scripts": {
     "test": "node test/smoke.mjs",
     "test:panel": "node test/panel-render.mjs",
-    "test:all": "node test/smoke.mjs && node test/panel-render.mjs"
+    "test:market": "node test/market.mjs",
+    "test:all": "node test/smoke.mjs && node test/panel-render.mjs && node test/multipage-render.mjs && node test/manage.mjs && node test/market.mjs && node test/bootstrap.mjs",
+    "market:build": "node scripts/build-market.mjs --write",
+    "market:check": "node scripts/build-market.mjs --check",
+    "test:bootstrap": "node test/bootstrap.mjs",
+    "test:multipage": "node test/multipage-render.mjs",
+    "test:manage": "node test/manage.mjs"
   }
 }

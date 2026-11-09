@@ -214,6 +214,35 @@ window.__ModuleLoader__.load({
       navDistill: '蒸馏审查',
       navMetrics: '指标与运行',
       navDistribute: '分发',
+      navMarket: '市场',
+      marketLoading: '正在读取市场…',
+      marketEmpty: '市场里还没有包',
+      marketEmptyHint: '市场是公开只读的。向 dsh-workstyle 仓库提交 PR 即可分享自己的包；CI 负责构建归档并校验 sha256。',
+      marketStale: '离线：显示上次缓存的市场目录',
+      marketSearch: '搜索名称、作者或 id',
+      marketBuiltin: '内置',
+      marketInstalled: '已安装',
+      marketInstall: '安装',
+      marketUpdateBadge: '可更新',
+      marketUpdate: '更新',
+      marketUpdated: '已更新',
+      marketUpToDate: '已是最新版本',
+      marketPreviewing: '读取预览…',
+      marketConfirming: '安装中…',
+      marketInstallHint: '安装或更新前会下载归档并核对 sha256；确认后才会写入本机。更新会把旧包移到回收站。',
+      marketBuiltinHint: '内置包随插件分发，不能从市场覆盖。',
+      marketInstalledHint: '已安装；有新版本时会显示「更新」。',
+      marketPreviewTitle: '安装预览',
+      marketConfirm: '确认安装',
+      marketRules: '规则',
+      marketSkills: '技能',
+      marketAuthor: '作者',
+      marketLicense: '许可',
+      marketVersion: '版本',
+      marketRulesTitle: '规则（仅名称）',
+      marketSkillsTitle: '技能',
+      marketConflictNote: '同名包已存在，确认后会先移到回收站再写入新版本。',
+      marketRefresh: '刷新市场',
       navGroupState: '状态',
       navGroupContent: '内容',
       navGroupMaintain: '维护',
@@ -298,6 +327,35 @@ window.__ModuleLoader__.load({
       distributionTitle: '分发',
       exportWithScope: '导出包 + 作用域快照',
       exportPackOnly: '导出包（仅包）',
+      shareTitle: '分享这个包',
+      shareHint: '把 tar.gz 文件和 sha256 一起发给同事；对方可在「导入包」里选择文件，或运行 /workstyle import <文件> 校验后安装。插件不托管、不上传。',
+      downloadArchive: '下载 tar.gz',
+      copyShare: '复制分享信息',
+      shareTextPack: '工作方式包',
+      shareTextInstall: '安装：/workstyle import <tar.gz 路径> --yes',
+      shareShaLabel: 'sha256',
+      importShareOpen: '导入分享链接',
+      importSourceDir: '包目录',
+      importSourceFile: '归档文件',
+      importSourceUrl: '分享链接',
+      importArchivePick: '选择 .tar.gz',
+      importArchiveNone: '尚未选择归档',
+      importUrlLabel: '分享链接（含 #sha256=…）',
+      importPreview: '预览',
+      importPreviewing: '预览中…',
+      importPreviewTitle: '安装前确认',
+      importPreviewHint: '核对这些内容后再安装；安装后的规则会进入系统提示。',
+      importApplyOnly: '仅导入',
+      importApplyAndUse: '导入并应用',
+      importReplace: '覆盖已存在',
+      importAsLabel: '另存为 id',
+      importAsButton: '另存为',
+      importConflict: '已存在同 id 的包',
+      importBundledConflict: '内置包同 id 不可覆盖；请另存为新 id。',
+      importPreviewExpired: '预览已过期，请重新预览。',
+      importDone: '已导入',
+      importSourceLabel: '来源',
+      importRulesSkills: '规则 / 技能',
       todoDistill: '蒸馏建议待审',
       todoEvidence: '规则缺证据',
       todoConflict: '作用域冲突',
@@ -508,6 +566,35 @@ window.__ModuleLoader__.load({
       navDistill: 'Distill review',
       navMetrics: 'Metrics & run',
       navDistribute: 'Distribute',
+      navMarket: 'Market',
+      marketLoading: 'Reading the marketplace…',
+      marketEmpty: 'No packs in the marketplace yet',
+      marketEmptyHint: 'The marketplace is public and read-only. Open a PR against dsh-workstyle to share a pack; CI builds the archive and verifies its sha256.',
+      marketStale: 'Offline: showing the last cached catalog',
+      marketSearch: 'Search name, author or id',
+      marketBuiltin: 'Built-in',
+      marketInstalled: 'Installed',
+      marketInstall: 'Install',
+      marketUpdateBadge: 'Update available',
+      marketUpdate: 'Update',
+      marketUpdated: 'Updated',
+      marketUpToDate: 'Up to date',
+      marketPreviewing: 'Reading preview…',
+      marketConfirming: 'Installing…',
+      marketInstallHint: 'The archive is downloaded and its sha256 checked before anything is written. Updating moves the old pack to trash after confirmation.',
+      marketBuiltinHint: 'Built-in packs ship with the plugin and cannot be replaced from the market.',
+      marketInstalledHint: 'Installed. A newer version shows an Update button.',
+      marketPreviewTitle: 'Install preview',
+      marketConfirm: 'Confirm install',
+      marketRules: 'rules',
+      marketSkills: 'skills',
+      marketAuthor: 'Author',
+      marketLicense: 'License',
+      marketVersion: 'Version',
+      marketRulesTitle: 'Rules (names only)',
+      marketSkillsTitle: 'Skills',
+      marketConflictNote: 'A pack with this id already exists; confirming moves it to trash before writing the new version.',
+      marketRefresh: 'Refresh market',
       navGroupState: 'Status',
       navGroupContent: 'Content',
       navGroupMaintain: 'Maintain',
@@ -592,6 +679,35 @@ window.__ModuleLoader__.load({
       distributionTitle: 'Distribute',
       exportWithScope: 'Export pack + scope snapshot',
       exportPackOnly: 'Export pack only',
+      shareTitle: 'Share this pack',
+      shareHint: 'Send the tar.gz and its sha256 together; the recipient can pick the file under "Import pack" or run /workstyle import <file> to verify and install. Nothing is hosted or uploaded.',
+      downloadArchive: 'Download tar.gz',
+      copyShare: 'Copy share info',
+      shareTextPack: 'workstyle pack',
+      shareTextInstall: 'Install: /workstyle import <archive> --yes',
+      shareShaLabel: 'sha256',
+      importShareOpen: 'Import share link',
+      importSourceDir: 'Pack directory',
+      importSourceFile: 'Archive file',
+      importSourceUrl: 'Share link',
+      importArchivePick: 'Choose .tar.gz',
+      importArchiveNone: 'No archive selected',
+      importUrlLabel: 'Share link (with #sha256=…)',
+      importPreview: 'Preview',
+      importPreviewing: 'Previewing…',
+      importPreviewTitle: 'Confirm before installing',
+      importPreviewHint: 'Check these details before installing; installed rules enter the system prompt.',
+      importApplyOnly: 'Import only',
+      importApplyAndUse: 'Import and use',
+      importReplace: 'Replace existing',
+      importAsLabel: 'Save as id',
+      importAsButton: 'Save as',
+      importConflict: 'A pack with this id already exists',
+      importBundledConflict: 'A bundled pack cannot be replaced; save under a new id.',
+      importPreviewExpired: 'This preview expired; preview again.',
+      importDone: 'Imported',
+      importSourceLabel: 'Source',
+      importRulesSkills: 'Rules / skills',
       todoDistill: 'suggestions to review',
       todoEvidence: 'rules without evidence',
       todoConflict: 'scope conflicts',
@@ -1345,7 +1461,7 @@ window.__ModuleLoader__.load({
 
     /* Grouped sidebar IA: three groups, labels via t(), selection via T.sel. */
     const NAV_GROUPS = [
-      ['navGroupState', [['overview', 'navOverview'], ['pack', 'navRail']]],
+      ['navGroupState', [['overview', 'navOverview'], ['pack', 'navRail'], ['market', 'navMarket']]],
       ['navGroupContent', [['rules', 'navRules'], ['presets', 'navPresets'], ['skills', 'navSkills']]],
       ['navGroupMaintain', [['distill', 'navDistill'], ['metrics', 'navMetrics'], ['distribute', 'navDistribute']]],
     ]
@@ -1449,6 +1565,16 @@ window.__ModuleLoader__.load({
       const [packTrash, setPackTrash] = React.useState([])
       const [packTrashError, setPackTrashError] = React.useState('')
       const [packTrashReload, setPackTrashReload] = React.useState(0)
+      /* Marketplace: the public catalog, the selected entry and the two-step
+         install (preview → confirm). Nothing is written before confirm. */
+      const [market, setMarket] = React.useState(null)
+      const [marketError, setMarketError] = React.useState('')
+      const [marketReload, setMarketReload] = React.useState(0)
+      const [marketQuery, setMarketQuery] = React.useState('')
+      const [marketSelected, setMarketSelected] = React.useState('')
+      const [marketPreview, setMarketPreview] = React.useState(null)
+      const [marketPreviewError, setMarketPreviewError] = React.useState('')
+      const [marketBusy, setMarketBusy] = React.useState('')
       const [revisions, setRevisions] = React.useState([])
       const [revisionsError, setRevisionsError] = React.useState('')
       const [revisionsReload, setRevisionsReload] = React.useState(0)
@@ -1495,7 +1621,7 @@ window.__ModuleLoader__.load({
         envContextRef.current = { query: envQuery, loadedQuery: null }
       }
 
-      const ROUTES = new Set(['overview', 'pack', 'rules', 'presets', 'skills', 'distill', 'metrics', 'distribute'])
+      const ROUTES = new Set(['overview', 'pack', 'rules', 'presets', 'skills', 'distill', 'metrics', 'distribute', 'market'])
       /* Legacy hash values keep working: run folded into metrics, packs
          folded into overview (deep pack links keep landing on the pack page). */
       const LEGACY_ROUTES = { run: 'metrics', packs: 'overview' }
@@ -1513,6 +1639,23 @@ window.__ModuleLoader__.load({
           ? (page === 'packs' && packId ? 'pack' : LEGACY_ROUTES[page])
           : page
         return '#/' + canonical + (packId ? '/' + encodeURIComponent(packId) : '')
+      }
+
+      /* A route the host never registered answers a plain-text 404 ("not
+         found"). Report that as an HTTP failure instead of letting JSON.parse
+         throw `Unexpected token 'o', "not found" is not valid JSON`, which the
+         banner showed verbatim with no hint that the route was missing. */
+      const readJson = (response) => {
+        const copy = typeof response.clone === 'function' ? response.clone() : null
+        return response.json().catch(async (parseError) => {
+          let detail = ''
+          try {
+            if (copy) detail = (await copy.text()).trim().slice(0, 200)
+          } catch (err) { /* body already consumed */ }
+          const status = response.status ? 'HTTP ' + response.status + ' ' : ''
+          const fallback = String(parseError && parseError.message ? parseError.message : parseError)
+          throw new Error((status + (detail || fallback)).trim())
+        })
       }
 
       const getJson = (path) => fetch('/api/dsh-workstyle/' + path, { headers: { accept: 'application/json' } })
@@ -1611,6 +1754,35 @@ window.__ModuleLoader__.load({
         })
         return () => { cancelled = true }
       }, [route, packTrashReload])
+
+      /* Marketplace: the host answers 200 with stale:true when GitHub is
+         unreachable, so an offline panel lists the last cached catalog instead
+         of an error. Re-entering the page re-reads it. */
+      React.useEffect(() => {
+        if (route.page !== 'market') return undefined
+        let cancelled = false
+        setMarketError('')
+        getJson('market').then((result) => {
+          if (cancelled) return
+          if (!result.ok || !result.data || !Array.isArray(result.data.packs)) {
+            setMarket(null)
+            setMarketError(result.error || (result.data && result.data.error) || 'market unavailable')
+            return
+          }
+          setMarket(result.data)
+        })
+        return () => { cancelled = true }
+      }, [route.page, marketReload])
+
+      /* Selection and the install preview belong to the market page: leaving
+         it drops both so a confirm can never apply to a pack the user is no
+         longer looking at. */
+      React.useEffect(() => {
+        if (route.page === 'market') return
+        setMarketSelected('')
+        setMarketPreview(null)
+        setMarketPreviewError('')
+      }, [route.page])
 
       /* Revision history is local state only: it is read from the host when the
          distribution page is open, and re-read after a rollback so the rows
@@ -1739,7 +1911,7 @@ window.__ModuleLoader__.load({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body || {}),
-      }).then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+      }).then((response) => readJson(response).then((data) => ({ ok: response.ok, data })))
 
       const scrollTo = (id) => {
         try {
@@ -1884,7 +2056,7 @@ window.__ModuleLoader__.load({
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(body || {}),
-      }).then((response) => response.json().then((data) => ({ ok: response.ok, data })))
+      }).then((response) => readJson(response).then((data) => ({ ok: response.ok, data })))
 
       const requireCurrentContext = () => {
         if (envContextRef.current.loadedQuery === envQuery) return true
@@ -1897,7 +2069,7 @@ window.__ModuleLoader__.load({
       /* The detail route carries no dir, so writability is read from the
          status summary. Only a pack under the host's workstyle/packs root can
          be renamed or deleted in place; bundled packs stay read-only. */
-      const packWritable = (pack) => /(^|[\\/])workstyle[\\/]packs[\\/]/.test((pack && pack.dir) || '')
+      const packWritable = (pack) => !(pack && pack.market) && /(^|[\\/])workstyle[\\/]packs[\\/]/.test((pack && pack.dir) || '')
 
       const packSummaryOf = (id) => {
         const list = status && Array.isArray(status.packs) ? status.packs : []
@@ -1981,6 +2153,155 @@ window.__ModuleLoader__.load({
           if (saved) setPackEditing(null)
           return saved
         })
+      }
+
+      /* Import previews and installs are two steps on purpose: the archive
+         decides what the agent reads every turn, so the panel shows the
+         manifest and digest first and only then posts confirm:true. */
+      const newImportDraft = () => ({
+        mode: 'import', source: 'dir', path: '', url: '', fileName: '', fileData: '',
+        preview: null, previewError: '', applyAs: '',
+      })
+
+      const fileToBase64 = (file) => new Promise((resolve, reject) => {
+        if (!file || typeof file.arrayBuffer !== 'function') {
+          reject(new Error('file input is unavailable in this browser'))
+          return
+        }
+        file.arrayBuffer().then((buffer) => {
+          const bytes = new Uint8Array(buffer)
+          let binary = ''
+          for (let i = 0; i < bytes.length; i += 0x8000) {
+            binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000))
+          }
+          resolve(typeof btoa === 'function' ? btoa(binary) : Buffer.from(bytes).toString('base64'))
+        }).catch(reject)
+      })
+
+      const onPickImportFile = (file) => {
+        if (!file) return
+        setError('')
+        fileToBase64(file)
+          .then((data) => setPackEditing((prev) => (prev ? {
+            ...prev, fileName: file.name || 'pack.tar.gz', fileData: data, preview: null, previewError: '',
+          } : prev)))
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+      }
+
+      const onPreviewImport = (draft) => {
+        if (!packEditing || busy === 'pack') return Promise.resolve()
+        const source = draft.source || 'dir'
+        if (source === 'dir') return onSavePack(draft)
+        const body = { action: 'preview' }
+        if (source === 'url') body.url = String(draft.url || '').trim()
+        else {
+          if (!draft.fileData) { setError(t('importArchiveNone')); return Promise.resolve() }
+          body.data = draft.fileData
+          body.name = draft.fileName || 'pack.tar.gz'
+        }
+        setBusy('pack'); setError(''); setNotice('')
+        return postJson('import', body)
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'preview failed')
+            setPackEditing((prev) => (prev ? {
+              ...prev,
+              preview: data,
+              previewError: '',
+              applyAs: data.conflict && !data.conflict.bundled ? data.conflict.id : '',
+            } : prev))
+          })
+          .catch((err) => {
+            const message = String(err && err.message ? err.message : err)
+            setPackEditing((prev) => (prev ? { ...prev, preview: null, previewError: message } : prev))
+          })
+          .finally(() => setBusy(''))
+      }
+
+      const onApplyImport = (draft, options) => {
+        const preview = draft && draft.preview
+        if (!preview || busy === 'pack') return Promise.resolve()
+        const opts = options || {}
+        const body = { action: 'apply', token: preview.token, confirm: true }
+        if (opts.apply === false) body.apply = false
+        const as = String(opts.as || '').trim()
+        if (as) body.as = as
+        if (opts.replace) body.replace = true
+        setBusy('pack'); setError(''); setNotice('')
+        return postJson('import', body)
+          .then(({ ok, data }) => {
+            if (!ok) {
+              if (data && data.conflict) {
+                setPackEditing((prev) => (prev ? {
+                  ...prev,
+                  preview: { ...prev.preview, conflict: data.conflict },
+                  previewError: data.error || t('importConflict'),
+                } : prev))
+                return null
+              }
+              throw new Error(data && data.error ? data.error : 'import failed')
+            }
+            if (data.status) setStatus(data.status)
+            setPackEditing(null)
+            setPackReload((value) => value + 1)
+            setPackTrashReload((value) => value + 1)
+            setNotice(t('importDone') + '：' + data.id)
+            if (data.applied) loadEnv()
+            return data
+          })
+          .catch((err) => setError(String(err && err.message ? err.message : err)))
+          .finally(() => setBusy(''))
+      }
+
+      const onOpenImportShare = () => {
+        setPackEditing({ ...newImportDraft(), source: 'url' })
+        navigate({ page: 'pack' })
+      }
+
+      /* Marketplace install reuses the same two-step import contract: preview
+         first, confirm second. The registry pins sha256, so the share URL
+         carries it in the fragment and the host rejects a swapped asset before
+         extracting anything. */
+      const marketInstallUrl = (entry) => entry.url + '#sha256=' + entry.sha256
+
+      const onMarketInstall = (entry) => {
+        if (!entry || marketBusy) return
+        setMarketBusy('preview')
+        setMarketPreview(null)
+        setMarketPreviewError('')
+        postJson('import', { action: 'preview', url: marketInstallUrl(entry) })
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'preview failed')
+            setMarketPreview(data)
+          })
+          .catch((err) => setMarketPreviewError(String(err && err.message ? err.message : err)))
+          .finally(() => setMarketBusy(''))
+      }
+
+      const onMarketConfirm = () => {
+        const preview = marketPreview
+        if (!preview || marketBusy) return
+        const replace = !!(preview.conflict && preview.conflict.exists && !preview.conflict.bundled)
+        setMarketBusy('install')
+        setMarketPreviewError('')
+        postJson('import', {
+          action: 'apply',
+          token: preview.token,
+          confirm: true,
+          market: true,
+          ...(replace ? { replace: true } : {}),
+        })
+          .then(({ ok, data }) => {
+            if (!ok) throw new Error(data && data.error ? data.error : 'install failed')
+            if (data.status) setStatus(data.status)
+            setMarketPreview(null)
+            setMarketSelected('')
+            setMarketReload((value) => value + 1)
+            setPackReload((value) => value + 1)
+            setNotice(t(data.replaced ? 'marketUpdated' : 'marketInstalled') + '：' + (data.id || preview.pack.id))
+            if (data.applied) loadEnv()
+          })
+          .catch((err) => setMarketPreviewError(String(err && err.message ? err.message : err)))
+          .finally(() => setMarketBusy(''))
       }
 
       const onRestoreRevision = (id) => {
@@ -3206,11 +3527,82 @@ window.__ModuleLoader__.load({
       const packEditorOpen = !!packEditing && (packEditing.mode === 'rename'
         ? route.page === 'pack' && route.packId === packEditing.id
         : route.page === 'pack' && !route.packId)
+
+      const importPreviewCard = (draft) => {
+        const preview = draft.preview
+        const pack = preview.pack || {}
+        const conflict = preview.conflict
+        const source = draft.source || 'dir'
+        return h('div', { style: { ...S.card, width: '100%' } },
+          h('div', { style: S.ruleTitleRow },
+            h('span', { style: S.ruleTitle }, t('importPreviewTitle')),
+            h('span', { style: S.chip }, (pack.id || '—') + ' v' + (pack.version || '—'))),
+          h('div', { style: S.hint }, t('importPreviewHint')),
+          h('div', { style: S.stackSm },
+            h('div', null, pack.displayName || pack.name || pack.id || '—', pack.author ? ' · ' + pack.author : ''),
+            h('div', { style: S.hint }, t('importRulesSkills') + '：' + nf(pack.ruleCount) + ' / ' + nf(pack.skillCount)),
+            h('div', { style: S.hint }, t('importSourceLabel') + '：', h('span', { style: S.mono }, preview.source || '—')),
+            h('div', { style: S.hint }, t('shareShaLabel') + '：',
+              h('span', { style: { ...S.mono, wordBreak: 'break-all' } }, preview.sha256 || '—'))),
+          conflict
+            ? h('div', { style: S.banner('info') },
+              h('div', null, t('importConflict') + '：' + conflict.id),
+              conflict.bundled ? h('div', { style: S.hint }, t('importBundledConflict')) : null)
+            : null,
+          conflict
+            ? h('div', { style: S.fieldRow },
+              h('label', { style: S.field },
+                h('span', { style: S.fieldLabel }, t('importAsLabel')),
+                h('input', {
+                  style: S.input,
+                  value: draft.applyAs || '',
+                  placeholder: 'my-pack-copy',
+                  onChange: (event) => setPackEditing((prev) => (prev ? { ...prev, applyAs: event.target.value } : prev)),
+                })),
+              h('button', {
+                style: busy === 'pack' || !String(draft.applyAs || '').trim() ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+                disabled: busy === 'pack' || !String(draft.applyAs || '').trim(),
+                onClick: () => onApplyImport(draft, { apply: true, as: draft.applyAs }),
+              }, t('importAsButton')))
+            : null,
+          h('div', { style: S.editorActions },
+            conflict
+              ? (conflict.bundled
+                ? null
+                : h('button', {
+                  style: busy === 'pack' ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+                  disabled: busy === 'pack',
+                  onClick: () => onApplyImport(draft, { apply: true, replace: true }),
+                }, t('importReplace')))
+              : h('button', {
+                style: S.smallButton,
+                disabled: busy === 'pack',
+                onClick: () => onApplyImport(draft, { apply: false }),
+              }, t('importApplyOnly')),
+            !conflict
+              ? h('button', {
+                style: busy === 'pack' ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
+                disabled: busy === 'pack',
+                onClick: () => onApplyImport(draft, { apply: true }),
+              }, t('importApplyAndUse'))
+              : null))
+      }
+
       const packEditor = packEditorOpen
         ? h('div', { style: S.editorBox },
-          h('div', { style: S.fieldRow },
-            packEditing.mode === 'import'
-              ? h('label', { style: S.field },
+          packEditing.mode === 'import'
+            ? h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', width: '100%' } },
+              [['dir', t('importSourceDir')], ['file', t('importSourceFile')], ['url', t('importSourceUrl')]].map(([key, label]) =>
+                h('button', {
+                  key,
+                  style: (packEditing.source || 'dir') === key ? S.buttonPrimary : S.smallButton,
+                  disabled: busy === 'pack',
+                  onClick: () => setPackEditing((prev) => (prev ? { ...prev, source: key, preview: null, previewError: '' } : prev)),
+                }, label)))
+            : null,
+          packEditing.mode === 'import'
+            ? ((packEditing.source || 'dir') === 'dir'
+              ? h('label', { style: S.fieldBlock },
                 h('span', { style: S.fieldLabel }, t('packImportPath')),
                 h('input', {
                   style: S.input,
@@ -3218,7 +3610,29 @@ window.__ModuleLoader__.load({
                   placeholder: '/path/to/pack',
                   onChange: (event) => setPackEditing({ ...packEditing, path: event.target.value }),
                 }))
-              : h('label', { style: S.field },
+              : (packEditing.source === 'file'
+                ? h('label', { style: S.fieldBlock },
+                  h('span', { style: S.fieldLabel }, t('importArchivePick')),
+                  h('input', {
+                    type: 'file',
+                    accept: '.tar.gz,application/gzip',
+                    style: S.input,
+                    onChange: (event) => {
+                      const file = event.target.files && event.target.files[0]
+                      if (file) onPickImportFile(file)
+                    },
+                  }),
+                  h('span', { style: S.hint }, packEditing.fileName || t('importArchiveNone')))
+                : h('label', { style: S.fieldBlock },
+                  h('span', { style: S.fieldLabel }, t('importUrlLabel')),
+                  h('input', {
+                    style: S.input,
+                    value: packEditing.url || '',
+                    placeholder: 'https://example.com/pack.tar.gz#sha256=…',
+                    onChange: (event) => setPackEditing({ ...packEditing, url: event.target.value }),
+                  }))))
+            : h('div', { style: S.fieldRow },
+              h('label', { style: S.field },
                 h('span', { style: S.fieldLabel }, t('packIdLabel')),
                 h('input', {
                   style: S.input,
@@ -3227,9 +3641,7 @@ window.__ModuleLoader__.load({
                   placeholder: 'my-pack',
                   onChange: (event) => setPackEditing({ ...packEditing, id: event.target.value }),
                 })),
-            packEditing.mode === 'import'
-              ? null
-              : h('label', { style: S.field },
+              h('label', { style: S.field },
                 h('span', { style: S.fieldLabel }, t('packDisplayNameLabel')),
                 h('input', {
                   style: S.input,
@@ -3237,24 +3649,35 @@ window.__ModuleLoader__.load({
                   placeholder: t('packDisplayNameLabel'),
                   onChange: (event) => setPackEditing({ ...packEditing, displayName: event.target.value }),
                 }))),
+          packEditing.mode === 'import' && packEditing.previewError
+            ? h('div', { style: S.banner('error') }, packEditing.previewError)
+            : null,
+          packEditing.mode === 'import' && packEditing.preview ? importPreviewCard(packEditing) : null,
           h('div', { style: S.editorActions },
             h('button', { style: S.button, onClick: () => setPackEditing(null) }, t('cancel')),
             h('button', {
               style: busy === 'pack' ? { ...S.buttonPrimary, ...S.disabled } : S.buttonPrimary,
               disabled: busy === 'pack',
-              onClick: () => onSavePack(packEditing),
-            }, t('packSave'))))
+              onClick: () => (packEditing.mode === 'import' && (packEditing.source || 'dir') !== 'dir'
+                ? onPreviewImport(packEditing)
+                : onSavePack(packEditing)),
+            }, packEditing.mode === 'import' && (packEditing.source || 'dir') !== 'dir'
+              ? (busy === 'pack' ? t('importPreviewing') : t('importPreview'))
+              : t('packSave'))))
         : null
 
       const packListBody = h('div', { style: S.stackMd },
         h('div', { style: { display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' } },
           h('span', { style: S.hint }, t('packHint')),
           h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing({ mode: 'create', id: '', displayName: '' }) }, '+ ' + t('packNew')),
-          h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing({ mode: 'import', path: '' }) }, t('packImport'))),
+          h('button', { style: S.smallButton, disabled: busy === 'pack', onClick: () => setPackEditing(newImportDraft()) }, t('packImport'))),
         packEditor,
         h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: SPACE.sm } },
           packs.map((pack) => h('a', {
-            key: pack.id, href: routeHash('pack', pack.id), style: { ...S.card, textDecoration: 'none' },
+            /* The card is a link, so it must opt out of the UA link color:
+               S.card has no `color` and every child only sets size/weight. */
+            key: pack.id, href: routeHash('pack', pack.id),
+            style: { ...S.card, color: 'var(--dsw-alias-label-primary)', cursor: 'pointer', textDecoration: 'none' },
             onClick: (event) => { if (event && event.preventDefault) event.preventDefault(); navigate({ page: 'pack', packId: pack.id }) },
           },
             h('div', { style: S.ruleTitleRow },
@@ -3348,7 +3771,7 @@ window.__ModuleLoader__.load({
                 h('div', { role: 'tablist', 'aria-label': scopedT('packResourcesAria'), style: S.tabs }, detailTabs.map(([key, label, count]) => h('button', { key, role: 'tab', id: 'dsw-pack-tab-' + key, 'aria-controls': 'dsw-pack-panel-' + key, 'aria-selected': packTab === key ? 'true' : 'false', tabIndex: packTab === key ? 0 : -1, style: packTab === key ? { ...S.tab, ...S.tabOn } : S.tab, onClick: () => setPackTab(key) }, label + ' · ' + count))),
                 h('div', { role: 'tabpanel', id: 'dsw-pack-panel-' + packTab, 'aria-labelledby': 'dsw-pack-tab-' + packTab }, selectedIsActive ? packDetailBody : nonActiveDetail)))
 
-      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory, revisions: revisionRows, revisionsError, onRestoreRevision }) => {
+      const DistributionPage = ({ exports: exportHistory, cwd, onExport: exportAction, onCopy: copyAction, onImportShare, result, busy: exportBusy, disabled: exportDisabled, error: exportError, lastMode, historyError, onRetryHistory, revisions: revisionRows, revisionsError, onRestoreRevision }) => {
         const history = Array.isArray(exportHistory) ? exportHistory : []
         /* Newest 20 only: this is a recent-history list, not a full audit log,
            and the panel does not trust the host's ordering. */
@@ -3362,6 +3785,15 @@ window.__ModuleLoader__.load({
           .slice(0, 20)
         const copyInstall = () => copyAction(installCommand, installCommand)
         const copyArchive = result && result.file ? () => copyAction(result.file, t('copyPath')) : null
+        const baseName = (file) => String(file || '').split(/[\\/]/).pop()
+        const downloadHref = (file) => '/api/dsh-workstyle/exports/download?file=' + encodeURIComponent(baseName(file))
+        const shareText = result
+          ? [
+            (result.packId || 'workstyle') + ' ' + t('shareTextPack'),
+            'sha256: ' + (result.sha256 || '—'),
+            t('shareTextInstall'),
+          ].join('\n')
+          : ''
         return h('div', { style: S.stackMd },
           h('section', { style: S.stackSm },
             h('div', { style: S.hint }, t('exportScopeHint')),
@@ -3383,7 +3815,22 @@ window.__ModuleLoader__.load({
               ? h('div', { style: S.banner('info') },
                 h('div', null, t('exported') + '：', h('span', { style: S.mono }, result.file)),
                 h('div', { style: S.hint }, nf(result.files) + ' ' + t('filesUnit') + ' · ' + nf(result.bytes) + ' bytes'),
-                copyArchive ? h('button', { style: { ...S.linkAccent, marginTop: 6 }, onClick: copyArchive }, t('copyPath')) : null)
+                result.sha256
+                  ? h('div', { style: S.hint }, t('shareShaLabel') + '：',
+                    h('span', { style: { ...S.mono, wordBreak: 'break-all' } }, result.sha256))
+                  : null,
+                h('div', { style: { display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginTop: 6 } },
+                  result.file
+                    ? h('a', {
+                      href: downloadHref(result.file),
+                      download: baseName(result.file),
+                      style: S.linkAccent,
+                    }, t('downloadArchive'))
+                    : null,
+                  shareText
+                    ? h('button', { style: S.linkAccent, onClick: () => copyAction(shareText, t('copyShare')) }, t('copyShare'))
+                    : null,
+                  copyArchive ? h('button', { style: S.linkAccent, onClick: copyArchive }, t('copyPath')) : null))
               : null,
             exportError ? h('div', null,
               h(ErrorState, {
@@ -3391,6 +3838,11 @@ window.__ModuleLoader__.load({
                 message: exportError,
                 onRetry: (lastMode === null || lastMode === undefined) ? undefined : () => exportAction(lastMode),
               })) : null),
+          h('section', { style: S.stackSm },
+            h('div', { style: S.ruleTitle }, t('shareTitle')),
+            h('div', { style: S.hint }, t('shareHint')),
+            h('div', { style: S.distPrimaryRow },
+              h('button', { style: S.button, onClick: onImportShare }, t('importShareOpen')))),
           h(Section, { id: 'dsw-distribution-history', label: scopedT('recentExports'), count: history.length },
             historyError
               ? h(ErrorState, { operation: scopedT('opLoadExportHistory'), message: historyError, onRetry: onRetryHistory })
@@ -3402,7 +3854,13 @@ window.__ModuleLoader__.load({
                     h('span', { style: S.ruleTitle }, item.file || '—'),
                     h('span', { style: S.hint }, when(item.modifiedAt) || '—')),
                   h('span', { style: S.ruleSideText }, (item.packId || '—') + ' v' + (item.packVersion || '—')),
-                  h('span', { style: S.mutedBadge }, nf(item.bytes) + ' bytes'))))
+                  h('div', { style: { display: 'flex', alignItems: 'center', gap: 10 } },
+                    h('span', { style: S.mutedBadge }, nf(item.bytes) + ' bytes'),
+                    h('a', {
+                      href: downloadHref(item.file),
+                      download: baseName(item.file),
+                      style: S.linkAccent,
+                    }, t('downloadArchive'))))))
               : !historyError
                 ? h('div', { style: S.empty },
                   h('div', { style: S.hint }, scopedT('noExportsYet')),
@@ -3672,7 +4130,123 @@ window.__ModuleLoader__.load({
                       h(MetricsPage, { metrics: met, onNavigate: navigate, onScan: onDistill }),
                       /* The old run page survives as the lower half of metrics. */
                       h(Section, { id: 'dsw-run', label: t('pageRun') }, runBody))
-                    : h(Page, { labelledby: 'dsw-distribute-title' },
+                    : route.page === 'market'
+                      ? (() => {
+                        const catalog = market && Array.isArray(market.packs) ? market.packs : []
+                        const query = marketQuery.trim().toLowerCase()
+                        const visible = query
+                          ? catalog.filter((entry) => [entry.id, entry.displayName, entry.author, entry.description, ...(entry.categories || [])].join(' ').toLowerCase().includes(query))
+                          : catalog
+                        const selected = catalog.find((entry) => entry.id === marketSelected) || null
+                        const refresh = () => { setMarket(null); setMarketReload((value) => value + 1) }
+                        const card = (entry) => h('button', {
+                          key: entry.id,
+                          type: 'button',
+                          onClick: () => { setMarketSelected(entry.id); setMarketPreview(null); setMarketPreviewError('') },
+                          style: {
+                            ...S.card, textAlign: 'left', font: 'inherit', cursor: 'pointer',
+                            ...(entry.id === marketSelected ? { borderColor: T.sel } : null),
+                          },
+                        },
+                          h('div', { style: S.ruleTitleRow },
+                            h('span', { style: S.ruleTitle }, entry.displayName),
+                            entry.bundled ? h('span', { style: S.badge }, t('marketBuiltin')) : null,
+                            entry.canUpdate
+                              ? h('span', { style: S.chip }, t('marketUpdateBadge') + ' v' + entry.installedVersion + ' → v' + entry.version)
+                              : entry.installed && !entry.bundled ? h('span', { style: S.chip }, t('marketInstalled')) : null),
+                          h('span', { style: S.mono }, entry.id + ' v' + entry.version),
+                          h('span', { style: S.hint }, entry.description),
+                          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', fontSize: 11.5, color: T.ink2 } },
+                            h('span', null, t('marketAuthor') + ' ' + entry.author),
+                            h('span', null, t('marketLicense') + ' ' + entry.license),
+                            h('span', null, t('marketRules') + ' ' + entry.rules),
+                            h('span', null, t('marketSkills') + ' ' + entry.skills)))
+                        const previewCard = marketPreview ? h('div', { style: { ...S.card, marginTop: SPACE.sm } },
+                          h('div', { style: S.sectionHead },
+                            h('span', { style: S.sectionLabel }, t('marketPreviewTitle')),
+                            h('span', { style: S.chip }, marketPreview.pack.id + ' v' + marketPreview.pack.version)),
+                          h('div', { style: S.hint },
+                            marketPreview.pack.displayName + ' · ' + marketPreview.pack.rules.length + ' ' + t('marketRules') + ' · ' + marketPreview.pack.skills.length + ' ' + t('marketSkills') + ' · ' + marketPreview.pack.license),
+                          marketPreview.conflict && marketPreview.conflict.exists ? h('p', { style: S.hint }, t('marketConflictNote')) : null,
+                          h('div', { style: S.stackSm },
+                            h('span', { style: S.sectionLabel }, t('marketRulesTitle')),
+                            marketPreview.pack.rules.length
+                              ? marketPreview.pack.rules.slice(0, 20).map((rule) => h('div', { key: rule.id, style: { display: 'flex', gap: 8, fontSize: 12.5 } },
+                                  h('code', { style: S.mono }, rule.id),
+                                  h('span', { style: S.hint }, rule.title)))
+                              : h('span', { style: S.hint }, '—')),
+                          h('div', { style: S.stackSm },
+                            h('span', { style: S.sectionLabel }, t('marketSkillsTitle')),
+                            marketPreview.pack.skills.length
+                              ? h('div', { style: { display: 'flex', gap: 6, flexWrap: 'wrap' } }, marketPreview.pack.skills.map((name) => h('span', { key: name, style: S.chip }, name)))
+                              : h('span', { style: S.hint }, '—')),
+                          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: SPACE.sm } },
+                            h('button', {
+                              type: 'button',
+                              style: { ...S.buttonPrimary, ...(marketBusy ? S.disabled : null) },
+                              disabled: !!marketBusy,
+                              onClick: onMarketConfirm,
+                            }, marketBusy === 'install' ? t('marketConfirming') : t('marketConfirm')),
+                            h('button', {
+                              type: 'button', style: S.button, disabled: !!marketBusy,
+                              onClick: () => { setMarketPreview(null); setMarketPreviewError('') },
+                            }, t('cancel')))) : null
+                        const detail = selected ? h('div', { style: S.card },
+                          h('div', { style: S.sectionHead },
+                            h('span', { style: S.sectionLabel }, selected.displayName),
+                            h('span', { style: S.chip }, selected.id + ' v' + selected.version)),
+                          h('p', { style: S.ruleText }, selected.description),
+                          h('div', { style: { display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 12, color: T.ink2, alignItems: 'center' } },
+                            h('span', null, t('marketAuthor') + '：' + selected.author),
+                            h('span', null, t('marketLicense') + '：' + selected.license),
+                            h('span', null, t('marketRules') + '：' + selected.rules),
+                            h('span', null, t('marketSkills') + '：' + selected.skills),
+                            h('span', { style: S.mono, title: selected.sha256 }, 'sha256 ' + selected.sha256),
+                            ...(selected.categories || []).map((category) => h('span', { key: category, style: S.chip }, category))),
+                          h('div', { style: { display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: SPACE.sm } },
+                            selected.bundled
+                              ? h('span', { style: S.hint }, t('marketBuiltinHint'))
+                              : selected.installed && !selected.canUpdate
+                                ? h('span', { style: S.hint }, t('marketUpToDate') + (selected.installedVersion ? ' v' + selected.installedVersion : ''))
+                                : h('button', {
+                                    type: 'button',
+                                    style: { ...S.buttonPrimary, ...(marketBusy ? S.disabled : null) },
+                                    disabled: !!marketBusy,
+                                    onClick: () => onMarketInstall(selected),
+                                  }, marketBusy === 'preview'
+                                    ? t('marketPreviewing')
+                                    : selected.canUpdate ? t('marketUpdate') : t('marketInstall')),
+                            selected.installed && !selected.bundled && selected.canUpdate
+                              ? h('span', { style: S.hint }, t('marketInstalledHint'))
+                              : null),
+                          h('p', { style: S.hint }, t('marketInstallHint')),
+                          marketPreviewError ? h('div', { style: S.banner('error'), role: 'alert' }, marketPreviewError) : null,
+                          previewCard) : null
+                        return h(Page, { labelledby: 'dsw-market-title' },
+                          PageHead({
+                            id: 'dsw-market-title',
+                            title: t('navMarket'),
+                            count: catalog.length,
+                            action: h('button', { type: 'button', style: S.smallButton, onClick: refresh }, t('marketRefresh')),
+                          }),
+                          market && market.stale ? Notice({ children: t('marketStale') }) : null,
+                          marketError ? ErrorState({ operation: t('navMarket'), message: marketError, onRetry: refresh }) : null,
+                          !market && !marketError ? Loading({ label: t('marketLoading') }) : null,
+                          market ? h('div', { style: S.stackMd },
+                            h('div', { style: S.field },
+                              h('input', {
+                                type: 'search', style: S.input, value: marketQuery,
+                                placeholder: t('marketSearch'), 'aria-label': t('marketSearch'),
+                                onChange: (event) => setMarketQuery(event.target.value),
+                              })),
+                            visible.length
+                              ? h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: SPACE.sm } }, visible.map(card))
+                              : h('div', { style: S.emptyCenter },
+                                  h('div', { style: S.emptyLine }, t('marketEmpty')),
+                                  h('div', { style: S.hint }, t('marketEmptyHint'))),
+                            detail) : null)
+                      })()
+                      : h(Page, { labelledby: 'dsw-distribute-title' },
                 PageHead({
                   id: 'dsw-distribute-title',
                   title: t('pageDistribute'),
@@ -3683,6 +4257,7 @@ window.__ModuleLoader__.load({
                   cwd: environment.cwd,
                   onExport,
                   onCopy,
+                  onImportShare: onOpenImportShare,
                   result: exportResult,
                   busy: exportBusy,
                   disabled: !!exportBusy || !!busy,

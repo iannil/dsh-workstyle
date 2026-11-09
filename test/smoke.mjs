@@ -9,9 +9,12 @@
  * Run: ELECTRON_RUN_AS_NODE=1 "<DeepSeek Harness binary>" test/smoke.mjs
  *      (or any Node.js >= 20)
  */
+import crypto from 'node:crypto'
 import fs from 'node:fs'
+import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
+import zlib from 'node:zlib'
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
 import { fingerprintOf } from '../lib/inject-text.js'
@@ -19,9 +22,13 @@ import { fingerprintOf } from '../lib/inject-text.js'
 const root = path.dirname(path.dirname(new URL(import.meta.url).pathname))
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-smoke-'))
 process.env.DSH_HOME = home
+/* The market route must degrade, not hang or 500, when the registry host is
+   unreachable. Point it at a closed local port instead of the network. */
+process.env.DSH_WORKSTYLE_MARKET_URL = 'http://127.0.0.1:1/registry.json'
 
 const { apply } = await import(path.join(root, 'index.js'))
 const { loadPackAt, listSkills } = await import(path.join(root, 'lib/pack.js'))
+const { sha256 } = await import(path.join(root, 'lib/import.js'))
 
 /* ------------------------------ mock host ------------------------------ */
 
@@ -48,7 +55,25 @@ const ctx = {
   },
   tools: { register(tool) { registered.tools.set(tool.name, tool); return () => {} } },
   commands: { register(command) { registered.commands.set(command.name, command); return () => {} } },
-  connection: { fetch: { register(route) { const methods = route.methods && route.methods.length ? route.methods : ['GET']; for (const m of methods) registered.routes.set(route.path + ' ' + m, route); return () => {} } } },
+  /*
+   * The real Connection service keeps ONE exact Fetch route per path and
+   * dispatches by `route.methods`; registering the same path twice throws
+   * `connection: exact Fetch route "..." is already registered`. Mirror that,
+   * so a plugin that registers GET and POST separately cannot pass here while
+   * failing in the harness.
+   */
+  connection: {
+    fetch: {
+      register(route) {
+        if (registered.routes.has(route.path)) {
+          throw new Error('connection: exact Fetch route ' + JSON.stringify(route.path) + ' is already registered')
+        }
+        const methods = route.methods && route.methods.length ? route.methods.slice() : ['GET']
+        registered.routes.set(route.path, { ...route, methods })
+        return () => {}
+      },
+    },
+  },
   inject(services, callback) { callback(ctx) },
 }
 
@@ -78,10 +103,11 @@ async function callTool(name, args) {
 }
 
 async function callRoute(routePath, { method = 'GET', body } = {}) {
-  // Routes are keyed by exact path+method; a query string is still the same
-  // route, so look it up without one.
-  const route = registered.routes.get(routePath.split('?')[0] + ' ' + method)
+  // One route per path holds every method it serves; a request for a method
+  // the host never registered is a 404 in production, so refuse it here too.
+  const route = registered.routes.get(routePath.split('?')[0])
   assert.ok(route, 'route missing: ' + routePath)
+  assert.ok(route.methods.includes(method), 'route method missing: ' + method + ' ' + routePath)
   const init = { method, headers: {} }
   if (body !== undefined) {
     init.body = JSON.stringify(body)
@@ -90,6 +116,19 @@ async function callRoute(routePath, { method = 'GET', body } = {}) {
   const response = await route.fetch(new Request('http://localhost' + routePath, init))
   const text = await response.text()
   return { status: response.status, data: text ? JSON.parse(text) : undefined }
+}
+
+async function callRouteRaw(routePath, { method = 'GET', body } = {}) {
+  const route = registered.routes.get(routePath.split('?')[0])
+  assert.ok(route, 'route missing: ' + routePath)
+  assert.ok(route.methods.includes(method), 'route method missing: ' + method + ' ' + routePath)
+  const init = { method, headers: {} }
+  if (body !== undefined) {
+    init.body = JSON.stringify(body)
+    init.headers['content-type'] = 'application/json'
+  }
+  const response = await route.fetch(new Request('http://localhost' + routePath, init))
+  return { status: response.status, headers: response.headers, buffer: Buffer.from(await response.arrayBuffer()) }
 }
 
 const reportPath = path.join(home, 'workstyle', 'reports', 'latest.json')
@@ -115,9 +154,26 @@ fs.writeFileSync(reportPath, JSON.stringify(fakeReport, null, 2) + '\n')
 
 console.log('tools:')
 ok(registered.tools.size === 8, '8 tools registered (' + [...registered.tools.keys()].join(', ') + ')')
-const registeredPaths = new Set([...registered.routes.keys()].map((key) => key.split(' ')[0]))
-ok(registeredPaths.size === 17, '17 HTTP route paths registered (' + [...registeredPaths].length + ')')
+const registeredPaths = new Set(registered.routes.keys())
+ok(registeredPaths.size === 20, '20 HTTP route paths registered (' + [...registeredPaths].length + ')')
+const marketRoute = registered.routes.get('/api/dsh-workstyle/market')
+ok(marketRoute && marketRoute.methods.join(',') === 'GET', '/api/dsh-workstyle/market serves GET')
+/* Paths the panel reads and writes share one exact Fetch route; a split
+   GET/POST pair used to lose its POST half silently. */
+for (const [routePath, methods] of [
+  ['/api/dsh-workstyle/pack', 'GET,POST'],
+  ['/api/dsh-workstyle/scope', 'GET,POST'],
+  ['/api/dsh-workstyle/revisions', 'GET,POST'],
+]) {
+  const route = registered.routes.get(routePath)
+  ok(route && route.methods.join(',') === methods, routePath + ' serves ' + methods + ' on one route')
+}
 ok(registered.commands.has('workstyle'), '/workstyle command registered')
+const market = await callRoute('/api/dsh-workstyle/market')
+ok(market.status === 200, 'GET /market answers 200 when the registry host is unreachable')
+ok(Array.isArray(market.data.packs) && market.data.packs.length === 0, 'GET /market degrades to an empty catalog')
+ok(market.data.source === 'none' && market.data.stale === true, 'GET /market reports source=none, stale=true without a cache')
+ok(typeof market.data.error === 'string' && market.data.error.length > 0, 'GET /market surfaces the fetch error')
 ok(registered.sections.has('dsh-workstyle.rules'), 'system prompt section registered')
 ok(registered.providers.length === 1, 'skills provider registered')
 ok((await registered.providers[0].list()).candidates.length === 40, 'skills provider lists 40 skills')
@@ -211,7 +267,7 @@ ok(reloaded.rules.length === 8, 'extracted pack has 8 rules')
 ok(reloadedSkills.length === 40, 'extracted pack has 40 skills')
 ok(reloaded.rules.some((rule) => rule.id === 'smoke-verify'), 'adopted rule is exported with the pack')
 ok(fs.readFileSync(path.join(extract, 'skills/fde-cloner/references/contract-extraction.md')).length ===
-  fs.readFileSync(path.join(root, 'pack/reference/skills/fde-cloner/references/contract-extraction.md')).length, 'skill bytes copied intact')
+  fs.readFileSync(path.join(root, 'market/packs/fde-engineering/skills/fde-cloner/references/contract-extraction.md')).length, 'skill bytes copied intact')
 
 /* ------------------------------- routes -------------------------------- */
 
@@ -243,13 +299,13 @@ ok(!JSON.stringify(reportList.data).includes('先给方案再写代码'), 'repor
 const exportList = await callRoute('/api/dsh-workstyle/exports')
 ok(exportList.status === 200 && Array.isArray(exportList.data.exports), 'GET /exports returns export metadata')
 ok(exportList.data.exports.every((item) => item.packId && item.packVersion && typeof item.bytes === 'number'), 'export metadata includes pack id, version and bytes')
-const referencePath = path.join(root, 'pack', 'reference')
+const referencePath = path.join(root, 'market', 'packs', 'fde-engineering')
 const referenceBefore = fs.statSync(referencePath).mtimeMs
 const exportRoute = await callRoute('/api/dsh-workstyle/export', { method: 'POST', body: { withProject: false } })
 ok(exportRoute.status === 200 && fs.existsSync(exportRoute.data.file), 'POST /export pack-only')
 const defaultEntries = execFileSync('tar', ['-tzf', exportRoute.data.file], { encoding: 'utf8' }).trim().split('\n')
 ok(!defaultEntries.includes('project.workstyle.json'), 'pack-only export has no project snapshot')
-ok(fs.statSync(referencePath).mtimeMs === referenceBefore, 'exports do not write pack/reference')
+ok(fs.statSync(referencePath).mtimeMs === referenceBefore, 'exports do not write market/packs/fde-engineering')
 const applyRoute = await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'nope' } })
 ok(applyRoute.status === 404, 'POST /apply unknown pack → 404')
 const distillRoute = await callRoute('/api/dsh-workstyle/distill', { method: 'POST', body: { dshSessions: 0 } })
@@ -298,7 +354,7 @@ const scopedExtract = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-scope
 execFileSync('tar', ['-xzf', scopedExport.data.file, '-C', scopedExtract])
 const scopedSnapshot = JSON.parse(fs.readFileSync(path.join(scopedExtract, 'project.workstyle.json'), 'utf8'))
 ok(scopedSnapshot.rules.length === 1 && scopedSnapshot.rules[0].id === 'smoke-project', 'project snapshot contains only normalized scope rules')
-ok(!scopedEntries.some((entry) => entry.startsWith('pack/reference/')), 'scoped export never copies pack/reference')
+ok(!scopedEntries.some((entry) => entry.startsWith('market/packs/fde-engineering/')), 'scoped export never copies market/packs/fde-engineering')
 const projectLayer = await callRoute('/api/dsh-workstyle/scope?cwd=' + encodeURIComponent(projectDir))
 ok(projectLayer.data.counts.project === 1, 'project rule counted in scope.counts.project')
 ok(projectLayer.data.counts.injected === baseInjected + 1, 'project rule raises the injected count')
@@ -447,7 +503,7 @@ ok(measuredRuleHit.value !== '0' && measuredRuleHit.unit !== '/0',
 
 /* pack rules must keep the keywords their manifest declares */
 const { loadPackAt: loadReal } = await import(path.join(root, 'lib/pack.js'))
-const realPack = loadReal(path.join(root, 'pack', 'reference'))
+const realPack = loadReal(path.join(root, 'market', 'packs', 'fde-engineering'))
 ok(realPack && realPack.rules.some((rule) => Array.isArray(rule.measures) && rule.measures.length),
   'normalizePack keeps per-rule measures')
 ok(realPack && Array.isArray(realPack.presets) && realPack.presets.length === 3,
@@ -504,7 +560,7 @@ ok(statusPlanFirst && statusPlanFirst.writable.packId === 'fde-engineering',
 
 /* ---------------- overlay: patch a bundled rule without touching the pack ---------------- */
 
-const packFile = path.join(root, 'pack', 'reference', 'workstyle.json')
+const packFile = path.join(root, 'market', 'packs', 'fde-engineering', 'workstyle.json')
 const packBefore = fs.readFileSync(packFile, 'utf8')
 
 const patchRes = await callRoute('/api/dsh-workstyle/rule', {
@@ -513,7 +569,7 @@ const patchRes = await callRoute('/api/dsh-workstyle/rule', {
 })
 ok(patchRes.status === 200, 'patching a bundled rule succeeds')
 ok(fs.readFileSync(packFile, 'utf8') === packBefore, 'the bundled pack file is untouched')
-ok(fs.statSync(referencePath).mtimeMs === referenceBefore, 'patching a bundled rule leaves pack/reference mtime alone')
+ok(fs.statSync(referencePath).mtimeMs === referenceBefore, 'patching a bundled rule leaves market/packs/fde-engineering mtime alone')
 const patched = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
 ok(patched.text === '本机覆盖后的正文。', 'the effective rule uses the patched text')
 
@@ -650,7 +706,7 @@ const blockedState = JSON.parse(fs.readFileSync(path.join(home, 'workstyle', 'st
 ok((blockedState.presetBlocked['fde-engineering'] || []).includes('writing'),
   'block records presetBlocked in state.json')
 ok(fs.readFileSync(lifecyclePackFile, 'utf8') === lifecyclePackBefore, 'blocking never rewrites the bundled pack')
-ok(fs.statSync(referencePath).mtimeMs === lifecycleStatBefore, 'blocking leaves pack/reference mtime alone')
+ok(fs.statSync(referencePath).mtimeMs === lifecycleStatBefore, 'blocking leaves market/packs/fde-engineering mtime alone')
 
 const useBlocked = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'use', preset: 'writing', cwd: projectDir } })
 ok(useBlocked.status === 400, 'using a blocked preset is rejected')
@@ -829,8 +885,8 @@ ok(duplicateFreshAgain.status === 400 && duplicateFreshAgain.data.error === 'pre
 
 /* M1: target:'pack' is refused for bundled packs; bad targets are rejected */
 const packTargetBuiltin = await postPreset({ action: 'save', target: 'pack', packId: 'fde-engineering', preset: { id: 'smoke-write-attempt' } })
-ok(packTargetBuiltin.status === 400 && packTargetBuiltin.data.error === 'bundled packs are read-only: fde-engineering',
-  "target:'pack' on a bundled pack is refused")
+ok(packTargetBuiltin.status === 400 && packTargetBuiltin.data.error === 'pack is read-only: fde-engineering',
+  "target:'pack' on a market pack is refused")
 ok(fs.readFileSync(lifecyclePackFile, 'utf8') === lifecyclePackBefore,
   'the bundled pack file is byte-identical after a refused pack write')
 const badTarget = await postPreset({ action: 'save', target: 'elsewhere', preset: { id: 'smoke-bad-target' } })
@@ -1261,9 +1317,14 @@ ok(trashListing.data.trash[0].id === 'smoke-created-copy'
   'the newest trash entry is listed first')
 fs.rmSync(olderTrash, { recursive: true, force: true })
 
-const deleteBundled = await postPack({ action: 'delete', id: 'fde-engineering' })
-ok(deleteBundled.status === 400 && /read-only/.test(deleteBundled.data.error || ''),
-  'deleting a bundled pack is refused as read-only')
+const deleteMarket = await postPack({ action: 'delete', id: 'fde-engineering' })
+ok(deleteMarket.status === 200 && typeof deleteMarket.data.trash === 'string',
+  'deleting a market pack moves it to trash')
+const restoreMarket = await postPack({ action: 'restore', id: 'fde-engineering' })
+ok(restoreMarket.status === 200, 'a market pack can be restored from trash')
+const reapplyMarket = await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
+ok(reapplyMarket.status === 200 && reapplyMarket.data.applied.id === 'fde-engineering',
+  'the restored market pack can be applied again')
 const deleteUnknown = await postPack({ action: 'delete', id: 'ghost-pack' })
 ok(deleteUnknown.status === 400 && /unknown pack: ghost-pack/.test(deleteUnknown.data.error || ''),
   'deleting an unknown pack is refused')
@@ -1388,8 +1449,8 @@ await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde
 /* ---- /rule target:'overlay': explicit overlay writes, never the pack file ---- */
 
 console.log("rule target=overlay:")
-const overlayPackFile = path.join(root, 'pack', 'reference', 'workstyle.json')
-const overlayPackRefDir = path.join(root, 'pack', 'reference')
+const overlayPackFile = path.join(root, 'market', 'packs', 'fde-engineering', 'workstyle.json')
+const overlayPackRefDir = path.join(root, 'market', 'packs', 'fde-engineering')
 const overlayPackBytes = fs.readFileSync(overlayPackFile, 'utf8')
 const overlayPackMtime = fs.statSync(overlayPackRefDir).mtimeMs
 const yamlPackFile = path.join(yamlPackDir, 'workstyle.yaml')
@@ -1416,7 +1477,7 @@ ok((await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.
 ok(fs.readFileSync(overlayPackFile, 'utf8') === overlayPackBytes,
   'the bundled pack file is byte-identical after an overlay edit')
 ok(fs.statSync(overlayPackRefDir).mtimeMs === overlayPackMtime,
-  'pack/reference mtime is unchanged after an overlay edit')
+  'market/packs/fde-engineering mtime is unchanged after an overlay edit')
 
 const overlayRemove = await callRoute('/api/dsh-workstyle/rule', {
   method: 'POST',
@@ -1574,8 +1635,8 @@ const revRestoreBad = await callRoute('/api/dsh-workstyle/revisions', { method: 
 ok(revRestoreBad.status === 400, 'unknown revision action is a 400')
 const revRestoreNoId = await callRoute('/api/dsh-workstyle/revisions', { method: 'POST', body: { action: 'restore' } })
 ok(revRestoreNoId.status === 400, 'restore without an id is a 400')
-const revPostRoute = registered.routes.get('/api/dsh-workstyle/revisions POST')
-assert.ok(revPostRoute, 'route missing: /api/dsh-workstyle/revisions POST')
+const revPostRoute = registered.routes.get('/api/dsh-workstyle/revisions')
+assert.ok(revPostRoute && revPostRoute.methods.includes('POST'), 'route missing: POST /api/dsh-workstyle/revisions')
 const badJsonBody = await revPostRoute.fetch(new Request('http://localhost/api/dsh-workstyle/revisions', {
   method: 'POST', headers: { 'content-type': 'application/json' }, body: '{"action":',
 }))
@@ -1629,6 +1690,10 @@ ok((await callRoute('/api/dsh-workstyle/status')).data.activePackId === 'fde-eng
 console.log('virgin home rollback:')
 const virginHome = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-workstyle-virgin-'))
 const virginStateFile = path.join(virginHome, 'workstyle', 'state.json')
+/* A fresh profile gets the default pack from the bundled snapshot at boot;
+   this test switches DSH_HOME after boot, so seed that same copy by hand. */
+fs.cpSync(path.join(root, 'market', 'packs', 'fde-engineering'),
+  path.join(virginHome, 'workstyle', 'packs', 'fde-engineering'), { recursive: true })
 const warmHome = process.env.DSH_HOME
 try {
   process.env.DSH_HOME = virginHome
@@ -1744,6 +1809,186 @@ await callRoute('/api/dsh-workstyle/rule', {
 })
 await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'unblock', packId: 'fde-engineering', preset: 'rc-discussion' } })
 await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'delete', preset: exportLocalPreset } })
+
+/* --------------------------- share / import ---------------------------- */
+
+console.log('share/import:')
+const archiveBytes = fs.readFileSync(exported.file)
+ok(exported.sha256 === sha256(archiveBytes), 'export returns the gzip sha256')
+ok(/^[0-9a-f]{64}$/.test(exported.sha256), 'sha256 is 64 lowercase hex characters')
+
+const downloadPath = '/api/dsh-workstyle/exports/download?file=' + encodeURIComponent(path.basename(exported.file))
+const downloaded = await callRouteRaw(downloadPath)
+ok(downloaded.status === 200, 'GET /exports/download returns the archive')
+ok(downloaded.buffer.length === exported.bytes && sha256(downloaded.buffer) === exported.sha256,
+  'downloaded bytes match the exported archive')
+ok(String(downloaded.headers.get('content-disposition') || '').startsWith('attachment;'),
+  'download is served as an attachment')
+const downloadTraversal = await callRoute('/api/dsh-workstyle/exports/download?file=' + encodeURIComponent('../state.json'))
+ok(downloadTraversal.status === 400, 'download refuses a path outside exports/')
+const downloadMissing = await callRoute('/api/dsh-workstyle/exports/download?file=nope-v0.tar.gz')
+ok(downloadMissing.status === 404, 'download returns 404 for a missing archive')
+
+/* base64 upload → preview → apply as a new id */
+const sharedData = archiveBytes.toString('base64')
+const importPreview = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'preview', data: sharedData, name: 'fde-share.tar.gz' },
+})
+ok(importPreview.status === 200 && importPreview.data.pack.id === 'fde-engineering', 'POST /import preview reads the manifest')
+ok(importPreview.data.sha256 === exported.sha256, 'preview echoes the archive sha256')
+ok(importPreview.data.pack.ruleCount === exported.ruleCount && importPreview.data.pack.skillCount === exported.skillCount,
+  'preview reports rule and skill counts')
+ok(importPreview.data.conflict && importPreview.data.conflict.market === true,
+  'preview flags a clash with the market-managed pack')
+const importNoConfirm = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'apply', token: importPreview.data.token },
+})
+ok(importNoConfirm.status === 400 && /confirm:true/.test(importNoConfirm.data.error),
+  'apply without confirm:true is refused')
+const importAsNew = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'apply', token: importPreview.data.token, confirm: true, as: 'smoke-archive', apply: false },
+})
+ok(importAsNew.status === 200 && importAsNew.data.id === 'smoke-archive' && importAsNew.data.applied === false,
+  'apply --as installs under a new id without switching the active pack')
+ok(fs.existsSync(path.join(packsDir, 'smoke-archive', 'workstyle.json')), 'imported pack is written to packs/')
+const rewrittenManifest = JSON.parse(fs.readFileSync(path.join(packsDir, 'smoke-archive', 'workstyle.json'), 'utf8'))
+ok(rewrittenManifest.id === 'smoke-archive', 'renaming during import rewrites workstyle.json id')
+const importedArchiveDetail = await callRoute('/api/dsh-workstyle/pack?id=smoke-archive')
+ok(importedArchiveDetail.status === 200
+  && importedArchiveDetail.data.pack.ruleCount === exported.ruleCount
+  && importedArchiveDetail.data.pack.skillCount === exported.skillCount,
+  'imported archive keeps its rules and skills')
+const replayToken = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'apply', token: importPreview.data.token, confirm: true, as: 'smoke-archive', apply: false },
+})
+ok(replayToken.status === 410, 'a consumed preview token cannot be replayed')
+
+/* replace moves the old pack into the trash */
+const replacePreview = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'preview', data: sharedData, name: 'fde-share.tar.gz' },
+})
+ok(replacePreview.data.conflict && replacePreview.data.conflict.id === 'fde-engineering', 'second preview still sees the bundled clash')
+const replaced = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'apply', token: replacePreview.data.token, confirm: true, as: 'smoke-archive', replace: true, apply: false },
+})
+ok(replaced.status === 200 && replaced.data.replaced === true && replaced.data.trash,
+  'replace:true installs over an existing user pack')
+ok(fs.existsSync(replaced.data.trash), 'the replaced pack is kept in the trash')
+const marketReplacePreview = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'preview', data: sharedData, name: 'fde-share.tar.gz' },
+})
+const marketReplace = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'apply', token: marketReplacePreview.data.token, confirm: true, replace: true, market: true },
+})
+ok(marketReplace.status === 200 && marketReplace.data.replaced === true && marketReplace.data.market === true,
+  'a market update replaces the installed default pack after confirmation')
+const replacedStatus = await callRoute('/api/dsh-workstyle/status')
+ok(replacedStatus.data.packs.find((pack) => pack.id === 'fde-engineering').market === true,
+  'the replaced pack is still marked as market-managed')
+
+/* pinned https link */
+const archiveServer = http.createServer((request, response) => {
+  if (request.url && request.url.startsWith('/pack.tar.gz')) {
+    response.writeHead(200, { 'content-type': 'application/gzip', 'content-length': archiveBytes.length })
+    response.end(archiveBytes)
+    return
+  }
+  response.writeHead(404)
+  response.end()
+})
+await new Promise((resolve) => archiveServer.listen(0, '127.0.0.1', resolve))
+const shareBase = 'http://127.0.0.1:' + archiveServer.address().port + '/pack.tar.gz'
+try {
+  const missingPin = await callRoute('/api/dsh-workstyle/import', { method: 'POST', body: { action: 'preview', url: shareBase } })
+  ok(missingPin.status === 400 && /sha256/.test(missingPin.data.error), 'a share link without #sha256 is refused')
+  const wrongPin = await callRoute('/api/dsh-workstyle/import', {
+    method: 'POST',
+    body: { action: 'preview', url: shareBase + '#sha256=' + '0'.repeat(64) },
+  })
+  ok(wrongPin.status === 400 && /sha256 mismatch/.test(wrongPin.data.error), 'a mismatched sha256 is refused')
+  const pinned = await callRoute('/api/dsh-workstyle/import', {
+    method: 'POST',
+    body: { action: 'preview', url: shareBase + '#sha256=' + exported.sha256 },
+  })
+  ok(pinned.status === 200 && pinned.data.source === shareBase, 'a pinned link downloads and previews')
+  ok(pinned.data.sha256 === exported.sha256, 'downloaded archive matches the pinned digest')
+} finally {
+  archiveServer.close()
+}
+
+/* hostile archives are rejected before extraction */
+function makeTarGz(files) {
+  const chunks = []
+  for (const file of files) {
+    const data = Buffer.isBuffer(file.data) ? file.data : Buffer.from(file.data || '')
+    const header = Buffer.alloc(512)
+    header.write(file.name, 0, 100, 'utf8')
+    header.write('0000644\0', 100, 8, 'ascii')
+    header.write('0000000\0', 108, 8, 'ascii')
+    header.write('0000000\0', 116, 8, 'ascii')
+    header.write(Math.floor(data.length).toString(8).padStart(11, '0') + '\0', 124, 12, 'ascii')
+    header.write('00000000000\0', 136, 12, 'ascii')
+    header.write('        ', 148, 8, 'ascii')
+    header.write(file.type || '0', 156, 1, 'ascii')
+    header.write('ustar\0', 257, 6, 'ascii')
+    header.write('00', 263, 2, 'ascii')
+    let sum = 0
+    for (const byte of header) sum += byte
+    header.write(sum.toString(8).padStart(6, '0') + '\0 ', 148, 8, 'ascii')
+    chunks.push(header, data, Buffer.alloc((512 - (data.length % 512)) % 512))
+  }
+  chunks.push(Buffer.alloc(1024))
+  return zlib.gzipSync(Buffer.concat(chunks))
+}
+
+const hostile = [
+  { name: '../evil.txt', data: 'x', error: /unsafe path/ },
+  { name: '/etc/passwd', data: 'x', error: /absolute path/ },
+  { name: 'link', type: '2', data: '', error: /unsupported entry type/ },
+  { name: 'workstyle.json', data: '{}', error: /no rules|manifest|pack/i },
+]
+for (const sample of hostile) {
+  const response = await callRoute('/api/dsh-workstyle/import', {
+    method: 'POST',
+    body: { action: 'preview', data: makeTarGz([sample]).toString('base64'), name: 'hostile.tar.gz' },
+  })
+  ok(response.status === 400, 'hostile archive rejected: ' + sample.name)
+}
+for (const skillsDir of ['../..', '/etc']) {
+  const manifest = JSON.stringify({ id: 'evil-pack', rules: [{ id: 'evil-rule', text: 'x' }], skills: { dir: skillsDir } })
+  const escaped = await callRoute('/api/dsh-workstyle/import', {
+    method: 'POST',
+    body: { action: 'preview', data: makeTarGz([{ name: 'workstyle.json', data: manifest }]).toString('base64'), name: 'escaped.tar.gz' },
+  })
+  ok(escaped.status === 400 && /skills\.dir/.test(escaped.data.error),
+    'skills.dir escaping the pack root is refused: ' + skillsDir)
+}
+
+const notGzip = await callRoute('/api/dsh-workstyle/import', {
+  method: 'POST',
+  body: { action: 'preview', data: Buffer.from('not a gzip').toString('base64'), name: 'plain.txt' },
+})
+ok(notGzip.status === 400 && /gzip/.test(notGzip.data.error), 'a non-gzip upload is refused')
+
+/* command: preview first, then --yes */
+const importCommandPreview = await command.handler({ rawInput: 'import ' + exported.file })
+ok(importCommandPreview.kind === 'success' && importCommandPreview.text.includes(exported.sha256)
+  && importCommandPreview.text.includes('未安装'),
+  '/workstyle import previews without installing')
+const importCommandApply = await command.handler({ rawInput: 'import ' + exported.file + ' --yes --as smoke-cmd --no-apply' })
+ok(importCommandApply.kind === 'success' && importCommandApply.text.includes('已安装 smoke-cmd')
+  && importCommandApply.text.includes('未切换'),
+  '/workstyle import --yes installs and honours --no-apply')
+const importCommandMissing = await command.handler({ rawInput: 'import' })
+ok(importCommandMissing.kind === 'error' && /用法/.test(importCommandMissing.text), '/workstyle import without a source explains usage')
 
 /* ------------------------------- cleanup ------------------------------- */
 

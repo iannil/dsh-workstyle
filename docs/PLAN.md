@@ -84,16 +84,45 @@ distill（读本机会话，出聚合报告与建议规则）
 
 同期修掉两个缺陷：会话层 `preset` 之前不参与组装（选了不生效）；恢复最旧一份保留修订会 500 并顺带删掉该行（快照淘汰与恢复自写冲突，现用 `pin` 保护）。
 
-验收证据（2026-11-09，`feat/workstyle-management`）：`test/smoke.mjs` 447 项、`test/panel-render.mjs` 221 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项全过；`git status --short pack/` 为空，内置包文件未被管理操作改写。
+验收证据（2026-11-09，`feat/workstyle-management`）：`test/smoke.mjs` 447 项、`test/panel-render.mjs` 291 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项全过；`git status --short pack/` 为空，内置包文件未被管理操作改写。
 
 ## 隐私约束
 
-- 只读本机已有会话与日志，不联网、不上传。
+- 默认离线：只读本机已有会话与日志；只有打开 `#/market`、主动安装市场包或粘贴分享链接时才访问对应 HTTPS 地址，不上传。
 - 蒸馏只输出聚合统计（数量、比例、关键词计数），不落盘 prompt 原文。
 - 状态、报告、导出包全部留在 `$DSH_HOME/workstyle/`。
 
 ## 验证方式
 
-- 四套，共 802 项：`test/smoke.mjs` 447（工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 包生命周期 / 预设白名单 / 修订与回滚 / 导出 tar 往返）、`test/panel-render.mjs` 221（渲染、搜索、筛选、折叠、分发、构建标记、无营销文案、样式作用域）、`test/multipage-render.mjs` 97（多页路由与导航、蒸馏、度量、缺失包恢复）、`test/manage.mjs` 37（快照保留上限、恢复、写盘落点）。
+- 六套，共 1004 项：`test/smoke.mjs` 502（工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 包生命周期 / 预设白名单 / 修订与回滚 / 导出 tar 往返 / 市场降级 / 市场包删除恢复与更新）、`test/panel-render.mjs` 293（渲染、搜索、筛选、折叠、分发、构建标记、无营销文案、样式作用域）、`test/multipage-render.mjs` 97（多页路由与导航、蒸馏、度量、缺失包恢复）、`test/manage.mjs` 37（快照保留上限、恢复、写盘落点）、`test/market.mjs` 61（注册表校验 / 缓存 TTL / stale 回退 / 构建确定性 / 篡改检测）、`test/bootstrap.mjs` 14（默认包本地快照安装 / 幂等 / 删除后不重装 / 0.2.x 迁移 / 离线）。
 - 隔离实例：`dsh --profile web --patch <patch.yml>` + 临时 `DSH_HOME`，Chrome headless CDP 截图验证面板。
 - 真实环境：重启 DeepSeek Harness 后实测面板与工具（本地 link 安装的插件必须重启才加载）。
+
+
+### 2026-11-09 分享面（已实现，0.2.0）
+
+1. **手动导出仍是兜底，但不再是唯一路径。** 面板可从导出结果直接下载归档；包页支持目录 / `.tar.gz` / 带摘要链接三种导入。手动解压 + `workstyle_apply` 保持可用。
+2. **摘要先于信任。** 导出返回 `sha256`；链接必须带 `#sha256`；归档与链接都先预览清单再 `confirm:true` 安装。插件不托管、不上传，也没有自动应用工具。
+3. **导入是替换，不是合并。** 同 id 冲突返回 409，覆盖会把旧包移入 `trash/` 并可恢复；另存为会重写 `workstyle.json` 的 id；内置包 id 拒绝覆盖。
+4. **边界写死在解析器里。** 20 MB 下载 / 100 MB 解压 / 5000 条目；拒绝路径穿越、绝对路径、符号链接 / 硬链接、重复条目与非 gzip 数据。
+
+验收证据（2026-11-09）：`test/smoke.mjs` 491 项、`test/panel-render.mjs` 288 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项全过；`git status --short pack/` 为空。
+
+### 2026-11-09 公开市场（0.3.0）
+
+1. **目录是文本，归档在 Release。** `market/registry.json` 记录 id / 版本 / 作者 / 许可 / 规则与技能数 / `sha256` / 归档 URL；包源在 `market/packs/<id>/`（`workstyle.json` + `skills/*.md`）。`scripts/build-market.mjs` 生成确定性 `tar.gz`，CI 上传到滚动 `market` Release 并把摘要写回注册表；仓库和插件安装不背归档体积。
+2. **市场只读渲染，安装复用既有路径。** `#/market` 浏览 / 搜索 / 预览规则与技能名，确认后走 `POST /import` 的 preview → apply；没有自动更新，也没有自动应用工具。
+3. **在线可降级。** `GET /market` 缓存到 `$DSH_HOME/workstyle/market.json`（10 分钟 TTL，`?refresh=1` 强制刷新）；拉取失败回退缓存并标 `stale`，无缓存返回空目录，接口不 500。`DSH_WORKSTYLE_MARKET_URL` 可指向私有注册表。
+4. **信任边界诚实。** `sha256` 只证明字节一致，不证明内容安全；规则会进系统提示、技能目录可带资源与脚本，所以合入 PR 仍需人工审查，安装仍需人确认；内置包 id 拒绝覆盖。
+5. **贡献走 PR。** `market/README.md` 给出目录结构、`--write` 与 `--check`；CI 校验命名空间 id、semver、64 位 `sha256`、http(s) URL 且无凭据 / 无 fragment，`--check` 在注册表与源不一致时失败。
+
+验收证据（2026-11-09）：`test/smoke.mjs` 499 项、`test/panel-render.mjs` 293 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项、`test/market.mjs` 61 项全过；`git status --short pack/` 为空。
+
+### 2026-11-09 默认包迁移与更新（0.3.0）
+
+1. **默认包从插件目录搬到市场源目录。** `pack/reference/` → `market/packs/fde-engineering/`，与其它市场包同构、可走 PR 审查。全新 profile 在 `state.json` 不存在时，把随插件分发的本地快照复制到 `$DSH_HOME/workstyle/packs/fde-engineering/` 并设为当前包；不联网，装完即可用。
+2. **删除是用户的决定。** 引导只在「全新 profile」发生；一旦 `state.json` 存在就不再复制，删掉默认包重启也不会重装。
+3. **市场包只读，改动落覆盖层。** 安装来源记在 `state.marketPacks`；规则 / 预设的包内写入、重命名被拒绝，删除 / 恢复保留托管标记；用户要改就写覆盖层，导出时照常带上。
+4. **更新是「检查自动、执行手动」。** `GET /market` 用 semver 比较已安装版本与注册表版本，返回 `canUpdate` / `installedVersion`；面板显示「可更新 vX → vY」，用户确认后走 `POST /import` 的 `replace:true` + `market:true`，旧包移入 `trash/`，没有静默升级。
+
+验收证据（2026-11-09）：`test/smoke.mjs` 502 项、`test/panel-render.mjs` 293 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项、`test/market.mjs` 61 项、`test/bootstrap.mjs` 14 项全过。

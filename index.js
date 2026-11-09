@@ -17,17 +17,22 @@ import {
   renderRules, reportsDir, statePath, workstyleHome, writeJsonAtomic, writeState,
 } from './lib/pack.js'
 import {
-  applyRuleOverlay, blockPreset, checkPackId, commit, isUserPack, listRevisions, patchOverlay, removeOverlay,
-  resolveWrite, restore as restoreRevision, restoreOverlay, snapshot, trashDir, userPacksDir,
+  applyRuleOverlay, blockPreset, checkPackId, commit, isMarketPack, isUserPack, listRevisions, patchOverlay,
+  removeOverlay, resolveWrite, restore as restoreRevision, restoreOverlay, snapshot, trashDir, userPacksDir,
 } from './lib/manage.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
+import {
+  LIMITS as IMPORT_LIMITS, downloadArchive, dropStaged, extractArchive, importsDir, inspectEntries,
+  readStaged, readTarGz, stageArchive,
+} from './lib/import.js'
 import {
   checkPresetId, composeScope, listPresets, listTemplates, projectFilePath, readProjectScope,
   readSessionScope, sessionFilePath, sessionsDir, writeProjectScope, writeSessionScope,
 } from './lib/scope.js'
 import { packForRender, renderInjectText } from './lib/inject-text.js'
 import { computeMetrics } from './lib/metrics.js'
+import { readMarket, canUpdate } from './lib/market.js'
 
 const PKG_DIR = path.dirname(fileURLToPath(import.meta.url))
 const PKG_JSON = JSON.parse(fs.readFileSync(path.join(PKG_DIR, 'package.json'), 'utf8'))
@@ -65,6 +70,7 @@ function toLossless(value) {
 }
 
 function packSummary(pack) {
+  const marketPacks = readState().marketPacks || {}
   return {
     id: pack.id,
     name: pack.name,
@@ -74,6 +80,7 @@ function packSummary(pack) {
     description: pack.description,
     format: pack.format,
     dir: pack.dir,
+    market: !!marketPacks[pack.id],
     ruleCount: pack.rules.length,
     skillCount: pack.skillCount,
     skills: pack.skillList.map((skill) => ({ name: skill.name, description: skill.description, whenToUse: skill.whenToUse })),
@@ -294,7 +301,71 @@ function readJsonBody(request) {
 /* Plugin                                                              */
 /* ------------------------------------------------------------------ */
 
+/**
+ * Install the default pack on a truly fresh profile.
+ *
+ * The pack now lives in `market/packs/` (so it is reviewable like any other
+ * market entry), but a fresh install must not be left with zero packs — the
+ * plugin would go idle before the user ever opens the panel. We copy the
+ * bundled snapshot locally, never over the network, and only when there is no
+ * `state.json` yet. A user who later deletes the pack keeps it deleted.
+ */
+function ensureDefaultPack() {
+  const stateFile = statePath()
+  const dest = path.join(userPacksDir(), DEFAULT_PACK_ID)
+  if (fs.existsSync(path.join(dest, 'workstyle.json'))) return
+
+  const hasState = fs.existsSync(stateFile)
+  const state = hasState ? readState() : {}
+  /* 0.2.x shipped the default pack inside the plugin as a read-only bundled
+     pack. Those profiles have a state file without the market marker; migrate
+     them once. A 0.3.0+ profile that deleted the pack keeps its decision. */
+  const fresh = !hasState
+  const legacy = hasState && !state.marketPacks
+  if (!fresh && !legacy) return
+
+  const source = path.join(PKG_DIR, 'market', 'packs', DEFAULT_PACK_ID)
+  const manifestPath = path.join(source, 'workstyle.json')
+  if (!fs.existsSync(manifestPath)) return
+
+  let version = null
+  try {
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+    version = typeof manifest.version === 'string' ? manifest.version : null
+  } catch {
+    return
+  }
+
+  const staging = dest + '.bootstrap-' + process.pid
+  try {
+    fs.rmSync(staging, { recursive: true, force: true })
+    fs.mkdirSync(path.dirname(dest), { recursive: true })
+    fs.cpSync(source, staging, { recursive: true })
+    fs.renameSync(staging, dest)
+  } catch (error) {
+    fs.rmSync(staging, { recursive: true, force: true })
+    log('default pack bootstrap skipped:', error && error.message ? error.message : String(error))
+    return
+  }
+
+  const keepActive = !fresh && state.activePack && state.activePack !== DEFAULT_PACK_ID
+  writeState({
+    ...(keepActive ? {} : { activePack: DEFAULT_PACK_ID }),
+    marketPacks: {
+      ...(state.marketPacks || {}),
+      [DEFAULT_PACK_ID]: {
+        version,
+        installedAt: new Date().toISOString(),
+        source: fresh ? 'bootstrap' : 'migration',
+      },
+    },
+  })
+  log('default pack installed from bundled snapshot:', DEFAULT_PACK_ID, 'v' + version,
+    fresh ? '(fresh profile)' : '(migrated from 0.2.x)')
+}
+
 export function apply(ctx) {
+  ensureDefaultPack()
   let packs = loadAllPacks()
   const saved = readState()
   let active = packs.find((pack) => pack.id === saved.activePack) || packs[0]
@@ -415,7 +486,7 @@ export function apply(ctx) {
       return { scope: 'project', packId: active.id, file: cwd ? projectFilePath(cwd) : null }
     }
     const ownedByPack = (ruleId) => (active.rules || []).some((item) => item.id === ruleId)
-    if (isUserPack(active) && ownedByPack(rule.id)) {
+    if (isUserPack(active) && !isMarketPack(active) && ownedByPack(rule.id)) {
       // A YAML pack has no manifest this route can rewrite, so point at
       // nothing rather than at a file that would fail to open on save.
       return {
@@ -707,6 +778,201 @@ export function apply(ctx) {
       ruleCount: rules.length,
       skillCount: target.skillCount || 0,
       adoptedRules: adoptedRulesFor(target.id).length,
+      sha256: out.sha256,
+    }
+  }
+
+  /* --- pack import (Web panel + /workstyle import) ------------------ */
+  /**
+   * Resolve one preview request from the panel: a pinned https URL, a local
+   * `.tar.gz`, or a base64 upload. Nothing is installed here — the archive is
+   * hashed and parked in `imports/` until a human confirms the manifest.
+   */
+  /**
+   * A pack manifest may name its skills directory. Reject a name that leaves
+   * the pack root: `loadPackAt` joins it without confinement, and `listSkills`
+   * would then read `SKILL.md` from outside the imported archive.
+   */
+  const skillsDirEscapes = (manifest) => {
+    const dir = manifest && manifest.skills && typeof manifest.skills.dir === 'string'
+      ? manifest.skills.dir.trim()
+      : ''
+    if (!dir) return false
+    const root = path.resolve('/__workstyle_pack_root__')
+    const resolved = path.resolve(root, dir)
+    return resolved !== root && !resolved.startsWith(root + path.sep)
+  }
+
+  const stageImport = async (body) => {
+    const url = typeof body.url === 'string' ? body.url.trim() : ''
+    if (url) {
+      const downloaded = await downloadArchive(url)
+      return stageArchive(downloaded)
+    }
+    const file = typeof body.path === 'string' ? body.path.trim() : ''
+    if (file) {
+      const abs = path.resolve(file)
+      let stat
+      try { stat = fs.statSync(abs) } catch { throw new Error('archive file not found: ' + file) }
+      if (!stat.isFile()) throw new Error('path must be a .tar.gz file')
+      if (stat.size > IMPORT_LIMITS.downloadBytes) {
+        throw new Error('archive is larger than ' + IMPORT_LIMITS.downloadBytes + ' bytes')
+      }
+      return stageArchive({ buffer: fs.readFileSync(abs), source: abs })
+    }
+    const data = typeof body.data === 'string' ? body.data.trim() : ''
+    if (data) {
+      const match = /^data:[^;,]*;base64,(.*)$/s.exec(data) || /^base64:(.*)$/s.exec(data)
+      const payload = match ? match[1] : data
+      const buffer = Buffer.from(payload, 'base64')
+      if (!buffer.length) throw new Error('archive data is empty')
+      const name = typeof body.name === 'string' && body.name.trim() ? body.name.trim() : 'uploaded file'
+      return stageArchive({ buffer, source: name })
+    }
+    throw new Error('url, path or data is required')
+  }
+
+  /**
+   * Parse a staged archive into the manifest a human reviews. `rules`/`skills`
+   * are names only: the full rule text and skill files stay in the archive
+   * until the receiver confirms.
+   */
+  const previewStaged = (staged) => {
+    const { entries, bytes } = readTarGz(staged.buffer)
+    const info = inspectEntries(entries)
+    if (skillsDirEscapes(info.pack)) throw new Error('pack skills.dir escapes the pack directory')
+    const id = checkPackId(info.pack.id)
+    const known = loadAllPacks().find((pack) => pack.id === id)
+    const dirTaken = fs.existsSync(path.join(userPacksDir(), id))
+    return {
+      token: staged.token,
+      sha256: staged.sha256,
+      source: staged.source,
+      bytes: staged.bytes,
+      extractedBytes: bytes,
+      files: info.files,
+      pack: {
+        id,
+        name: info.pack.name || id,
+        displayName: info.pack.displayName || info.pack.name || id,
+        version: info.pack.version || '0.0.0',
+        description: info.pack.description || '',
+        author: info.pack.author || '',
+        license: info.pack.license || 'MIT',
+        ruleCount: info.ruleCount,
+        skillCount: info.skillCount,
+        rules: (Array.isArray(info.pack.rules) ? info.pack.rules : [])
+          .slice(0, 100)
+          .map((rule) => ({ id: rule.id, title: rule.title || rule.id })),
+        skills: info.skillNames,
+      },
+      conflict: known
+        ? { exists: true, id, version: known.version, active: known.id === active.id, bundled: !isUserPack(known), market: isMarketPack(known) }
+        : dirTaken
+          ? { exists: true, id, version: null, active: false, bundled: false, market: false }
+          : null,
+    }
+  }
+
+  /**
+   * Install a staged archive. The digest is re-checked by `readStaged`, the
+   * archive is unpacked into a fresh directory, loaded as a pack, and only
+   * then renamed into `packs/`. Replacing moves the old directory to `trash/`.
+   */
+  /**
+   * Record that a pack is marketplace-managed (read-only, replaced wholesale
+   * on update). Best effort: the install has already succeeded by the time we
+   * get here, so a failed marker write must not turn success into a 500.
+   */
+  const markMarketPack = (id, pack, market) => {
+    try {
+      const state = readState()
+      const marketPacks = { ...(state.marketPacks || {}) }
+      if (market) {
+        marketPacks[id] = {
+          version: pack && pack.version ? pack.version : null,
+          installedAt: new Date().toISOString(),
+          source: 'market',
+        }
+      } else {
+        delete marketPacks[id]
+      }
+      writeState({ marketPacks })
+    } catch (error) {
+      log('market marker skipped for', id + ':', error && error.message ? error.message : String(error))
+    }
+  }
+
+  const applyStaged = (staged, { apply = true, as, replace = false, market = false } = {}) => {
+    const { entries } = readTarGz(staged.buffer)
+    const info = inspectEntries(entries)
+    const sourceId = checkPackId(info.pack.id)
+    const targetId = as ? checkPackId(as) : sourceId
+    const known = loadAllPacks().find((pack) => pack.id === targetId)
+    const destAbs = path.join(userPacksDir(), targetId)
+    const dirExists = fs.existsSync(destAbs)
+    if ((known || dirExists) && !replace) {
+      throw Object.assign(new Error('pack already exists: ' + targetId + ' (use replace, or import as a new id)'), {
+        status: 409,
+        details: {
+          conflict: {
+            exists: true,
+            id: targetId,
+            version: known ? known.version : null,
+            bundled: !!known && !isUserPack(known), market: !!known && isMarketPack(known),
+          },
+        },
+      })
+    }
+    if (known && !isUserPack(known)) throw new Error('bundled packs are read-only: ' + targetId)
+
+    const work = path.join(importsDir(), staged.token + '.extract')
+    fs.rmSync(work, { recursive: true, force: true })
+    fs.mkdirSync(work, { recursive: true })
+    try {
+      extractArchive(entries, work)
+      const manifestPath = path.join(work, 'workstyle.json')
+      if (targetId !== sourceId) {
+        const raw = JSON.parse(fs.readFileSync(manifestPath, 'utf8'))
+        raw.id = targetId
+        if (!raw.name || raw.name === sourceId) raw.name = targetId
+        fs.writeFileSync(manifestPath, JSON.stringify(raw, null, 2) + '\n', 'utf8')
+      }
+      const loaded = loadPackAt(work)
+      if (!loaded) throw new Error('workstyle.json could not be loaded as a pack')
+      const packRoot = path.resolve(work)
+      const skillsDir = path.resolve(String(loaded.skillsDir || path.join(packRoot, 'skills')))
+      if (skillsDir !== packRoot && !skillsDir.startsWith(packRoot + path.sep)) {
+        throw new Error('pack skills.dir escapes the pack directory')
+      }
+
+      fs.mkdirSync(userPacksDir(), { recursive: true })
+      let replacedTo = null
+      if (dirExists) {
+        fs.mkdirSync(trashDir(), { recursive: true })
+        replacedTo = path.join(trashDir(), targetId + '-' + new Date().toISOString().replace(/[:.]/g, '-'))
+        fs.renameSync(destAbs, replacedTo)
+      }
+      try {
+        fs.renameSync(work, destAbs)
+      } catch (error) {
+        if (replacedTo) fs.renameSync(replacedTo, destAbs)
+        throw error
+      }
+      reloadOrThrow()
+      if (apply) applyPack(targetId)
+      const installed = packs.find((pack) => pack.id === targetId)
+      markMarketPack(targetId, installed, market)
+      dropStaged(staged.token)
+      return {
+        ...(installed ? packSummary(installed) : { id: targetId }),
+        applied: !!apply,
+        replaced: !!replacedTo,
+        trash: replacedTo,
+        market: !!market,
+      }
+    } finally {
+      fs.rmSync(work, { recursive: true, force: true })
     }
   }
 
@@ -983,9 +1249,15 @@ export function apply(ctx) {
       additionalProperties: false,
     },
     output: {
-      schema: { type: 'object', properties: { file: { type: 'string' }, bytes: { type: 'number' }, files: { type: 'number' }, ruleCount: { type: 'number' }, skillCount: { type: 'number' } } },
+      schema: {
+        type: 'object',
+        properties: {
+          file: { type: 'string' }, bytes: { type: 'number' }, files: { type: 'number' },
+          ruleCount: { type: 'number' }, skillCount: { type: 'number' }, sha256: { type: 'string' },
+        },
+      },
       render: (args, value) => textBlock(
-        '已导出：' + value.file + '\n' +
+        '已导出：' + value.file + '\n' + value.sha256 + '\n' +
         value.ruleCount + ' 条规则 / ' + value.skillCount + ' 个技能 · ' + value.files + ' 个文件 · ' + value.bytes + ' 字节'),
     },
     async execute(args) {
@@ -998,8 +1270,8 @@ export function apply(ctx) {
   try {
     ctx.inject(['commands'], (scoped) => scoped.effect(() => scoped.commands.register({
       name: 'workstyle',
-      description: '工作方式包：/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export',
-      input: { hint: 'status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export' },
+      description: '工作方式包：/workstyle status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export | import <url|file>',
+      input: { hint: 'status | apply <pack> | distill | adopt <id|all> | undo <id> | on <id> | off <id> | export | import <url|file>' },
       async handler(invocation) {
         const raw = String(invocation.rawInput || '').trim()
         const [head, ...rest] = raw.split(/\s+/)
@@ -1050,9 +1322,72 @@ export function apply(ctx) {
           }
           if (head === 'export') {
             const out = exportActivePack(rest.join(' ') || undefined)
-            return { kind: 'success', text: '已导出：' + out.file + '（' + out.ruleCount + ' 规则 / ' + out.skillCount + ' 技能）' }
+            return {
+              kind: 'success',
+              text: '已导出：' + out.file + '\nsha256：' + out.sha256 +
+                '\n（' + out.ruleCount + ' 规则 / ' + out.skillCount + ' 技能）',
+            }
           }
-          return { kind: 'error', text: '未知子命令：' + head + '（可用 status / apply / distill / adopt / undo / on / off / export）' }
+          if (head === 'import') {
+            let confirm = false
+            let doApply = true
+            let replace = false
+            let as = ''
+            const positional = []
+            for (let i = 0; i < rest.length; i += 1) {
+              const arg = rest[i]
+              if (arg === '--yes') { confirm = true; continue }
+              if (arg === '--no-apply') { doApply = false; confirm = true; continue }
+              if (arg === '--replace') { replace = true; continue }
+              if (arg === '--as') { as = rest[++i] || ''; continue }
+              if (arg.startsWith('--as=')) { as = arg.slice(5); continue }
+              if (arg.startsWith('--')) {
+                return { kind: 'error', text: '未知选项：' + arg + '（可用 --yes / --as <id> / --replace / --no-apply）' }
+              }
+              positional.push(arg)
+            }
+            const source = positional.join(' ').trim()
+            if (!source) {
+              return {
+                kind: 'error',
+                text: '用法：/workstyle import <https://…/pack.tar.gz#sha256=… 或 .tar.gz 路径> [--yes] [--as <id>] [--replace] [--no-apply]',
+              }
+            }
+            let staged
+            try {
+              staged = await stageImport(/^https?:\/\//i.test(source) ? { url: source } : { path: source })
+              const preview = previewStaged(staged)
+              const lines = [
+                '包：' + preview.pack.displayName + '（' + preview.pack.id + '）v' + preview.pack.version,
+                '作者：' + (preview.pack.author || '—') + ' · 许可：' + preview.pack.license,
+                '规则 ' + preview.pack.ruleCount + ' 条 / 技能 ' + preview.pack.skillCount + ' 个 · ' +
+                  preview.files + ' 个文件 · ' + preview.bytes + ' 字节',
+                'sha256：' + preview.sha256,
+                '来源：' + preview.source,
+              ]
+              if (preview.conflict) {
+                lines.push('冲突：已存在 ' + preview.conflict.id +
+                  (preview.conflict.bundled ? '（内置包，不可覆盖）' : '') +
+                  '；覆盖用 --replace，另存用 --as <id>')
+              }
+              if (!confirm) {
+                dropStaged(preview.token)
+                lines.push('', '未安装。确认清单后重跑同一命令并加 --yes。')
+                return { kind: 'success', text: lines.join('\n') }
+              }
+              const installed = applyStaged(staged, { apply: doApply, as, replace })
+              lines.push('', '已安装 ' + installed.id + ' v' + installed.version + '：' +
+                installed.ruleCount + ' 规则 / ' + installed.skillCount + ' 技能' +
+                (installed.applied ? '，并已设为当前包。' : '（未切换当前包）。') +
+                (installed.replaced ? ' 旧包已移入回收站。' : ''))
+              return { kind: 'success', text: lines.join('\n') }
+            } catch (error) {
+              if (staged) dropStaged(staged.token)
+              const hint = error && error.status === 409 ? '；用 --replace 覆盖，或 --as <id> 另存为' : ''
+              return { kind: 'error', text: (error && error.message ? error.message : String(error)) + hint }
+            }
+          }
+          return { kind: 'error', text: '未知子命令：' + head + '（可用 status / apply / distill / adopt / undo / on / off / export / import）' }
         } catch (error) {
           return { kind: 'error', text: error && error.message ? error.message : String(error) }
         }
@@ -1067,11 +1402,44 @@ export function apply(ctx) {
     ctx.inject(['connection'], (scoped) => {
       const connection = scoped.connection
       if (!connection || !connection.fetch || typeof connection.fetch.register !== 'function') return
-      const register = (route) => {
-        try {
-          scoped.effect(() => connection.fetch.register(route), 'dsh-workstyle: route ' + route.path)
-        } catch (error) {
-          log('route registration failed for', route.path, error && error.message ? error.message : String(error))
+      /*
+       * The host keys exact Fetch routes by pathname alone and dispatches by
+       * `route.methods`. Registering GET /pack and POST /pack as two routes
+       * therefore throws `connection: exact Fetch route "..." is already
+       * registered`; the old per-call try/catch swallowed that error, so the
+       * POST half never existed. A request for it fell through to the shared
+       * /api handler's plain-text 404 (`not found`), which the client's
+       * unguarded JSON.parse reported as `Unexpected token 'o', "not
+       * found" is not valid JSON`. Accumulate handlers per path and register
+       * each path once with every method it serves.
+       */
+      const routeTable = new Map()
+      const register = ({ path: routePath, methods, requestBody = 'buffered', fetch }) => {
+        const entry = routeTable.get(routePath) || { path: routePath, requestBody, handlers: new Map() }
+        for (const method of methods) {
+          if (entry.handlers.has(method)) throw new Error('duplicate route: ' + method + ' ' + routePath)
+          entry.handlers.set(method, fetch)
+        }
+        routeTable.set(routePath, entry)
+      }
+      const flushRoutes = () => {
+        for (const entry of routeTable.values()) {
+          const route = {
+            path: entry.path,
+            methods: [...entry.handlers.keys()],
+            requestBody: entry.requestBody,
+            fetch: (request) => {
+              const handler = entry.handlers.get(request.method)
+              return handler
+                ? handler(request)
+                : jsonResponse({ error: 'method not allowed: ' + request.method }, 405)
+            },
+          }
+          try {
+            scoped.effect(() => connection.fetch.register(route), 'dsh-workstyle: route ' + entry.path)
+          } catch (error) {
+            log('route registration failed for', entry.path, error && error.message ? error.message : String(error))
+          }
         }
       }
       register({
@@ -1079,6 +1447,39 @@ export function apply(ctx) {
         methods: ['GET'],
         requestBody: 'buffered',
         fetch: async () => jsonResponse(buildStatus()),
+      })
+      register({
+        path: ROUTE_BASE + '/market',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          /* The catalog is public and read-only. A failed fetch must never
+           * turn the marketplace page into a 500: fall back to the last cached
+           * copy and let the client mark it stale. `?refresh=1` skips the TTL
+           * cache but still degrades to the cached copy. */
+          const refresh = new URL(request.url).searchParams.get('refresh')
+          const result = await readMarket({ force: refresh === '1' || refresh === 'true' })
+          const byId = new Map(packs.map((pack) => [pack.id, pack]))
+          return jsonResponse({
+            schema: result.catalog.schema,
+            packs: result.catalog.packs.map((entry) => {
+              const installed = byId.get(entry.id)
+              return {
+                ...entry,
+                bundled: !!installed && !isUserPack(installed),
+                market: !!installed && isMarketPack(installed),
+                installed: !!installed,
+                installedVersion: installed ? installed.version : null,
+                canUpdate: !!installed && canUpdate(installed.version, entry.version),
+              }
+            }),
+            source: result.source,
+            stale: result.stale,
+            fetchedAt: result.fetchedAt,
+            url: result.url,
+            ...(result.error ? { error: result.error } : {}),
+          })
+        },
       })
       register({
         path: ROUTE_BASE + '/pack',
@@ -1125,6 +1526,7 @@ export function apply(ctx) {
                 : id
               const dir = path.join(userPacksDir(), id)
               fs.mkdirSync(path.join(dir, 'skills'), { recursive: true })
+              markMarketPack(id, null, false)
               const manifest = {
                 id,
                 name: id,
@@ -1172,6 +1574,7 @@ export function apply(ctx) {
               const id = checkPackId(body.id)
               const pack = packOrThrow(id)
               if (!isUserPack(pack)) return jsonResponse({ error: 'bundled packs are read-only: ' + id }, 400)
+              if (isMarketPack(pack)) return jsonResponse({ error: 'market packs are read-only: ' + id }, 400)
               if (pack.format !== 'json') return jsonResponse({ error: 'only json packs can be renamed: ' + id }, 400)
               const displayName = typeof body.displayName === 'string' ? body.displayName.trim() : ''
               if (!displayName) return jsonResponse({ error: 'displayName is required' }, 400)
@@ -1275,6 +1678,71 @@ export function apply(ctx) {
         methods: ['GET'],
         requestBody: 'buffered',
         fetch: async () => jsonResponse({ exports: listExportMetadata() }),
+      })
+      register({
+        path: ROUTE_BASE + '/exports/download',
+        methods: ['GET'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const name = new URL(request.url).searchParams.get('file') || ''
+          const base = path.basename(name)
+          if (!base || base !== name || !base.endsWith('.tar.gz')) {
+            return jsonResponse({ error: 'file must be an exported .tar.gz basename' }, 400)
+          }
+          const file = path.join(exportsDir(), base)
+          let buffer
+          try {
+            buffer = fs.readFileSync(file)
+          } catch {
+            return jsonResponse({ error: 'export not found: ' + base }, 404)
+          }
+          return new Response(buffer, {
+            status: 200,
+            headers: {
+              'content-type': 'application/gzip',
+              'content-length': String(buffer.length),
+              'content-disposition': 'attachment; filename="' + base.replace(/"/g, '') + '"',
+              'cache-control': 'no-store',
+            },
+          })
+        },
+      })
+      register({
+        path: ROUTE_BASE + '/import',
+        methods: ['POST'],
+        requestBody: 'buffered',
+        fetch: async (request) => {
+          const body = (await readJsonBody(request)) || {}
+          const action = typeof body.action === 'string' && body.action.trim() ? body.action.trim() : 'preview'
+          try {
+            if (action === 'preview') {
+              const staged = await stageImport(body)
+              return jsonResponse(previewStaged(staged))
+            }
+            if (action === 'apply') {
+              /* Installing changes what the agent reads every turn, so the
+               * caller must echo the human confirmation explicitly. */
+              if (body.confirm !== true) {
+                return jsonResponse({ error: 'confirm:true is required to install an imported pack' }, 400)
+              }
+              const staged = readStaged(body.token)
+              const result = applyStaged(staged, {
+                apply: body.apply !== false,
+                as: typeof body.as === 'string' && body.as.trim() ? body.as.trim() : undefined,
+                replace: body.replace === true,
+                market: body.market === true,
+              })
+              return jsonResponse({ action, ...result, status: buildStatus() })
+            }
+            return jsonResponse({ error: "action must be 'preview' or 'apply'" }, 400)
+          } catch (error) {
+            const status = error && Number.isFinite(error.status) ? error.status : 400
+            return jsonResponse({
+              error: error && error.message ? error.message : String(error),
+              ...(error && error.details ? error.details : {}),
+            }, status)
+          }
+        },
       })
       register({
         path: ROUTE_BASE + '/evidence',
@@ -1547,7 +2015,7 @@ export function apply(ctx) {
             /* Ownership routes the write: only the pack's own rules belong to
                its file; adopted/distilled ones stay in the machine overlay. */
             const owned = (targetPack.rules || []).some((rule) => rule.id === id)
-            const write = owned && isUserPack(targetPack)
+            const write = owned && isUserPack(targetPack) && !isMarketPack(targetPack)
               ? {
                   scope: 'pack',
                   file: targetPack.format === 'yaml' ? null : path.join(targetPack.dir, 'workstyle.json'),
@@ -1695,8 +2163,8 @@ export function apply(ctx) {
               if (requestedTarget !== null && requestedTarget !== 'overlay' && requestedTarget !== 'pack') {
                 return jsonResponse({ error: "target must be 'overlay' or 'pack'" }, 400)
               }
-              if (requestedTarget === 'pack' && !isUserPack(targetPack)) {
-                return jsonResponse({ error: 'bundled packs are read-only: ' + targetPack.id }, 400)
+              if (requestedTarget === 'pack' && (!isUserPack(targetPack) || isMarketPack(targetPack))) {
+                return jsonResponse({ error: 'pack is read-only: ' + targetPack.id }, 400)
               }
               const write = resolveWrite({ entity: 'preset', pack: targetPack })
               /* An explicit target wins; otherwise keep the historical default:
@@ -1761,7 +2229,7 @@ export function apply(ctx) {
                * Commit the pack file FIRST: a failed commit must not touch state,
                * and one overlay write then drops both the override and any stale
                * block entry for the id that no longer ships. */
-              if (shipped && isUserPack(targetPack)) {
+              if (shipped && isUserPack(targetPack) && !isMarketPack(targetPack)) {
                 const write = resolveWrite({ entity: 'preset', pack: targetPack })
                 const manifest = JSON.parse(fs.readFileSync(write.file, 'utf8'))
                 const list = (Array.isArray(manifest.presets) ? manifest.presets : []).filter((item) => item && item.id !== presetId)
@@ -1902,6 +2370,7 @@ export function apply(ctx) {
           }
         },
       })
+      flushRoutes()
     })
   } catch (error) {
     log('connection service unavailable:', error && error.message ? error.message : String(error))

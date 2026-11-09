@@ -29,6 +29,6 @@ dsh-workstyle distill
 
 ## 隐私
 
-- 只读本机数据，不联网、不上传；
+- 默认只读本机数据、不联网、不上传；只有打开市场、主动安装或粘贴分享链接时才访问 GitHub / 对应下载地址；
 - 蒸馏只保存聚合统计与规则证据，不保存 prompt 原文；
-- 参考包 MIT，署名见 `LICENSE` 与 `pack/reference/skills-LICENSE`。
+- 参考包 MIT，署名见 `LICENSE` 与 `skills-LICENSE`。

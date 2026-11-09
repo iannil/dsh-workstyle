@@ -1,0 +1,74 @@
+name: market
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'market/**'
+      - 'scripts/build-market.mjs'
+      - 'lib/**'
+      - 'test/fixtures/market/**'
+      - '.github/workflows/market.yml'
+  pull_request:
+    paths:
+      - 'market/**'
+      - 'scripts/build-market.mjs'
+      - 'lib/**'
+      - 'test/fixtures/market/**'
+      - '.github/workflows/market.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  MARKET_REPO: iannil/dsh-workstyle
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: registry matches pack sources
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Rebuild and compare
+        run: node scripts/build-market.mjs --check --repo "$MARKET_REPO"
+
+  publish:
+    name: publish rolling market release
+    needs: verify
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/master') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build deterministic archives
+        run: node scripts/build-market.mjs --write --dist .market-dist --repo "$MARKET_REPO"
+      - name: Ensure rolling release exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view market >/dev/null 2>&1 || \
+            gh release create market \
+              --title "dsh-workstyle market" \
+              --notes "Rolling marketplace assets. registry.json pins their sha256; do not delete."
+      - name: Upload archives
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          shopt -s nullglob
+          files=(.market-dist/*.tar.gz)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no archives to upload"
+            exit 0
+          fi
+          gh release upload market "${files[@]}" --clobber
+      - name: Verify published bytes match registry
+        run: node scripts/build-market.mjs --verify-remote --repo "$MARKET_REPO"

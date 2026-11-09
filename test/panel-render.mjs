@@ -240,6 +240,7 @@ const json = (data) => ({ ok: true, json: async () => data })
    one environment route fail while the others succeed. */
 const fetchLog = []
 const exportCalls = []
+const importCalls = []
 const mutationCalls = []
 const exportControl = { fail: false, delayed: false, pending: [], failHistory: false, failReports: false }
 const failEnv = { scope: false, inject: false, metrics: false, emptyMetrics: false, adopt: false }
@@ -250,7 +251,7 @@ const presetControl = { sessions: [], blockedIds: [], duplicateExists: false }
 /* Pack lifecycle answers like the host `/pack` route: bundled ids refuse
    rename/delete with a 400, and a delete returns the trash entry the panel
    may restore. `failRevisions` simulates an unreadable revision index. */
-const packControl = { failDelete: false, failRestore: false, failRevisions: false, revisions: [], trash: [] }
+const packControl = { failDelete: false, failRestore: false, failRevisions: false, plainPackNotFound: false, revisions: [], trash: [] }
 
 globalThis.fetch = async (url, options = {}) => {
   const target = String(url)
@@ -274,10 +275,34 @@ globalThis.fetch = async (url, options = {}) => {
     exportCalls.push(body)
     const respond = () => {
       if (exportControl.fail) return { ok: false, json: async () => ({ error: 'export rejected' }) }
-      return json({ file: '/tmp/exports/fde-engineering-v0.1.0-new.tar.gz', bytes: 4567, files: 6, packId: 'fde-engineering', ruleCount: 4, skillCount: 3 })
+      return json({ file: '/tmp/exports/fde-engineering-v0.1.0-new.tar.gz', bytes: 4567, files: 6, packId: 'fde-engineering', ruleCount: 4, skillCount: 3, sha256: 'a'.repeat(64) })
     }
     if (exportControl.delayed) return new Promise((resolve) => exportControl.pending.push(() => resolve(respond())))
     return respond()
+  }
+  if (target.endsWith('/api/dsh-workstyle/import')) {
+    const body = JSON.parse(options.body || '{}')
+    importCalls.push(body)
+    if (body.action === 'preview') {
+      const pack = {
+        id: 'shared-pack', name: 'shared-pack', displayName: '共享包', version: '1.2.3',
+        author: '同事', license: 'MIT', ruleCount: 5, skillCount: 2, rules: [], skills: ['review'],
+      }
+      return json({
+        token: 'b'.repeat(32), sha256: 'c'.repeat(64), source: body.url || body.name || 'upload.tar.gz',
+        bytes: 2048, extractedBytes: 8192, files: 9, pack, conflict: null,
+      })
+    }
+    if (body.action === 'apply') {
+      if (body.confirm !== true) return { ok: false, json: async () => ({ error: 'confirm:true is required' }) }
+      const id = body.as || 'shared-pack'
+      if (!(currentStatus.packs || []).some((pack) => pack.id === id)) {
+        currentStatus.packs = [...(currentStatus.packs || []), {
+          id, displayName: '共享包', version: '1.2.3', dir: '/tmp/home/.dsh/workstyle/packs/' + id,
+        }]
+      }
+      return json({ action: 'apply', id, packId: id, applied: body.apply !== false, ruleCount: 5, skillCount: 2, status: currentStatus })
+    }
   }
   if (target.endsWith('/api/dsh-workstyle/adopt')) {
     if (failEnv.adopt) return { ok: false, json: async () => ({ error: 'adopt rejected' }) }
@@ -468,6 +493,16 @@ globalThis.fetch = async (url, options = {}) => {
     }
     const body = JSON.parse(options.body || '{}')
     mutationCalls.push({ path: 'pack', body })
+    /* A route the host never registered answers a plain-text 404, exactly as
+       the shared /api handler does: text body, non-JSON, status 404. */
+    if (packControl.plainPackNotFound) {
+      return {
+        ok: false,
+        status: 404,
+        json: async () => { throw new SyntaxError('Unexpected token \'o\', "not found" is not valid JSON') },
+        clone: () => ({ text: async () => 'not found' }),
+      }
+    }
     const bundled = new Set(['fde-engineering'])
     const refuses = (body.action === 'rename' || body.action === 'delete')
       && (bundled.has(body.id) || packControl.failDelete)
@@ -906,6 +941,13 @@ ok(text.includes('已复制：dsh plugin add dsh-workstyle'), 'copy install comm
 view = await act(() => button(view, '导出包 + 作用域快照').props.onClick())
 ok(exportCalls.some((body) => body.withProject === true && body.cwd === '/tmp/live-cwd'), 'scoped export sends cwd and withProject=true')
 ok(/4,?567 bytes/.test(textOf(view)) && !!button(view, '复制路径'), 'successful export shows archive metadata and copy path')
+const downloadLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.download)
+ok(!!downloadLink && downloadLink.props.href.includes('/api/dsh-workstyle/exports/download?file=')
+  && downloadLink.props.href.includes('fde-engineering-v0.1.0-new.tar.gz'),
+  'successful export offers the archive download')
+ok(textOf(view).includes('a'.repeat(64)), 'successful export shows the archive sha256')
+view = await act(() => button(view, '复制分享信息').props.onClick())
+ok(textOf(view).includes('已复制：复制分享信息'), 'share info copies with a confirmation')
 view = await act(() => button(view, '导出包（仅包）').props.onClick())
 ok(exportCalls.some((body) => body.withProject === false), 'pack-only export sends withProject=false')
 exportControl.fail = true
@@ -1040,6 +1082,10 @@ const packsSwitcher = button(view, '切换包 ▾')
 view = await act(() => packsSwitcher.props.onClick())
 const packListLink = findHost(view, (node) => node.type === 'a' && node.props && node.props.href === '#/pack/fde-engineering')
 ok(!!packListLink, 'packs route lists installed packs')
+/* The pack card is an anchor: with no explicit color its title inherits the
+   UA link blue (#0000EE) instead of the panel's ink. */
+ok(packListLink.props.style && !!packListLink.props.style.color,
+  'pack card link sets its own color instead of inheriting the UA link blue')
 view = await act(() => packListLink.props.onClick({ preventDefault() {} }))
 const collapseAgain = button(view, '收起已处理')
 if (collapseAgain) view = await act(() => collapseAgain.props.onClick())
@@ -1528,6 +1574,7 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     packControl.failDelete = false
     packControl.failRestore = false
     packControl.failRevisions = false
+    packControl.plainPackNotFound = false
     packControl.revisions = []
     packControl.trash = []
 
@@ -1553,12 +1600,49 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     view = await act(() => button(view, '导入包').props.onClick())
     const importField = input(view, '/path/to/pack')
     ok(!!importField, 'import dialog asks for the pack directory')
+    /* Stacked fields must not carry the row flex basis: in the editor column
+       `flex: 1 1 200px` lands on the vertical axis and stretches the field to
+       200px, leaving ~148px of dead space above the actions. */
+    const dirLabel = findHost(view, (node) => node.type === 'label' && node.props
+      && node.props.style && node.props.style.flexDirection === 'column'
+      && !!findHost(node.props.children, (child) => child && child.type === 'input'
+        && child.props && child.props.placeholder === '/path/to/pack'))
+    ok(!!dirLabel && !('flex' in dirLabel.props.style),
+      'import directory field stacks without a row flex basis (no 200px column stretch)')
     view = await act(() => importField.props.onChange({ target: { value: '/tmp/import-me' } }))
     since = mutationCalls.length
     view = await act(() => button(view, '保存').props.onClick())
     calls = packCalls(since)
     ok(calls.length === 1 && calls[0].body.action === 'import' && calls[0].body.path === '/tmp/import-me',
       'import posts the chosen directory')
+
+    /* Archive and link imports preview first, then install only on an
+       explicit confirm — the digest and manifest are visible before apply. */
+    view = await goPack()
+    view = await act(() => button(view, '导入包').props.onClick())
+    ok(!!button(view, '包目录') && !!button(view, '归档文件') && !!button(view, '分享链接'),
+      'import dialog offers directory, archive and link sources')
+    view = await act(() => button(view, '分享链接').props.onClick())
+    const urlField = input(view, 'https://example.com/pack.tar.gz#sha256=…')
+    ok(!!urlField, 'link import asks for a pinned share link')
+    const urlLabel = findHost(view, (node) => node.type === 'label' && node.props
+      && node.props.style && node.props.style.flexDirection === 'column'
+      && !!findHost(node.props.children, (child) => child && child.type === 'input'
+        && child.props && child.props.placeholder === 'https://example.com/pack.tar.gz#sha256=…'))
+    ok(!!urlLabel && !('flex' in urlLabel.props.style),
+      'import link field stacks without a row flex basis')
+    view = await act(() => urlField.props.onChange({ target: { value: 'https://example.com/a.tar.gz#sha256=' + 'd'.repeat(64) } }))
+    view = await act(() => button(view, '预览').props.onClick())
+    text = textOf(view)
+    ok(text.includes('安装前确认') && text.includes('共享包'), 'preview shows the manifest before installing')
+    ok(text.includes('c'.repeat(64)) && text.includes('1.2.3'), 'preview shows the digest and version')
+    ok(!!button(view, '仅导入') && !!button(view, '导入并应用'), 'preview offers import and import-and-use')
+    const beforeApply = importCalls.length
+    view = await act(() => button(view, '导入并应用').props.onClick())
+    ok(importCalls.slice(beforeApply).some((body) => body.action === 'apply' && body.confirm === true && body.token === 'b'.repeat(32)),
+      'apply echoes confirm:true and the preview token')
+    ok(textOf(view).includes('已导入：shared-pack'), 'apply reports the imported pack')
+    ok(!button(view, '导入并应用'), 'a successful apply closes the preview')
 
     /* Writability comes from the status dir: only workstyle/packs is editable. */
     view = await goPack('local-pack')
@@ -1698,6 +1782,20 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     ok(calls.length === 1 && calls[0].body.action === 'apply' && calls[0].body.pack === 'minimal',
       'switching from the detail uses the pack apply action')
 
+    /* A pack action the host answers with a plain-text 404 must read as an
+       HTTP failure. Regression: GET and POST /pack were registered as two
+       routes, the host kept only the first (path-keyed), and every pack
+       action surfaced `Unexpected token 'o', "not found" is not valid JSON`. */
+    packControl.plainPackNotFound = true
+    view = await goPack('minimal')
+    view = await act(() => button(actionsOf(view), '复制').props.onClick())
+    const missingRoute = textOf(view)
+    ok(missingRoute.includes('HTTP 404') && missingRoute.includes('not found'),
+      'a plain-text 404 surfaces its HTTP status and body')
+    ok(!missingRoute.includes('Unexpected token'),
+      'a plain-text 404 never surfaces as a JSON.parse SyntaxError')
+    packControl.plainPackNotFound = false
+
     /* Distribution page: revision rows, reason without its prefix, rollback. */
     packControl.revisions = [
       { id: 'rev-b', at: '2026-11-09T06:00:00.000Z', bytes: 240, reason: 'restore:rev-a', file: '/tmp/home/.dsh/workstyle/state.json' },
@@ -1800,6 +1898,7 @@ console.log('  ✓ pack detail reskin + full locale coverage (' + new Set(used).
     packControl.failDelete = false
     packControl.failRestore = false
     packControl.failRevisions = false
+    packControl.plainPackNotFound = false
     packControl.revisions = []
     packControl.trash = []
     currentStatus.packs = originalPacks

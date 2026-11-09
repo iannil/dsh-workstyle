@@ -110,9 +110,9 @@ ok(overlayRules.length === 1 && overlayRules[0].title === 'B2', 'applyRuleOverla
 assert.throws(() => checkPackId('Bad Id'), /pack id/, 'checkPackId rejects spaces and capitals')
 ok(checkPackId('my-pack') === 'my-pack', 'checkPackId accepts lowercase ids')
 ok(isUserPack({ dir: path.join(home, 'workstyle', 'packs', 'x') }), 'user packs are writable')
-ok(!isUserPack({ dir: path.join(home, '..', 'app', 'pack', 'reference') }), 'bundled packs are not user packs')
+ok(!isUserPack({ dir: path.join(home, '..', 'app', 'market', 'packs', 'fde-engineering') }), 'packs outside the user pack dir are not user packs')
 ok(resolveWrite({ entity: 'rule', pack: { dir: path.join(home, 'workstyle', 'packs', 'x') } }).scope === 'pack', 'user pack rules write to the pack file')
-ok(resolveWrite({ entity: 'rule', pack: { dir: '/tmp/app/pack/reference' } }).scope === 'overlay', 'bundled pack rules write to the overlay')
+ok(resolveWrite({ entity: 'rule', pack: { dir: '/tmp/app/market/packs/fde-engineering' } }).scope === 'overlay', 'rules from a non-user pack write to the overlay')
 ok(resolveWrite({ entity: 'project-rule', cwd: home }).scope === 'project', 'project rules write to the project file')
 ok(resolveWrite({ entity: 'preset' }).file === statePath(), 'preset overlay writes to state.json')
 

@@ -2,23 +2,24 @@
 
 > 面板细节、命令全集、Agent 工具与 HTTP 路由。想先跑起来看 [README](../README.md#3-分钟上手)。
 
-## 1. 面板：八个页面
+## 1. 面板：九个页面
 
 侧边栏「工作方式」不是控制台，是**这轮工作方式的环境视图**——能看到载入了什么、按哪个作用域、想用什么套件、有没有真的改变行为。面板按页面组织，地址栏 `#/` 后即路径。
 
 | 路径 | 用途 |
 | --- | --- |
 | `#/overview` | 首屏：状态带（注入中 N 条、各层贡献、技能数、当前预设、注入指纹、最近蒸馏时间）、待办条、载入预览（与系统提示同一份 `renderRules()` 输出 + `sha256` 前 12 位）、运行态卡片与包切换 |
-| `#/pack` | 包列表：切换、新建、从目录导入、删除进回收站、回收站列出与恢复 |
-| `#/pack/<id>` | 包详情：规则 / 技能 / 预设 / 模板，标注「只读」还是可写；可写包可重命名、删除 |
-| `#/rules` | 有效规则：按作用域筛选，编辑 / 移除 / 恢复；每行标出「将写入」哪个落点；规则来自内置包时改的是覆盖层 |
+| `#/pack` | 包列表：切换、新建、从目录 / `.tar.gz` / 分享链接导入（先预览清单与 `sha256`），删除进回收站、回收站列出与恢复 |
+| `#/pack/<id>` | 包详情：规则 / 技能 / 预设 / 模板，标注「只读」还是可写；市场包只读但可删除 / 恢复，可写包可重命名 |
+| `#/market` | 公开市场：浏览 `market/registry.json` 的包、搜索、查看规则 / 技能、预览后安装；已安装包有更新时显示「可更新 vX → vY」，下载与替换需人工确认；离线时用最近一次缓存并标「可能已过期」 |
+| `#/rules` | 有效规则：按作用域筛选，编辑 / 移除 / 恢复；每行标出「将写入」哪个落点；规则来自市场包（含默认包）时改的是覆盖层 |
 | `#/presets` | 预设与组装：一键切换，编辑器按白名单勾选规则；复制、删除、屏蔽随包分发的预设并恢复，被会话占用时提示 |
 | `#/skills` | 技能：搜索、按启用状态筛选、逐条启停 |
 | `#/distill` | 蒸馏证据：最近一次报告、建议规则逐条采纳 / 忽略 |
 | `#/metrics` | 度量：规则命中、先方案率、验证率、蒸馏覆盖，每个都写出分母与算法；**不出现遵守率或违反率** |
-| `#/distribute` | 导出包 + 作用域快照、复制安装命令、修订历史（列出快照，可回滚） |
+| `#/distribute` | 导出包 + 作用域快照、下载 `tar.gz`、复制分享信息（含 `sha256`）、导入分享链接、修订历史（列出快照，可回滚） |
 
-`#/pack` 与 `#/pack/<id>` 是同一条路由的两种视图（列表 / 详情），其余各一条，共 8 条路由。页脚构建标记 `home v5`，可用来确认新面板已加载。旧地址 `#/run` 落到 `#/metrics`，`#/packs` 落到 `#/overview`（带包 id 时落到 `#/pack/<id>`）。
+`#/pack` 与 `#/pack/<id>` 是同一条路由的两种视图（列表 / 详情），其余各一条，共 9 条路由。页脚构建标记 `home v5`，可用来确认新面板已加载。旧地址 `#/run` 落到 `#/metrics`，`#/packs` 落到 `#/overview`（带包 id 时落到 `#/pack/<id>`）。
 
 ## 2. 三层作用域
 
@@ -40,8 +41,11 @@
 /workstyle undo <id>            # 撤销某条已采纳规则
 /workstyle on <id>              # 启用某条规则 / 某个技能
 /workstyle off <id>             # 停用（只影响本机，不改包文件）
-/workstyle export               # 导出 tar.gz 包
+/workstyle export               # 导出 tar.gz 包，输出带 sha256
+/workstyle import <url|file>    # 预览清单与 sha256；加 --yes 才安装
 ```
+
+`import` 的选项：`--yes` 确认安装，`--as <id>` 另存为新 id，`--replace` 覆盖同 id 用户包（旧包进回收站），`--no-apply` 只安装不切换当前包。链接必须带 `#sha256=<64 位十六进制>`；不带 `--yes` 时只下载校验并打印清单，不落盘到 `packs/`。
 
 ## 4. Agent 工具（8 个）
 
@@ -54,13 +58,13 @@
 | `workstyle_evidence` | 读取最近一次蒸馏的聚合证据 |
 | `workstyle_adopt` | 采纳建议规则（`all` 或规则 id） |
 | `workstyle_toggle` | 启停单条规则或技能 |
-| `workstyle_export` | 导出可分发包 |
+| `workstyle_export` | 导出可分发包，返回归档 `sha256` |
 
 没有独立的 `workstyle_unadopt`——撤销走命令 `/workstyle undo <id>`。
 
-## 5. HTTP 路由（17 个路径 / 20 项注册）
+## 5. HTTP 路由（20 个路径 / 23 个处理函数）
 
-`/api/dsh-workstyle/` 下。`pack`、`scope`、`revisions` 各挂 GET + POST，因此是 17 个路径、20 项注册（smoke 断言的也是路径数）。
+`/api/dsh-workstyle/` 下。`pack`、`scope`、`revisions` 各挂 GET + POST，`exports/download`、`import`、`market` 各一条，共 20 个路径、23 个处理函数。宿主按路径名只保存一条 exact Fetch 路由、按 `methods` 分派，所以同路径的 GET/POST 必须合并注册；面板实际拿到的是 20 条路由，`pack`、`scope`、`revisions` 各带 `GET,POST`。
 
 ```text
 status(GET)  pack(GET)  pack(POST)  reports(GET)  exports(GET)  evidence(GET)
@@ -68,7 +72,12 @@ apply(POST)  distill(POST)  adopt(POST)  unadopt(POST)  toggle(POST)
 scope(GET)  scope(POST)  inject(GET)  metrics(GET)
 rule(POST)  preset(POST)
 revisions(GET)  revisions(POST)  export(POST)
+exports/download(GET)  import(POST)  market(GET)
 ```
+
+`GET /market` 拉取并校验注册表，缓存到 `$DSH_HOME/workstyle/market.json`（10 分钟 TTL）；`?refresh=1` 强制刷新。拉取失败时返回缓存并带 `stale:true`，没有缓存则返回空目录与 `source:'none'`，不会 500。`DSH_WORKSTYLE_MARKET_URL` 可把注册表指向私有地址。
+
+`GET /exports/download?file=<basename>` 只接受 `exports/` 下的 `.tar.gz` 基名，返回 `application/gzip` 与 `content-disposition: attachment`。`POST /import` 的 `action` 为 `preview`（`url` / `path` / `data`+`name`）或 `apply`（必须 `confirm:true`，可带 `token` / `as` / `replace` / `apply`）。
 
 ## 6. 管理与落点
 
@@ -76,8 +85,8 @@ revisions(GET)  revisions(POST)  export(POST)
 
 | 实体 | 写入位置 | 说明 |
 | --- | --- | --- |
-| **pack** | `packs/<id>/`（用户包） | `POST /pack` 的动作：`apply` / `create` / `duplicate` / `rename` / `delete` / `restore` / `import` |
-| **rule** | `POST /rule` 的 `target` 四选一 | `overlay`：本机 `state.json` 的 `rulePatches` / `ruleRemovals`，内置包与用户包都可用，不动 `pack/`；`pack`：直接改用户 JSON 包的 `workstyle.json`；`project`：`<cwd>/.dsh/workstyle.json`；`session`：`sessions/<id>.json` |
+| **pack** | `packs/<id>/`（用户包） | `POST /pack` 的动作：`apply` / `create` / `duplicate` / `rename` / `delete` / `restore` / `import`（目录）；归档与链接走 `POST /import` 的 preview → apply |
+| **rule** | `POST /rule` 的 `target` 四选一 | `overlay`：本机 `state.json` 的 `rulePatches` / `ruleRemovals`，所有包都可用，不动包目录；`pack`：直接改用户 JSON 包的 `workstyle.json`；`project`：`<cwd>/.dsh/workstyle.json`；`session`：`sessions/<id>.json` |
 | **preset** | 覆盖层 `state.presets` 或用户包清单 | `POST /preset` 的动作：`save` / `use` / `delete` / `block` / `unblock` / `duplicate` |
 | **template** | 随预设与包清单走 | 无独立路由，导出时原样带走 |
 | **skill** | `skills/<name>/` | 只读分发；启停记在 `overrides.json` 与各层 `disabledSkills` |
@@ -105,7 +114,11 @@ revisions(GET)  revisions(POST)  export(POST)
    - `manifest.json`：导出清单（规则数、技能数、文件列表、来源），并记录 `overlay:{patched, added, removed}`；
    - `README-EXPORT.md`：接收方安装说明；
    - `skills/**`：技能文件原样。
-4. 接收方解压后 `/workstyle apply /path/to/extracted` 即可获得同一套工作方式。
+4. 接收方三种装法：
+   - 面板 `#/pack` →「导入包」→ 目录 / `.tar.gz` / 分享链接；
+   - `/workstyle import <文件或链接>` 先预览，再加 `--yes` 安装；
+   - 解压后 `/workstyle apply /path/to/extracted`（手动兜底）。
+5. 归档导入会校验 sha256、逐条检查路径穿越 / 符号链接 / 硬链接、限制 20 MB 下载与 100 MB 解压；冲突时 `--replace` 覆盖（旧包进 `trash/`）或 `--as <id>` 另存。
 
 ## 9. 数据目录
 
@@ -117,6 +130,7 @@ revisions(GET)  revisions(POST)  export(POST)
 | `overrides.json` | 本机启停 |
 | `reports/` | 蒸馏报告 |
 | `exports/` | 导出包 |
+| `imports/` | 归档预览的临时 `tar.gz` + 元数据，15 分钟懒清理 |
 | `packs/` | 用户自建 / 导入的包 |
 | `trash/` | 被删除的包（`<id>-<时间戳>/`），可恢复，不自动清理 |
 | `revisions/` | 写盘前快照，每个文件 20 份 |
@@ -131,3 +145,5 @@ revisions(GET)  revisions(POST)  export(POST)
 3. **可写性靠路径推断。** 面板用「包目录是否位于 `workstyle/packs/` 之下」判断可写，没有独立的权限清单；把包放在别处即视为只读。
 4. **导出不跟随符号链接。** 导出遍历技能目录时跳过符号链接文件（防止链接环），因此 `rc-text-assistant` 的 `philosophy-corpus.md`（指向 `rc-philosophy-advisor` 的符号链接）不会进入导出包。
 5. **`trash/` 与 `sessions/` 不做垃圾回收。** 删除的包与会话作用域文件一直保留，需要时手动清理。
+6. **导入只信 sha256。** 链接必须由发送方给出 `#sha256=`；插件不托管包，市场只是「归档地址 + 摘要 + 元数据」的索引，归档本身由 CI 构建后放在 GitHub Releases。下载只发生在用户打开 `#/market`、点击安装或粘贴分享链接之后。内网地址同样允许（同事之间分享内网文件属合理场景），但只有 http(s) 且带摘要的链接会被接受。市场会检查新版本并显示「可更新」，但下载与替换必须人工确认（安装请求带 `market:true`，旧包移入回收站），不会静默升级。
+7. **导入不是自动更新。** 同 id 不会静默覆盖；必须 `--replace` 或另存新 id。市场包更新走 `replace + market:true`，仍由人确认；非市场安装替换市场包会失去托管标记。

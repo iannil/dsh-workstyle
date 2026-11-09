@@ -1,0 +1,13 @@
+{
+  "id": "demo-review",
+  "version": "0.1.0",
+  "displayName": "Demo Review",
+  "author": "demo",
+  "license": "MIT",
+  "description": "A demo pack for marketplace tests.",
+  "categories": ["review"],
+  "rules": [
+    { "id": "review-first", "text": "Review before shipping." }
+  ],
+  "skills": { "dir": "skills" }
+}
