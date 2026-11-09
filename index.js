@@ -14,8 +14,12 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import {
   dshHome, exportsDir, loadPackAt, loadPacks, listSkills, readState,
-  renderRules, reportsDir, workstyleHome, writeJsonAtomic, writeState,
+  renderRules, reportsDir, statePath, workstyleHome, writeJsonAtomic, writeState,
 } from './lib/pack.js'
+import {
+  applyRuleOverlay, commit, isUserPack, patchOverlay, removeOverlay,
+  resolveWrite, restoreOverlay, snapshot,
+} from './lib/manage.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
 import {
@@ -283,7 +287,42 @@ export function apply(ctx) {
     return { ...pack, skillList: skills, skillCount: skills.length }
   }
 
-  const allActiveRules = () => mergeRules(active, adoptedRulesFor(active.id))
+  /* ---- overlay: per-machine edits on top of an immutable pack ---- */
+
+  const packOverlay = (packId) => {
+    const state = readState()
+    const id = packId || active.id
+    return {
+      patches: (state.rulePatches && state.rulePatches[id]) || {},
+      removed: (state.ruleRemovals && state.ruleRemovals[id]) || [],
+      blockedPresets: (state.presetBlocked && state.presetBlocked[id]) || [],
+    }
+  }
+
+  const baseRulesFor = (pack) => mergeRules(pack || active, adoptedRulesFor((pack || active).id))
+
+  const allActiveRules = () => applyRuleOverlay(baseRulesFor(), packOverlay())
+
+  const removedRulesFor = (pack) => {
+    const target = pack || active
+    const { removed } = packOverlay(target.id)
+    if (!removed.length) return []
+    return baseRulesFor(target).filter((rule) => removed.includes(rule.id)).map((rule) => ({ ...rule, removed: true }))
+  }
+
+  const writeOverlay = (patch, reason) => {
+    snapshot(statePath(), reason)
+    writeState(patch)
+  }
+
+  const refreshPacks = () => {
+    const next = loadAllPacks()
+    if (!next.length) return { ok: false, error: 'no packs found' }
+    packs = next
+    active = next.find((pack) => pack.id === active.id) || next[0]
+    try { skillControl?.invalidate() } catch { /* provider may be gone */ }
+    return { ok: true, activePackId: active.id }
+  }
 
   const effectiveActive = () => {
     const off = disabledFor(active.id)
@@ -329,22 +368,35 @@ export function apply(ctx) {
     return { cwd, sessionId }
   }
 
+  const writableFor = (rule, cwd) => {
+    if (rule.origin === 'project') return { scope: 'project', packId: active.id, file: projectFilePath(cwd) }
+    if (isUserPack(active)) return { scope: 'pack', packId: active.id, file: path.join(active.dir, 'workstyle.json') }
+    return { scope: 'overlay', packId: active.id, file: statePath() }
+  }
+
   /** Compose every layer into the effective rule/skill set for a context. */
   const scopeFor = (input) => {
     const { cwd, sessionId } = resolveContext(input)
+    const { blockedPresets } = packOverlay()
+    const composed = composeScope({
+      baseRules: allActiveRules(),
+      allSkills: active.skillList || [],
+      packPresets: active.presets || [],
+      packTemplates: active.templates || [],
+      removedRules: removedRulesFor(),
+      blockedPresets,
+      cwd,
+      sessionId,
+      disabledGlobal: [...disabledFor(active.id).rules],
+      disabledGlobalSkills: [...disabledFor(active.id).skills],
+      presetId: input && typeof input.preset === 'string' ? input.preset : undefined,
+    })
     return {
       ...resolveContext(input),
-      ...composeScope({
-        baseRules: allActiveRules(),
-        allSkills: active.skillList || [],
-        packPresets: active.presets || [],
-        packTemplates: active.templates || [],
-        cwd,
-        sessionId,
-        disabledGlobal: [...disabledFor(active.id).rules],
-        disabledGlobalSkills: [...disabledFor(active.id).skills],
-        presetId: input && typeof input.preset === 'string' ? input.preset : undefined,
-      }),
+      ...composed,
+      rules: composed.rules.map((rule) => ({ ...rule, writable: writableFor(rule, cwd) })),
+      /* 被屏蔽的预设从 composed.presets 里消失，管理界面靠这个列表显示「已屏蔽 + 恢复」 */
+      blockedPresets: blockedPresets.map((id) => ({ id, packId: active.id })),
     }
   }
 
@@ -1083,6 +1135,7 @@ export function apply(ctx) {
             templates: scope.templates,
             activePreset: scope.activePreset,
             presetScope: scope.presetScope,
+            blockedPresets: scope.blockedPresets,
           })
         },
       })
@@ -1149,29 +1202,88 @@ export function apply(ctx) {
         requestBody: 'buffered',
         fetch: async (request) => {
           const body = (await readJsonBody(request)) || {}
-          const rule = body.rule && typeof body.rule === 'object' ? body.rule : {}
-          const id = typeof rule.id === 'string' ? rule.id.trim() : ''
+          const raw = body.rule && typeof body.rule === 'object' ? body.rule : {}
+          const id = typeof raw.id === 'string' ? raw.id.trim() : ''
           if (!id) return jsonResponse({ error: 'rule.id is required' }, 400)
-          if (!body.cwd) return jsonResponse({ error: 'cwd is required' }, 400)
+          const target = body.target === 'pack' ? 'pack' : body.target === 'session' ? 'session' : 'project'
           // Same guard as /scope: only write project rules under a real
           // working directory, never an arbitrary path.
-          try {
-            if (!fs.statSync(body.cwd).isDirectory()) return jsonResponse({ error: 'cwd must be an existing directory' }, 400)
-          } catch {
-            return jsonResponse({ error: 'cwd must be an existing directory' }, 400)
+          const isDir = (value) => {
+            try { return fs.statSync(value).isDirectory() } catch { return false }
           }
+
           try {
-            const title = typeof rule.title === 'string' && rule.title.trim() ? rule.title.trim() : id
-            const current = readProjectScope(body.cwd)
-            const nextRules = current.rules.filter((item) => item.id !== id)
-            if (body.remove !== true) {
-              if (typeof rule.text !== 'string' || !rule.text.trim()) {
+            if (target === 'project') {
+              if (!body.cwd) return jsonResponse({ error: 'cwd is required' }, 400)
+              if (!isDir(body.cwd)) return jsonResponse({ error: 'cwd must be an existing directory' }, 400)
+              if (body.action === 'restore') return jsonResponse({ error: 'project rules have no restore' }, 400)
+              const title = typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : id
+              const current = readProjectScope(body.cwd)
+              const nextRules = current.rules.filter((item) => item.id !== id)
+              if (body.remove !== true) {
+                if (typeof raw.text !== 'string' || !raw.text.trim()) {
+                  return jsonResponse({ error: 'rule.text is required to save a rule' }, 400)
+                }
+                nextRules.push({ ...raw, id, title, text: raw.text.trim() })
+              }
+              writeProjectScope(body.cwd, { rules: nextRules })
+              return jsonResponse({ saved: body.remove === true ? 'removed' : 'rule', id, revision: null, scope: scopeFor({ cwd: body.cwd }) })
+            }
+
+            if (target === 'session') {
+              if (!body.sessionId) return jsonResponse({ error: 'sessionId is required' }, 400)
+              const current = readSessionScope(body.sessionId)
+              writeSessionScope(body.sessionId, {
+                enabledRules: body.remove === true || body.action === 'restore'
+                  ? current.enabledRules.filter((ruleId) => ruleId !== id)
+                  : [...new Set([...current.enabledRules, id])],
+                disabledRules: body.remove === true
+                  ? [...new Set([...current.disabledRules, id])]
+                  : current.disabledRules.filter((ruleId) => ruleId !== id),
+              })
+              return jsonResponse({ saved: body.remove === true ? 'disabled' : 'enabled', id, revision: null, scope: scopeFor({ sessionId: body.sessionId }) })
+            }
+
+            /* target === 'pack' */
+            const targetPack = packs.find((pack) => pack.id === (body.packId || active.id))
+            if (!targetPack) return jsonResponse({ error: 'unknown pack: ' + (body.packId || active.id) }, 404)
+            const known = baseRulesFor(targetPack).find((rule) => rule.id === id)
+            if (!known && body.action !== 'restore') return jsonResponse({ error: 'unknown rule: ' + id }, 404)
+            const write = resolveWrite({ entity: 'rule', pack: targetPack })
+
+            if (write.scope === 'overlay') {
+              const state = readState()
+              if (body.action === 'restore') {
+                writeOverlay(restoreOverlay(state, targetPack.id, id), 'rule-restore:' + id)
+                return jsonResponse({ saved: 'restored', id, revision: null, scope: scopeFor({}) })
+              }
+              if (body.remove === true) {
+                writeOverlay(removeOverlay(state, targetPack.id, id), 'rule-remove:' + id)
+                return jsonResponse({ saved: 'removed', id, revision: null, scope: scopeFor({}) })
+              }
+              if (typeof raw.text !== 'string' || !raw.text.trim()) {
                 return jsonResponse({ error: 'rule.text is required to save a rule' }, 400)
               }
-              nextRules.push({ ...rule, id, title, text: rule.text.trim() })
+              const next = patchOverlay(state, targetPack.id, id, { title: raw.title, text: raw.text })
+              writeOverlay(next, 'rule-patch:' + id)
+              return jsonResponse({ saved: 'rule', id, revision: null, scope: scopeFor({}) })
             }
-            writeProjectScope(body.cwd, { rules: nextRules })
-            return jsonResponse({ saved: body.remove === true ? 'removed' : 'rule', id, scope: scopeFor({ cwd: body.cwd }) })
+
+            /* user pack: edit workstyle.json in place */
+            const file = write.file
+            const manifest = JSON.parse(fs.readFileSync(file, 'utf8'))
+            const rules = Array.isArray(manifest.rules) ? [...manifest.rules] : []
+            const index = rules.findIndex((rule) => rule && rule.id === id)
+            if (body.remove === true) {
+              if (index >= 0) rules.splice(index, 1)
+            } else if (index >= 0) {
+              rules[index] = { ...rules[index], title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : rules[index].title, text: raw.text.trim() }
+            } else {
+              rules.push({ id, title: typeof raw.title === 'string' && raw.title.trim() ? raw.title.trim() : id, text: raw.text.trim() })
+            }
+            const result = commit(file, { ...manifest, rules }, { reason: 'rule:' + id })
+            refreshPacks()
+            return jsonResponse({ saved: body.remove === true ? 'removed' : 'rule', id, revision: result.revision, scope: scopeFor({}) })
           } catch (error) {
             return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
           }
