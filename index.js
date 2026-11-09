@@ -24,7 +24,7 @@ import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
 import {
   checkPresetId, composeScope, listPresets, listTemplates, projectFilePath, readProjectScope,
-  readSessionScope, sessionFilePath, writeProjectScope, writeSessionScope,
+  readSessionScope, sessionFilePath, sessionsDir, writeProjectScope, writeSessionScope,
 } from './lib/scope.js'
 import { packForRender, renderInjectText } from './lib/inject-text.js'
 import { computeMetrics } from './lib/metrics.js'
@@ -1337,15 +1337,38 @@ export function apply(ctx) {
           const selectedPresetId = (input) => {
             const { cwd, sessionId } = resolveContext(input)
             const state = readState()
-            let sessionPreset = null
-            const file = sessionId ? sessionFilePath(sessionId) : undefined
-            if (file) {
-              try {
-                const raw = JSON.parse(fs.readFileSync(file, 'utf8'))
-                if (raw && typeof raw.preset === 'string' && raw.preset.trim()) sessionPreset = raw.preset.trim()
-              } catch { /* a missing session file simply has no preset */ }
-            }
+            /* One reader for the session layer: whatever it returns trimmed is
+             * what composition uses, so the guard cannot disagree with /scope. */
+            const sessionPreset = (sessionId ? readSessionScope(sessionId).preset : '') || null
             return readProjectScope(cwd).preset || sessionPreset || (typeof state.activePreset === 'string' ? state.activePreset : null)
+          }
+          /*
+           * The guard above only sees the context this request names. A session
+           * that chose a preset elsewhere is still pointing at it, so deleting
+           * or blocking that id would leave it dangling and silently re-admit
+           * every rule the preset excluded.
+           */
+          const sessionsUsingPreset = (presetId) => {
+            const dir = sessionsDir()
+            if (!fs.existsSync(dir)) return []
+            const hits = []
+            for (const name of fs.readdirSync(dir)) {
+              if (!name.endsWith('.json')) continue
+              try {
+                const raw = JSON.parse(fs.readFileSync(path.join(dir, name), 'utf8'))
+                /* Trim like `readSessionScope`, so a padded id still counts. */
+                if (raw && typeof raw.preset === 'string' && raw.preset.trim() === presetId) hits.push(name.slice(0, -5))
+              } catch { /* a corrupt session file cannot claim a preset */ }
+            }
+            return hits
+          }
+          const sessionPresetRefusal = (presetId) => {
+            const sessions = sessionsUsingPreset(presetId)
+            if (!sessions.length) return null
+            return jsonResponse({
+              error: 'preset is in use by session ' + sessions.join(', ') + '; switch preset first',
+              sessions,
+            }, 400)
           }
           try {
             const targetPack = packs.find((pack) => pack.id === packId) || null
@@ -1422,6 +1445,8 @@ export function apply(ctx) {
               if (selectedPresetId(body) === presetId) {
                 return jsonResponse({ error: 'preset is in use: ' + presetId + '; switch preset first' }, 400)
               }
+              const sessionRefusal = sessionPresetRefusal(presetId)
+              if (sessionRefusal) return sessionRefusal
               writeOverlay(blockPreset(readState(), targetPack.id, presetId, true), 'preset-block:' + presetId)
               return jsonResponse({ removed: 'blocked', id: presetId })
             }
@@ -1438,6 +1463,11 @@ export function apply(ctx) {
               if (selectedPresetId(body) === presetId) {
                 return jsonResponse({ error: 'preset is in use: ' + presetId + '; switch preset first' }, 400)
               }
+              const sessionRefusal = sessionPresetRefusal(presetId)
+              if (sessionRefusal) return sessionRefusal
+              /* Neither shipped nor overlaid: this id no longer exists here, so
+               * deleting it must not answer 200 with a no-op write. */
+              if (!shipped && !hadLocal) return jsonResponse({ error: 'unknown preset: ' + presetId }, 404)
               /* A local override is this machine's copy of a shipped preset, so
                * it goes with it; otherwise delete would leave the override behind
                * and unblock would resurface the local copy instead of the original.
@@ -1457,7 +1487,13 @@ export function apply(ctx) {
                  * write must carry the freshest overlay, not the pre-commit one. */
                 const overlayState = readState()
                 const overlayList = Array.isArray(overlayState.presets) ? overlayState.presets.filter((item) => item && item.id !== presetId) : []
-                writeOverlay(blockPreset({ ...overlayState, presets: overlayList }, targetPack.id, presetId, false), 'preset-delete:' + presetId)
+                const pruned = blockPreset({ ...overlayState, presets: overlayList }, targetPack.id, presetId, false)
+                /* With no override and no stale block entry there is nothing to
+                 * drop: rewriting the overlay would only bump updatedAt and
+                 * burn a revision slot for a no-op. */
+                const unchanged = JSON.stringify(pruned.presets || []) === JSON.stringify(overlayState.presets || [])
+                  && JSON.stringify(pruned.presetBlocked || {}) === JSON.stringify(overlayState.presetBlocked || {})
+                if (!unchanged) writeOverlay(pruned, 'preset-delete:' + presetId)
                 return jsonResponse({ removed: 'pack', id: presetId, revision: result.revision, ...(hadLocal ? { local: true } : {}) })
               }
               if (shipped) {

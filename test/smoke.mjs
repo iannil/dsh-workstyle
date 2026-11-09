@@ -913,6 +913,46 @@ ok(deleteLocalInUse.status === 400
 const restoreProjectPreset = await postPreset({ action: 'use', preset: 'smoke-slice', cwd: projectDir })
 ok(restoreProjectPreset.status === 200, 'the project preset is restored after the guard tests')
 
+/* ---------------- a preset any session chose is in use ----------------
+ * The in-request guard only sees the context the request names, so delete and
+ * block must also refuse an id another session is pointing at: otherwise that
+ * session keeps a dangling preset and its excluded rules are silently
+ * re-admitted. */
+
+console.log('preset guard across sessions:')
+const sessionsDirPath = path.join(home, 'workstyle', 'sessions')
+fs.mkdirSync(sessionsDirPath, { recursive: true })
+const crossSessionId = 'preset-cross-' + Date.now()
+fs.writeFileSync(path.join(sessionsDirPath, crossSessionId + '.json'),
+  JSON.stringify({ preset: 'writing' }) + '\n')
+const deleteUsedElsewhere = await postPreset({ action: 'delete', packId: 'fde-engineering', preset: 'writing' })
+ok(deleteUsedElsewhere.status === 400
+  && Array.isArray(deleteUsedElsewhere.data.sessions)
+  && deleteUsedElsewhere.data.sessions.includes(crossSessionId),
+  'deleting a preset another session chose is refused and names that session')
+ok(/^preset is in use by session .+; switch preset first$/.test(deleteUsedElsewhere.data.error || ''),
+  'the cross-session refusal explains the session-level use')
+ok(!(readStateFile().presetBlocked?.['fde-engineering'] || []).includes('writing'),
+  'a refused cross-session delete leaves no presetBlocked entry')
+const blockUsedElsewhere = await postPreset({ action: 'block', packId: 'fde-engineering', preset: 'writing' })
+ok(blockUsedElsewhere.status === 400
+  && (blockUsedElsewhere.data.sessions || []).includes(crossSessionId),
+  'blocking a preset another session chose is refused too')
+ok(!(readStateFile().presetBlocked?.['fde-engineering'] || []).includes('writing'),
+  'a refused cross-session block leaves no presetBlocked entry')
+const deleteInNamedSession = await postPreset({ action: 'delete', packId: 'fde-engineering', preset: 'writing', sessionId: crossSessionId })
+ok(deleteInNamedSession.status === 400
+  && deleteInNamedSession.data.error === 'preset is in use: writing; switch preset first',
+  'a session named in the request still gets the in-request in-use message')
+
+/* a hand-written session preset is trimmed on read, so it still composes */
+const paddedSessionId = 'preset-padded-' + Date.now()
+fs.writeFileSync(path.join(sessionsDirPath, paddedSessionId + '.json'),
+  JSON.stringify({ preset: ' writing ' }) + '\n')
+const paddedScope = await callRoute('/api/dsh-workstyle/scope?session=' + paddedSessionId)
+ok(paddedScope.data.activePreset && paddedScope.data.activePreset.id === 'writing',
+  'a session preset is trimmed on read before composing')
+
 /* ---------------- user pack delete: commit first, prune the block ---------------- */
 
 console.log('preset delete ordering:')
@@ -933,24 +973,28 @@ ok(blockOrderPreset.status === 200, 'the user pack preset can be blocked')
 const orderPackFile = path.join(orderPackDir, 'workstyle.json')
 const orderPackBytes = fs.readFileSync(orderPackFile, 'utf8')
 const stateBeforeFailedDelete = readStateFile()
-const isRootUser = typeof process.getuid === 'function' && process.getuid() === 0
-if (!isRootUser) {
-  /* A failed pack commit must not move any state. */
-  fs.chmodSync(orderPackDir, 0o555)
-  try {
-    const failedDelete = await postPreset({ action: 'delete', packId: 'order-pack', preset: 'order-shipped' })
-    ok(failedDelete.status === 400, 'a failed pack commit surfaces as a 400')
-    const stateAfterFailedDelete = readStateFile()
-    ok(JSON.stringify(stateAfterFailedDelete.presets) === JSON.stringify(stateBeforeFailedDelete.presets),
-      'a failed pack commit leaves the local override untouched')
-    ok(JSON.stringify(stateAfterFailedDelete.presetBlocked) === JSON.stringify(stateBeforeFailedDelete.presetBlocked),
-      'a failed pack commit leaves presetBlocked untouched')
-    ok(fs.readFileSync(orderPackFile, 'utf8') === orderPackBytes,
-      'a failed pack commit leaves the pack file untouched')
-  } finally {
-    fs.chmodSync(orderPackDir, 0o755)
-  }
+/* A failed pack read must not move any state. Replacing the manifest with a
+ * directory fails the read on every platform and under any uid, unlike a chmod
+ * 0555 parent, which root ignores and which therefore skipped this block. */
+const orderPackBackup = orderPackFile + '.bak'
+fs.renameSync(orderPackFile, orderPackBackup)
+fs.mkdirSync(orderPackFile)
+try {
+  const failedDelete = await postPreset({ action: 'delete', packId: 'order-pack', preset: 'order-shipped' })
+  ok(failedDelete.status === 400, 'an unreadable pack manifest surfaces as a 400')
+  const stateAfterFailedDelete = readStateFile()
+  ok(JSON.stringify(stateAfterFailedDelete.presets) === JSON.stringify(stateBeforeFailedDelete.presets),
+    'a failed pack commit leaves the local override untouched')
+  ok(JSON.stringify(stateAfterFailedDelete.presetBlocked) === JSON.stringify(stateBeforeFailedDelete.presetBlocked),
+    'a failed pack commit leaves presetBlocked untouched')
+  ok(fs.statSync(orderPackFile).isDirectory(),
+    'a failed pack commit does not rewrite the manifest')
+} finally {
+  fs.rmdirSync(orderPackFile)
+  fs.renameSync(orderPackBackup, orderPackFile)
 }
+ok(fs.readFileSync(orderPackFile, 'utf8') === orderPackBytes,
+  'the restored pack manifest is byte-identical')
 
 const deleteOrderPreset = await postPreset({ action: 'delete', packId: 'order-pack', preset: 'order-shipped' })
 ok(deleteOrderPreset.status === 200 && deleteOrderPreset.data.removed === 'pack'
@@ -966,6 +1010,45 @@ ok(!(orderStateAfterDelete.presetBlocked?.['order-pack'] || []).includes('order-
   'deleting a pack preset prunes its stale block entry')
 const unblockVanished = await postPreset({ action: 'unblock', packId: 'order-pack', preset: 'order-shipped' })
 ok(unblockVanished.status === 404, 'unblocking a vanished preset is a 404')
+
+/* ---------------- a pristine user-pack delete is a true no-op ----------------
+ * With no local override and no stale block entry there is nothing to drop in
+ * the overlay, so state.json must keep its bytes and its revision history. */
+
+console.log('preset delete no-op:')
+const stateFilePath = path.join(home, 'workstyle', 'state.json')
+const newestStateRevision = () => {
+  try {
+    const index = JSON.parse(fs.readFileSync(path.join(home, 'workstyle', 'revisions', 'index.json'), 'utf8'))
+    const entry = Object.values(index.files || {}).find((row) => row && path.resolve(row.path) === stateFilePath)
+    return entry && entry.entries.length ? entry.entries[0].id : null
+  } catch { return null }
+}
+const noopPackDir = path.join(home, 'workstyle', 'packs', 'noop-pack')
+fs.mkdirSync(path.join(noopPackDir, 'skills'), { recursive: true })
+fs.writeFileSync(path.join(noopPackDir, 'workstyle.json'), JSON.stringify({
+  id: 'noop-pack', name: 'noop-pack', displayName: 'Noop Pack', version: '0.1.0',
+  rules: [{ id: 'noop-owned', title: '空转规则', text: '删除空转预设不应改写状态文件。' }],
+  presets: [{ id: 'noop-shipped', title: '空转预设', rules: ['noop-owned'], skills: [], templates: [] }],
+}, null, 2) + '\n')
+const applyNoopPack = await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'noop-pack' } })
+ok(applyNoopPack.status === 200, 'the no-op fixture pack applies')
+const stateBytesBeforeNoop = fs.readFileSync(stateFilePath, 'utf8')
+const stateRevisionBeforeNoop = newestStateRevision()
+ok(stateRevisionBeforeNoop !== null, 'the state file has a recorded revision to compare against')
+const noopDelete = await postPreset({ action: 'delete', packId: 'noop-pack', preset: 'noop-shipped' })
+ok(noopDelete.status === 200 && noopDelete.data.removed === 'pack' && noopDelete.data.local === undefined,
+  'deleting a pristine shipped user-pack preset edits only the pack file')
+ok(fs.readFileSync(stateFilePath, 'utf8') === stateBytesBeforeNoop,
+  'a no-op delete leaves state.json byte-identical')
+ok(newestStateRevision() === stateRevisionBeforeNoop,
+  'a no-op delete records no state revision')
+const noopDeleteAgain = await postPreset({ action: 'delete', packId: 'noop-pack', preset: 'noop-shipped' })
+ok(noopDeleteAgain.status === 404 && noopDeleteAgain.data.error === 'unknown preset: noop-shipped',
+  'deleting an already-gone preset is a 404')
+ok(fs.readFileSync(stateFilePath, 'utf8') === stateBytesBeforeNoop
+  && newestStateRevision() === stateRevisionBeforeNoop,
+  'the second delete leaves state.json and its revisions alone')
 
 /* ------------------------------- cleanup ------------------------------- */
 
