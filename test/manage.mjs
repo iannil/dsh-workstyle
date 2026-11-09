@@ -45,6 +45,50 @@ const dirs = fs.readdirSync(path.join(home, 'workstyle', 'revisions')).filter((n
 const keptFiles = dirs.flatMap((d) => fs.readdirSync(path.join(home, 'workstyle', 'revisions', d)).filter((n) => n.endsWith('.json')))
 ok(keptFiles.length === REVISION_KEEP, 'snapshot files beyond the cap are pruned')
 
+/* regression: a full ring must still be able to restore its OLDEST revision.
+ * snapshot() caps + prunes before the caller reads the bytes, so restoring the
+ * oldest row used to delete that row's file, throw ENOENT and destroy the row. */
+const revSource = (row) => path.join(home, 'workstyle', 'revisions', row.key, row.ts + '.json')
+const seedRing = (name) => {
+  const file = path.join(home, 'workstyle', name + '.json')
+  for (let i = 1; i <= REVISION_KEEP + 1; i++) commit(file, { n: i, ring: name }, { reason: 'ring-' + i })
+  return file
+}
+
+const oldestFile = seedRing('ring-oldest')
+ok(listRevisions(oldestFile).length === REVISION_KEEP, 'ring is full before the oldest restore')
+const oldestRing = listRevisions(oldestFile)
+const oldestRow = oldestRing[oldestRing.length - 1]
+const oldestBytes = fs.readFileSync(revSource(oldestRow))
+ok(JSON.parse(oldestBytes).n === 1, 'the oldest row holds the first content')
+
+const backOldest = restore(oldestRow.id)
+ok(JSON.parse(fs.readFileSync(oldestFile, 'utf8')).n === 1, 'restoring the oldest retained revision lands its bytes')
+ok(fs.readFileSync(oldestFile).equals(oldestBytes), 'the restored file is byte-identical to the snapshot')
+const afterOldest = listRevisions(oldestFile)
+ok(afterOldest.length === REVISION_KEEP, 'revision list stays capped at ' + REVISION_KEEP + ' after restoring the oldest')
+ok(afterOldest.some((row) => row.id === oldestRow.id), 'the restored oldest revision is still listed')
+ok(!!backOldest.revision, 'the overwritten bytes are snapshotted (restore stays reversible)')
+const oldestDirFiles = fs.readdirSync(path.join(home, 'workstyle', 'revisions', oldestRow.key)).filter((n) => n.endsWith('.json'))
+ok(oldestDirFiles.length === REVISION_KEEP, 'snapshot files stay pruned to the cap after restoring the oldest')
+
+/* the same row must still work on retry (the bug made it a 404) */
+restore(oldestRow.id)
+ok(JSON.parse(fs.readFileSync(oldestFile, 'utf8')).n === 1, 'the restored row can be restored again')
+ok(listRevisions(oldestFile).some((row) => row.id === oldestRow.id) && listRevisions(oldestFile).length === REVISION_KEEP, 'the row survives a retry and the ring is still capped')
+
+/* newest-first case on its own file */
+const newestFile = seedRing('ring-newest')
+const newestRing = listRevisions(newestFile)
+const newestRow2 = newestRing[0]
+ok(JSON.parse(fs.readFileSync(revSource(newestRow2))).n === 20, 'the newest row holds the last snapshotted content')
+const backNewest = restore(newestRow2.id)
+ok(JSON.parse(fs.readFileSync(newestFile, 'utf8')).n === 20, 'restoring the newest retained revision lands its bytes')
+const afterNewest = listRevisions(newestFile)
+ok(afterNewest.length === REVISION_KEEP, 'revision list stays capped after restoring the newest')
+ok(afterNewest.some((row) => row.id === newestRow2.id), 'the restored newest revision is still listed')
+ok(!!backNewest.revision, 'restoring the newest also snapshots the overwritten bytes')
+
 /* overlay helpers are pure */
 let state = {}
 state = patchOverlay(state, 'fde-engineering', 'plan-first', { title: '改标题', text: '改正文', id: 'hack' })
