@@ -624,9 +624,13 @@ import {
       ...resolveContext(input),
       ...composed,
       rules: composed.rules.map((rule) => ({ ...rule, writable: writableFor(rule, cwd) })),
+      /* 被屏蔽的预设从 composed.presets 里消失，管理界面靠这个列表显示「已屏蔽 + 恢复」 */
+      blockedPresets: blockedPresets.map((id) => ({ id, packId: active.id })),
     }
   }
 ```
+
+`/scope` GET 的 JSON 里补一个字段：`blockedPresets: scope.blockedPresets`（`index.js` 的 `/scope` GET，Task 4 同批改）。
 
 `buildStatus` 里 `allActiveRules()` 已自动带 patch；无需改动。
 
@@ -1599,6 +1603,24 @@ git commit -m "feat(panel): edit/remove/restore rules across scopes"
 ```
 
 `delete` 对内置预设后端自动转成 block，前端不需要分支。
+
+被屏蔽的预设不在 `scope.presets` 里，用 `/scope` 新增的 `blockedPresets` 渲染一个独立区块：
+
+```js
+      const blockedSection = (scoped.blockedPresets || []).length
+        ? h('div', { style: S.card },
+          h('div', { style: S.sectionLabel }, t('presetBlocked')),
+          (scoped.blockedPresets || []).map((item) => h('div', { key: item.id, style: { display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' } },
+            h('span', { style: { fontFamily: 'var(--dsw-alias-font-mono, monospace)' } }, item.id),
+            h('button', {
+              style: S.smallButton,
+              disabled: busy === 'preset',
+              onClick: () => onPresetAction('unblock', { id: item.id }),
+            }, t('presetRestore')))))
+        : null
+```
+
+`onPresetAction('unblock', {id})` 的 body 需要 `packId: active.id`（现有写法从 `preset.id` 取 id，兼容）。
 
 - [ ] **Step 3: 预设卡片加操作行**
 
