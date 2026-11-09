@@ -621,6 +621,98 @@ const sessionLists = sessionRestore.data.scope.session
 ok(!sessionLists.enabledRules.includes('plan-first') && !sessionLists.disabledRules.includes('plan-first'),
   'a restored session rule is absent from both session lists')
 
+/* ---------------- preset lifecycle: duplicate / delete / block / unblock ---------------- */
+
+console.log('preset lifecycle:')
+const lifecyclePackFile = path.join(referencePath, 'workstyle.json')
+const lifecyclePackBefore = fs.readFileSync(lifecyclePackFile, 'utf8')
+const lifecycleManifestBefore = JSON.parse(lifecyclePackBefore)
+const lifecycleStatBefore = fs.statSync(referencePath).mtimeMs
+
+const duplicate = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'duplicate', preset: 'smoke-slice', newId: 'smoke-slice-copy' },
+})
+ok(duplicate.status === 200, 'preset duplicate succeeds')
+const afterDuplicate = (await callRoute('/api/dsh-workstyle/scope')).data.presets
+ok(afterDuplicate.some((preset) => preset.id === 'smoke-slice-copy'), 'duplicated preset is listed')
+ok(afterDuplicate.find((preset) => preset.id === 'smoke-slice-copy').builtin === false,
+  'a duplicated preset is a local copy')
+
+const delPreset = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'delete', preset: 'smoke-slice-copy' } })
+ok(delPreset.status === 200 && delPreset.data.removed === 'local', 'local preset delete removes it')
+ok(!(await callRoute('/api/dsh-workstyle/scope')).data.presets.some((preset) => preset.id === 'smoke-slice-copy'), 'deleted local preset is gone')
+
+const blockBuiltin = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'block', preset: 'writing', packId: 'fde-engineering' } })
+ok(blockBuiltin.status === 200 && blockBuiltin.data.removed === 'blocked', 'bundled preset delete becomes a block')
+ok(!(await callRoute('/api/dsh-workstyle/scope')).data.presets.some((preset) => preset.id === 'writing'), 'blocked preset is hidden')
+const blockedState = JSON.parse(fs.readFileSync(path.join(home, 'workstyle', 'state.json'), 'utf8'))
+ok((blockedState.presetBlocked['fde-engineering'] || []).includes('writing'),
+  'block records presetBlocked in state.json')
+ok(fs.readFileSync(lifecyclePackFile, 'utf8') === lifecyclePackBefore, 'blocking never rewrites the bundled pack')
+ok(fs.statSync(referencePath).mtimeMs === lifecycleStatBefore, 'blocking leaves pack/reference mtime alone')
+
+const useBlocked = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'use', preset: 'writing', cwd: projectDir } })
+ok(useBlocked.status === 400, 'using a blocked preset is rejected')
+
+const unblock = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'unblock', preset: 'writing', packId: 'fde-engineering' } })
+ok(unblock.status === 200, 'unblock restores the bundled preset')
+ok((await callRoute('/api/dsh-workstyle/scope')).data.presets.some((preset) => preset.id === 'writing'), 'unblocked preset is listed again')
+const unblockedState = JSON.parse(fs.readFileSync(path.join(home, 'workstyle', 'state.json'), 'utf8'))
+ok(!unblockedState.presetBlocked || !unblockedState.presetBlocked['fde-engineering'],
+  'unblock empties presetBlocked for the pack')
+
+/* delete on a shipped preset is a block, never an edit of the pack file */
+const deleteShipped = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'delete', preset: 'fde-delivery', packId: 'fde-engineering' } })
+ok(deleteShipped.status === 200 && deleteShipped.data.removed === 'blocked',
+  'deleting a bundled preset blocks it instead of editing the pack')
+ok(!(await callRoute('/api/dsh-workstyle/scope')).data.presets.some((preset) => preset.id === 'fde-delivery'),
+  'the deleted bundled preset is hidden')
+const unblockShipped = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: { action: 'unblock', preset: 'fde-delivery', packId: 'fde-engineering' } })
+ok(unblockShipped.status === 200, 'unblocking the deleted bundled preset succeeds')
+ok((await callRoute('/api/dsh-workstyle/scope')).data.presets.some((preset) => preset.id === 'fde-delivery'),
+  'the unblocked bundled preset is listed again')
+
+const lifecycleManifestAfter = JSON.parse(fs.readFileSync(lifecyclePackFile, 'utf8'))
+ok(lifecycleManifestAfter.rules.length === lifecycleManifestBefore.rules.length
+  && lifecycleManifestAfter.presets.length === lifecycleManifestBefore.presets.length,
+  'the bundled pack keeps its rule and preset counts')
+ok(fs.readFileSync(lifecyclePackFile, 'utf8') === lifecyclePackBefore, 'the bundled pack bytes are unchanged')
+ok(fs.statSync(referencePath).mtimeMs === lifecycleStatBefore, 'the bundled pack mtime is unchanged')
+
+const badPresetJson = await callRoute('/api/dsh-workstyle/preset', { method: 'POST', body: null })
+ok(badPresetJson.status === 400, 'preset rejects a missing body')
+
+const unknownPresetUse = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'use', preset: 'no-such-preset', cwd: projectDir },
+})
+ok(unknownPresetUse.status === 404, 'using an unknown preset is a 404')
+const unknownPackSave = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'save', packId: 'no-such-pack', preset: { id: 'smoke-unowned', title: '无主预设' } },
+})
+ok(unknownPackSave.status === 404, 'saving into an unknown pack is a 404')
+
+/* a user pack owns its presets: save and delete edit its workstyle.json */
+const userPackPresetSave = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'save', packId: 'smoke-pack', preset: { id: 'smoke-owned-preset', title: '包内预设', rules: ['smoke-owned'] } },
+})
+ok(userPackPresetSave.status === 200 && userPackPresetSave.data.revision, 'saving a preset into a user pack returns a revision')
+const userPackPresetManifest = JSON.parse(fs.readFileSync(path.join(userPackDir, 'workstyle.json'), 'utf8'))
+ok((userPackPresetManifest.presets || []).some((preset) => preset.id === 'smoke-owned-preset'),
+  'a user pack preset lands in the pack file')
+const userPackPresetDelete = await callRoute('/api/dsh-workstyle/preset', {
+  method: 'POST',
+  body: { action: 'delete', packId: 'smoke-pack', preset: 'smoke-owned-preset' },
+})
+ok(userPackPresetDelete.status === 200 && userPackPresetDelete.data.removed === 'pack',
+  'deleting a user pack preset edits the pack file')
+const userPackAfterDelete = JSON.parse(fs.readFileSync(path.join(userPackDir, 'workstyle.json'), 'utf8'))
+ok(!(userPackAfterDelete.presets || []).some((preset) => preset.id === 'smoke-owned-preset'),
+  'the deleted user pack preset is gone from the pack file')
+
 /* ------------------------------- cleanup ------------------------------- */
 
 

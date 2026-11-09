@@ -17,8 +17,8 @@ import {
   renderRules, reportsDir, statePath, workstyleHome, writeJsonAtomic, writeState,
 } from './lib/pack.js'
 import {
-  applyRuleOverlay, commit, isUserPack, patchOverlay, removeOverlay,
-  restoreOverlay, snapshot,
+  applyRuleOverlay, blockPreset, commit, isUserPack, patchOverlay, removeOverlay,
+  resolveWrite, restoreOverlay, snapshot,
 } from './lib/manage.js'
 import { distill, readLatestReport } from './lib/distill.js'
 import { exportPack } from './lib/export.js'
@@ -1325,31 +1325,101 @@ export function apply(ctx) {
         fetch: async (request) => {
           const body = (await readJsonBody(request)) || {}
           const action = typeof body.action === 'string' ? body.action : 'save'
+          const packId = typeof body.packId === 'string' && body.packId ? body.packId : active.id
           try {
+            const targetPack = packs.find((pack) => pack.id === packId) || null
+
             if (action === 'use') {
               const presetId = checkPresetId(body.preset)
               if (!body.cwd && !body.sessionId) return jsonResponse({ error: 'cwd or sessionId is required to switch preset' }, 400)
+              if (!targetPack) return jsonResponse({ error: 'unknown pack: ' + packId }, 404)
+              const { blockedPresets } = packOverlay(packId)
+              if (blockedPresets.includes(presetId)) return jsonResponse({ error: 'preset is blocked: ' + presetId }, 400)
+              const known = listPresets(targetPack.presets).find((preset) => preset.id === presetId)
+              if (!known) return jsonResponse({ error: 'unknown preset: ' + presetId }, 404)
               if (body.cwd) writeProjectScope(body.cwd, { preset: presetId })
               else writeSessionScope(body.sessionId, { preset: presetId })
               return jsonResponse({ used: presetId, scope: scopeFor({ cwd: body.cwd, sessionId: body.sessionId }) })
             }
+
             if (action === 'save') {
               const preset = body.preset && typeof body.preset === 'object' ? body.preset : {}
               const presetId = checkPresetId(preset.id)
-              const state = readState()
-              const list = Array.isArray(state.presets) ? state.presets.filter((item) => item && item.id !== presetId) : []
-              list.push({
+              const normalized = {
                 id: presetId,
                 title: typeof preset.title === 'string' && preset.title.trim() ? preset.title.trim() : presetId,
                 description: typeof preset.description === 'string' ? preset.description : '',
                 rules: Array.isArray(preset.rules) ? preset.rules.filter((r) => typeof r === 'string') : [],
                 skills: Array.isArray(preset.skills) ? preset.skills.filter((s) => typeof s === 'string') : [],
                 templates: Array.isArray(preset.templates) ? preset.templates.filter((t) => typeof t === 'string') : [],
-              })
-              writeState({ presets: list })
-              return jsonResponse({ saved: presetId, presets: list })
+              }
+              if (!targetPack) return jsonResponse({ error: 'unknown pack: ' + packId }, 404)
+              const write = resolveWrite({ entity: 'preset', pack: targetPack })
+              if (write.scope === 'overlay') {
+                const state = readState()
+                const list = Array.isArray(state.presets) ? state.presets.filter((item) => item && item.id !== presetId) : []
+                list.push(normalized)
+                writeOverlay({ presets: list }, 'preset-save:' + presetId)
+                return jsonResponse({ saved: presetId, presets: list })
+              }
+              const manifest = JSON.parse(fs.readFileSync(write.file, 'utf8'))
+              const list = Array.isArray(manifest.presets) ? manifest.presets.filter((item) => item && item.id !== presetId) : []
+              list.push(normalized)
+              const result = commit(write.file, { ...manifest, presets: list }, { reason: 'preset-save:' + presetId })
+              const refreshed = refreshPacks()
+              if (!refreshed.ok) {
+                return jsonResponse({ error: refreshed.error || 'failed to reload packs' }, 500)
+              }
+              return jsonResponse({ saved: presetId, revision: result.revision, presets: list })
             }
-            return jsonResponse({ error: "action must be 'save' or 'use'" }, 400)
+
+            if (action === 'delete' || action === 'block') {
+              const presetId = checkPresetId(body.preset)
+              if (!targetPack) return jsonResponse({ error: 'unknown pack: ' + packId }, 404)
+              const write = resolveWrite({ entity: 'preset', pack: targetPack })
+              const shipped = (targetPack.presets || []).some((preset) => preset.id === presetId)
+
+              /* 包自带预设不能删文件：内置包 → 屏蔽，自建包 → 改包文件 */
+              if (action === 'block' || (write.scope === 'overlay' && shipped)) {
+                writeOverlay(blockPreset(readState(), targetPack.id, presetId, true), 'preset-block:' + presetId)
+                return jsonResponse({ removed: 'blocked', id: presetId })
+              }
+              if (write.scope === 'pack' && shipped) {
+                const manifest = JSON.parse(fs.readFileSync(write.file, 'utf8'))
+                const list = (Array.isArray(manifest.presets) ? manifest.presets : []).filter((item) => item && item.id !== presetId)
+                const result = commit(write.file, { ...manifest, presets: list }, { reason: 'preset-delete:' + presetId })
+                const refreshed = refreshPacks()
+                if (!refreshed.ok) {
+                  return jsonResponse({ error: refreshed.error || 'failed to reload packs' }, 500)
+                }
+                return jsonResponse({ removed: 'pack', id: presetId, revision: result.revision })
+              }
+              const state = readState()
+              const list = Array.isArray(state.presets) ? state.presets.filter((item) => item && item.id !== presetId) : []
+              writeOverlay({ presets: list }, 'preset-delete:' + presetId)
+              return jsonResponse({ removed: 'local', id: presetId })
+            }
+
+            if (action === 'unblock') {
+              const presetId = checkPresetId(body.preset)
+              writeOverlay(blockPreset(readState(), packId, presetId, false), 'preset-unblock:' + presetId)
+              return jsonResponse({ restored: presetId })
+            }
+
+            if (action === 'duplicate') {
+              const from = checkPresetId(body.preset)
+              const newId = checkPresetId(body.newId || from + '-copy')
+              if (!targetPack) return jsonResponse({ error: 'unknown pack: ' + packId }, 404)
+              const source = listPresets(targetPack.presets).find((preset) => preset.id === from)
+              if (!source) return jsonResponse({ error: 'unknown preset: ' + from }, 404)
+              const state = readState()
+              const list = Array.isArray(state.presets) ? state.presets.filter((item) => item && item.id !== newId) : []
+              list.push({ ...source, id: newId, title: source.title + ' copy', builtin: false })
+              writeOverlay({ presets: list }, 'preset-duplicate:' + newId)
+              return jsonResponse({ saved: newId, from })
+            }
+
+            return jsonResponse({ error: "action must be 'save', 'use', 'delete', 'duplicate', 'block' or 'unblock'" }, 400)
           } catch (error) {
             return jsonResponse({ error: error && error.message ? error.message : String(error) }, 400)
           }
