@@ -45,11 +45,12 @@ dsh plugin --profile <你的 profile> add github:iannil/dsh-workstyle
 
 ## 3 分钟上手
 
-装完并重启后，按这三步确认「已经生效」，不必先读手册：
+装完并重启后，按这四步确认「已经生效」，不必先读手册：
 
 1. **打开侧边栏「工作方式」** — 看状态带是否有「注入中 N」和一串指纹。有指纹 = 规则已进系统提示。页脚应出现 `home v5`。
 2. **新开一个对话**，说一句真实需求（例如「帮我给这个项目加登录」）。正常时应先给可评审方案（目标 / 改动点 / 验收），而不是直接改代码。
 3. **回到面板点「载入预览」** — 核对真实注入文本；与指纹不一致就点刷新。首次打开会看到可关闭的「3 分钟上手」提示。
+4. **改一条内置规则再回滚** — `#/rules` 编辑任意内置规则（写入本机覆盖层，包文件不动），指纹应立刻变化；再回 `#/distribute` 的「修订历史」点恢复，指纹回到改动之前。
 
 ## 核心能力
 
@@ -58,7 +59,9 @@ dsh plugin --profile <你的 profile> add github:iannil/dsh-workstyle
 - **一条命令复制给同事** — 导出 `tar.gz`，含规则、技能、预设、清单与接收方安装说明；对方 `/workstyle apply <解压目录>` 即得同一套。
 - **三层作用域** — 全局 → 项目（`<cwd>/.dsh/workstyle.json`，跟着仓库走）→ 会话（一次性实验），后层覆盖前层。
 - **只要可复算的指标** — 规则命中、先方案率、验证率、蒸馏覆盖，每个数字都写出分母与算法；**不出现遵守率或违反率**。
-- **停用不等于删除** — 停用项在面板显示「被覆盖 · 会话」，只影响系统提示与技能候选，不写入导出包。
+- **停用不等于删除** — 停用项在面板显示「被覆盖 · 会话」，只影响系统提示与技能候选，不写入导出包；被覆盖层移除的规则留下「已移除」墓碑，`恢复` 即让它重新参与组装。
+- **内置包只读、改动落覆盖层** — 修改内置包规则写进 `state.json` 的 `rulePatches` / `ruleRemovals`，`pack/` 下的文件保持原样；这些记录不在插件目录里，升级或重新安装插件不会冲掉你的本地改动。
+- **每次写盘都留快照，20 份可回滚** — 覆盖层 `state.json` 与用户包清单写入前先快照到 `revisions/`，每个文件保留最近 20 份；`#/distribute` 的「修订历史」可一键恢复。
 
 ## 它怎么工作
 
@@ -97,7 +100,7 @@ Pack 放在插件 `pack/<id>/` 或 `$DSH_HOME/workstyle/packs/<id>/`；技能放
 
 ## 面板、命令与 Agent 工具
 
-面板顶部是状态带与待办条，下面五个区块：载入预览、有效规则、预设与组装、度量、分发。命令 `/workstyle status | apply | distill | adopt | undo | on | off | export`，另有 8 个 Agent 工具与 17 条 HTTP 路由。
+面板分八个页面：`#/overview`（状态带、待办条、载入预览）、`#/pack` 与 `#/pack/<id>`（包列表 / 详情，含新建、导入、回收站恢复）、`#/rules`（按作用域编辑 / 移除 / 恢复，每行标出将写入哪里）、`#/presets`（预设编辑器，规则白名单）、`#/skills`、`#/distill`、`#/metrics`、`#/distribute`（导出 + 修订历史回滚）。命令 `/workstyle status | apply | distill | adopt | undo | on | off | export`，另有 8 个 Agent 工具与 17 个 HTTP 路径 / 20 项注册。
 
 细节见 **[docs/USAGE.md](docs/USAGE.md)**。
 
@@ -112,23 +115,35 @@ Pack 放在插件 `pack/<id>/` 或 `$DSH_HOME/workstyle/packs/<id>/`；技能放
 无运行时依赖，纯 ESM。Host 侧 `index.js` + `lib/`（`pack.js` 包模型、`distill.js` 蒸馏、`export.js` tar.gz 导出），Web 面板 `client.js`，清单 `cordis.patch.yml`。
 
 ```bash
-node test/smoke.mjs           # 146 项：工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 导出 tar 往返
-node test/panel-render.mjs    # 120 项：状态 / 搜索 / 筛选 / 启停 / 折叠 / 分发 / 构建标记、无营销文案
-node test/multipage-render.mjs #  97 项：多页路由渲染 / 导航 / 蒸馏 / 度量 / 缺失包恢复
+node test/smoke.mjs             # 447 项：工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 包生命周期 / 白名单 / 修订 / 导出 tar 往返
+node test/panel-render.mjs      # 221 项：状态 / 搜索 / 筛选 / 启停 / 折叠 / 分发 / 构建标记、无营销文案
+node test/multipage-render.mjs  #  97 项：多页路由渲染 / 导航 / 蒸馏 / 度量 / 缺失包恢复
+node test/manage.mjs            #  37 项：快照与保留上限 / 恢复 / 写盘落点
 ```
 
 系统未装 Node 时可用 Harness 自带运行时：
 
 ```bash
 ELECTRON_RUN_AS_NODE=1 "/Applications/DeepSeek Harness.app/Contents/MacOS/DeepSeek Harness" test/smoke.mjs
-# 另两套同理，把 test/smoke.mjs 换成 test/panel-render.mjs / test/multipage-render.mjs
+# 另三套同理，把 test/smoke.mjs 换成 test/panel-render.mjs / test/multipage-render.mjs / test/manage.mjs
 ```
 
-数据目录：`$DSH_HOME/workstyle/`（`state.json` 状态与采纳记录、`overrides.json` 本地启停、`reports/` 蒸馏报告、`exports/` 导出包）。
+数据目录 `$DSH_HOME/workstyle/`：
+
+| 路径 | 内容 |
+| --- | --- |
+| `state.json` | 当前包、`adoptions`、本机 `presets` / `templates`、覆盖层 `rulePatches` / `ruleRemovals` / `presetBlocked` |
+| `overrides.json` | 本机启停 |
+| `packs/<id>/` | 用户自建 / 导入的包（可写） |
+| `trash/<id>-<时间戳>/` | 被删除的包，可恢复；不自动清理 |
+| `revisions/` | 写盘前快照，每个文件保留 20 份 |
+| `reports/` | 蒸馏报告 |
+| `exports/` | 导出包 |
+| `sessions/<id>.json` | 会话层作用域；不自动清理 |
 
 ## Contributing
 
-欢迎 PR。设计稿与验证记录在 [`docs/`](docs/)（`docs/HOME-V5.md`、`docs/verification/`）；改完请跑上面三套测试。
+欢迎 PR。设计稿与验证记录在 [`docs/`](docs/)（`docs/HOME-V5.md`、`docs/verification/`）；改完请跑上面四套测试。
 
 ## 许可
 

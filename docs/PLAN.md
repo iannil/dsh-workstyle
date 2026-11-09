@@ -1,6 +1,6 @@
 # dsh-workstyle 方案与路线图
 
-> 本文是产品方案的可追溯版本，防止跨会话丢失。最后更新：2026-11-08（面板改为操作台）。
+> 本文是产品方案的可追溯版本，防止跨会话丢失。最后更新：2026-11-09（管理面：包生命周期 / 覆盖层 / 预设白名单 / 修订回滚）。
 
 ## 定位
 
@@ -40,7 +40,7 @@ distill（读本机会话，出聚合报告与建议规则）
 - 技能：`ctx.skills.registerProvider`，`source: 'bundled'`。
 - 工具（8）：`workstyle_status / list / apply / distill / evidence / adopt / toggle / export`。
 - 命令：`/workstyle status | apply | distill | adopt | undo | on <id> | off <id> | export`。
-- 路由（17 项注册）：`/api/dsh-workstyle/{status,pack,reports,exports,evidence,apply,distill,adopt,unadopt,toggle,export,scope,inject,metrics,rule,preset}`。
+- 路由（17 个路径 / 20 项注册）：`/api/dsh-workstyle/{status,pack,reports,exports,evidence,apply,distill,adopt,unadopt,toggle,export,scope,inject,metrics,rule,preset,revisions}`；`pack`、`scope`、`revisions` 各挂 GET + POST。
 - 持久化：`$DSH_HOME/workstyle/state.json`（当前包 + `adoptions[packId]`）、`overrides.json`（按包存停用规则/技能）、`reports/`、`exports/`。
 - 上架元数据（P3）：`dsh.bundle` + `category: workflow` + PNG 图标 + `screenshots.json`。
 
@@ -73,6 +73,19 @@ distill（读本机会话，出聚合报告与建议规则）
 - 形状规则：容器 12、控件 8、胶囊 999、徽标 999（badge 当前为胶囊）；圆角不再临时混用。
 - 2026-11-08 间距/对齐修正：统一一条左缘（标题、section、规则、技能、评审同一条线）；标题 26、规则题 14、正文 13/1.7、技能名 12.5；规则行 50px、技能行 42px；区块间距 36；全量评审状态折进 section header，减少一段沉底摘要。
 
+### 2026-11-09 管理面（已实现）
+
+管理面的四条定论，后续改动以此为据：
+
+1. **内置包只读，改动落覆盖层。** 编辑内置包规则写 `state.json` 的 `rulePatches` / `ruleRemovals`，不写 `pack/`；面板据此区分「只读 / 可写」，升级插件不丢本地改动。
+2. **预设的 `rules` 是白名单。** 未列出的规则仍可见（`outsidePreset`）但不注入；`rules: []` 表示不限制；屏蔽预设等价于没有预设。
+3. **本地快照回滚。** 覆盖层与用户包清单写前快照到 `revisions/`，每文件保留 20 份，`GET/POST /revisions` 列出与恢复；项目文件交给 git，不进快照。
+4. **显式路由优先于共享写入器。** 包生命周期、规则、预设各自一条路由（`/pack`、`/rule`、`/preset`），落点由 `resolveWrite` 与 `target` 决定并在响应里回报，不做隐式推断。
+
+同期修掉两个缺陷：会话层 `preset` 之前不参与组装（选了不生效）；恢复最旧一份保留修订会 500 并顺带删掉该行（快照淘汰与恢复自写冲突，现用 `pin` 保护）。
+
+验收证据（2026-11-09，`feat/workstyle-management`）：`test/smoke.mjs` 447 项、`test/panel-render.mjs` 221 项、`test/multipage-render.mjs` 97 项、`test/manage.mjs` 37 项全过；`git status --short pack/` 为空，内置包文件未被管理操作改写。
+
 ## 隐私约束
 
 - 只读本机已有会话与日志，不联网、不上传。
@@ -81,7 +94,6 @@ distill（读本机会话，出聚合报告与建议规则）
 
 ## 验证方式
 
-- `test/smoke.mjs`：146 项检查（工具 / 路由 / 命令 / 规则与技能启停 / 采纳与撤销 / 导出 tar 往返 / lossless JSON）；另有 panel-render 115 项、multipage-render 97 项。
-- `test/panel-render.mjs`：44 项渲染检查（状态、搜索、筛选、启停、折叠/展开、分发、构建标记、无营销文案、样式作用域）。
+- 四套，共 802 项：`test/smoke.mjs` 447（工具 / 路由 / 命令 / 启停 / 采纳与撤销 / 包生命周期 / 预设白名单 / 修订与回滚 / 导出 tar 往返）、`test/panel-render.mjs` 221（渲染、搜索、筛选、折叠、分发、构建标记、无营销文案、样式作用域）、`test/multipage-render.mjs` 97（多页路由与导航、蒸馏、度量、缺失包恢复）、`test/manage.mjs` 37（快照保留上限、恢复、写盘落点）。
 - 隔离实例：`dsh --profile web --patch <patch.yml>` + 临时 `DSH_HOME`，Chrome headless CDP 截图验证面板。
 - 真实环境：重启 DeepSeek Harness 后实测面板与工具（本地 link 安装的插件必须重启才加载）。
