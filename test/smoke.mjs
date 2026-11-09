@@ -1357,6 +1357,111 @@ const jsonRuleEdit = await callRoute('/api/dsh-workstyle/rule', {
 ok(jsonRuleEdit.status === 200, 'a json user pack rule still writes into its manifest')
 await callRoute('/api/dsh-workstyle/apply', { method: 'POST', body: { pack: 'fde-engineering' } })
 
+/* ---- /rule target:'overlay': explicit overlay writes, never the pack file ---- */
+
+console.log("rule target=overlay:")
+const overlayPackFile = path.join(root, 'pack', 'reference', 'workstyle.json')
+const overlayPackRefDir = path.join(root, 'pack', 'reference')
+const overlayPackBytes = fs.readFileSync(overlayPackFile, 'utf8')
+const overlayPackMtime = fs.statSync(overlayPackRefDir).mtimeMs
+const yamlPackFile = path.join(yamlPackDir, 'workstyle.yaml')
+const yamlPackBytes = fs.readFileSync(yamlPackFile, 'utf8')
+const yamlPackMtime = fs.statSync(yamlPackFile).mtimeMs
+const jsonPackManifest = path.join(packsDir, 'smoke-pack', 'workstyle.json')
+const jsonPackBytes = fs.readFileSync(jsonPackManifest, 'utf8')
+
+const overlayEdit = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'overlay', packId: 'fde-engineering', rule: { id: 'plan-first', title: '本机改写', text: '本机正文。' } },
+})
+ok(overlayEdit.status === 200 && overlayEdit.data.saved === 'rule',
+  "target:'overlay' edits a bundled rule")
+ok(readStateFile().rulePatches['fde-engineering']['plan-first'].text === '本机正文。',
+  'the overlay edit lands in state.rulePatches')
+ok(overlayEdit.data.writable && overlayEdit.data.writable.scope === 'overlay'
+  && overlayEdit.data.writable.packId === 'fde-engineering',
+  'the response names the overlay as the write target')
+ok((await callRoute('/api/dsh-workstyle/status')).data.rules.find((rule) => rule.id === 'plan-first').text === '本机正文。',
+  '/status shows the overlay text')
+ok((await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first').text === '本机正文。',
+  '/scope shows the overlay text')
+ok(fs.readFileSync(overlayPackFile, 'utf8') === overlayPackBytes,
+  'the bundled pack file is byte-identical after an overlay edit')
+ok(fs.statSync(overlayPackRefDir).mtimeMs === overlayPackMtime,
+  'pack/reference mtime is unchanged after an overlay edit')
+
+const overlayRemove = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'overlay', packId: 'fde-engineering', rule: { id: 'plan-first' }, remove: true },
+})
+ok(overlayRemove.status === 200 && overlayRemove.data.saved === 'removed',
+  "target:'overlay' removes a bundled rule")
+const overlayTombstone = (await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first')
+ok(overlayTombstone && overlayTombstone.removed === true,
+  'the overlay removal is a visible tombstone in /scope')
+ok(fs.readFileSync(overlayPackFile, 'utf8') === overlayPackBytes,
+  'the bundled pack file is still byte-identical after an overlay removal')
+
+const overlayRestore = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'overlay', packId: 'fde-engineering', action: 'restore', rule: { id: 'plan-first' } },
+})
+ok(overlayRestore.status === 200 && overlayRestore.data.saved === 'restored',
+  "target:'overlay' restores a bundled rule")
+ok((await callRoute('/api/dsh-workstyle/scope')).data.rules.find((rule) => rule.id === 'plan-first').text === '本机正文。',
+  'restore returns the patched text, not the pristine pack text')
+ok(readStateFile().rulePatches['fde-engineering']['plan-first'].text === '本机正文。',
+  'restoring keeps the overlay patch in state.rulePatches')
+
+const yamlOverlayEdit = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'overlay', packId: 'smoke-yaml', rule: { id: 'yaml-owned', title: 'YAML 本机改写', text: 'YAML 本机正文。' } },
+})
+ok(yamlOverlayEdit.status === 200 && yamlOverlayEdit.data.saved === 'rule',
+  "target:'overlay' is legal for a YAML user pack")
+ok(readStateFile().rulePatches['smoke-yaml']['yaml-owned'].text === 'YAML 本机正文。',
+  'a YAML pack overlay edit lands in state.rulePatches')
+ok(fs.readFileSync(yamlPackFile, 'utf8') === yamlPackBytes && fs.statSync(yamlPackFile).mtimeMs === yamlPackMtime,
+  'the YAML pack file is byte-identical after an overlay edit')
+const yamlPackTarget = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'pack', packId: 'smoke-yaml', rule: { id: 'yaml-owned', text: '不该写 yaml。' } },
+})
+ok(yamlPackTarget.status === 400,
+  "target:'pack' still refuses a YAML pack, so the overlay route is the only edit path")
+
+const jsonOverlayEdit = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'overlay', packId: 'smoke-pack', rule: { id: 'smoke-owned', title: 'JSON 本机改写', text: 'JSON 本机正文。' } },
+})
+ok(jsonOverlayEdit.status === 200 && jsonOverlayEdit.data.saved === 'rule',
+  "target:'overlay' is legal for a user JSON pack")
+ok(readStateFile().rulePatches['smoke-pack']['smoke-owned'].text === 'JSON 本机正文。',
+  'a user JSON pack overlay edit lands in state.rulePatches')
+ok(fs.readFileSync(jsonPackManifest, 'utf8') === jsonPackBytes,
+  'a user JSON pack file is byte-identical after an overlay edit')
+
+const overlayUnknownPack = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'overlay', packId: 'nope', rule: { id: 'plan-first' } },
+})
+ok(overlayUnknownPack.status === 404 && overlayUnknownPack.data.error === 'unknown pack: nope',
+  "target:'overlay' with an unknown pack is a 404")
+const overlayUnknownRule = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'overlay', packId: 'fde-engineering', rule: { id: 'nope' } },
+})
+ok(overlayUnknownRule.status === 404 && overlayUnknownRule.data.error === 'unknown rule: nope',
+  "target:'overlay' with an unknown rule is a 404")
+
+const bogusRuleTarget = await callRoute('/api/dsh-workstyle/rule', {
+  method: 'POST',
+  body: { target: 'bogus' },
+})
+ok(bogusRuleTarget.status === 400
+  && bogusRuleTarget.data.error === "target must be 'pack', 'overlay', 'project' or 'session'",
+  'an unknown rule target is a 400 with the four-target message')
+
 /* ---- /status must agree with the packs directory ---- */
 
 console.log('pack status matches the filesystem:')

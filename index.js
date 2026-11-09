@@ -368,6 +368,8 @@ export function apply(ctx) {
     return { cwd, sessionId }
   }
 
+  const overlayWritableFor = (pack) => ({ scope: 'overlay', packId: pack.id, file: statePath() })
+
   /**
    * Where an edit to `rule` actually lands.
    *
@@ -391,7 +393,7 @@ export function apply(ctx) {
         file: active.format === 'yaml' ? null : path.join(active.dir, 'workstyle.json'),
       }
     }
-    return { scope: 'overlay', packId: active.id, file: statePath() }
+    return overlayWritableFor(active)
   }
 
   /** Compose every layer into the effective rule/skill set for a context. */
@@ -1412,10 +1414,20 @@ export function apply(ctx) {
         requestBody: 'buffered',
         fetch: async (request) => {
           const body = (await readJsonBody(request)) || {}
+          /* An unknown target used to fall through to 'project' and fail later
+             with a misleading `cwd is required`; name the four legal targets. */
+          const requestedTarget = body.target
+          if (requestedTarget !== undefined && requestedTarget !== null
+            && requestedTarget !== 'pack' && requestedTarget !== 'overlay'
+            && requestedTarget !== 'project' && requestedTarget !== 'session') {
+            return jsonResponse({ error: "target must be 'pack', 'overlay', 'project' or 'session'" }, 400)
+          }
           const raw = body.rule && typeof body.rule === 'object' ? body.rule : {}
           const id = typeof raw.id === 'string' ? raw.id.trim() : ''
           if (!id) return jsonResponse({ error: 'rule.id is required' }, 400)
-          const target = body.target === 'pack' ? 'pack' : body.target === 'session' ? 'session' : 'project'
+          const target = requestedTarget === 'pack' ? 'pack'
+            : requestedTarget === 'overlay' ? 'overlay'
+              : requestedTarget === 'session' ? 'session' : 'project'
           // Same guard as /scope: only write project rules under a real
           // working directory, never an arbitrary path.
           const isDir = (value) => {
@@ -1455,6 +1467,32 @@ export function apply(ctx) {
                 saved: body.action === 'restore' ? 'restored' : body.remove === true ? 'disabled' : 'enabled',
                 id, revision: null, scope: scopeFor({ sessionId: body.sessionId }),
               })
+            }
+
+            /* target === 'overlay': always this machine's overlay, never a pack
+               file. Legal for bundled packs (the overlay is how a shipped rule
+               is edited), user JSON packs and YAML user packs alike. */
+            if (target === 'overlay') {
+              const overlayPackId = body.packId || active.id
+              const targetPack = packs.find((pack) => pack.id === overlayPackId)
+              if (!targetPack) return jsonResponse({ error: 'unknown pack: ' + overlayPackId }, 404)
+              const known = baseRulesFor(targetPack).find((rule) => rule.id === id)
+              if (!known) return jsonResponse({ error: 'unknown rule: ' + id }, 404)
+              const writable = overlayWritableFor(targetPack)
+              const state = readState()
+              if (body.action === 'restore') {
+                writeOverlay(restoreOverlay(state, targetPack.id, id), 'rule-restore:' + id)
+                return jsonResponse({ saved: 'restored', id, revision: null, writable, scope: scopeFor({}) })
+              }
+              if (body.remove === true) {
+                writeOverlay(removeOverlay(state, targetPack.id, id), 'rule-remove:' + id)
+                return jsonResponse({ saved: 'removed', id, revision: null, writable, scope: scopeFor({}) })
+              }
+              if (typeof raw.text !== 'string' || !raw.text.trim()) {
+                return jsonResponse({ error: 'rule.text is required to save a rule' }, 400)
+              }
+              writeOverlay(patchOverlay(state, targetPack.id, id, { title: raw.title, text: raw.text }), 'rule-patch:' + id)
+              return jsonResponse({ saved: 'rule', id, revision: null, writable, scope: scopeFor({}) })
             }
 
             /* target === 'pack' */
